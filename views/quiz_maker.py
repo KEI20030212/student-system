@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 import streamlit.components.v1 as components
 import time     # ← これを追加！
 import base64   # ← これを追加！
@@ -81,7 +82,8 @@ def render_quiz_maker_page():
                     from google.oauth2.service_account import Credentials
                     
                     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-                    creds = Credentials.from_service_account_file('secret.json', scopes=scopes)
+                    secret_dict = json.loads(st.secrets["gcp_service_account_json"])
+                    creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
                     req = google.auth.transport.requests.Request()
                     creds.refresh(req)
                     headers = {"Authorization": f"Bearer {creds.token}"}
