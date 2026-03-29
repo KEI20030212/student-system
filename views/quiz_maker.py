@@ -99,17 +99,19 @@ def render_quiz_maker_page():
 
     if 'pdf_q' in st.session_state and 'pdf_a' in st.session_state:
         st.divider()
-        st.subheader("👀 プレビュー ＆ 印刷 (PDF)")
+        st.subheader("👀 ダウンロード ＆ 印刷 (PDF)") # タイトルを少し変えました
         tab_q, tab_a = st.tabs(["📝 問題 (A〜I列)", "💡 解答 (J〜R列)"])
 
         def display_pdf(pdf_bytes, filename):
             st.download_button(
-                label=f"📥 【 {filename} 】をダウンロード / 印刷する",
-                data=pdf_bytes, file_name=filename, mime="application/pdf", type="primary", use_container_width=True
+                label=f"📥 【 {filename} 】を開く / 印刷する",
+                data=pdf_bytes, 
+                file_name=filename, 
+                mime="application/pdf", 
+                type="primary", 
+                use_container_width=True
             )
-            base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
+            # ▼ ここにあったプレビュー用の iframe のコードを削除しました！▼
 
         with tab_q: display_pdf(st.session_state['pdf_q'], "確認テスト_問題.pdf")
         with tab_a: display_pdf(st.session_state['pdf_a'], "確認テスト_解答.pdf")
