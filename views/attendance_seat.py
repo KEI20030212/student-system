@@ -35,40 +35,49 @@ def render_attendance_seat_page():
                 st.warning("これ以上減らせません！")
 
     new_seating = {}
-    cols = st.columns(3) 
     
-    for i in range(st.session_state['num_booths']):
-        booth_name = f"ブース{i+1}"
-        with cols[i % 3]:
-            with st.container(border=True):
-                st.markdown(f"**🪑 {booth_name}**")
+    # ==========================================
+    # 🌟 ここから「3つずつ行を作る作戦」に大改造！
+    # ==========================================
+    for i in range(0, st.session_state['num_booths'], 3):
+        cols = st.columns(3) # 1行ごとに3つの列を作る
+        
+        for j in range(3):
+            if i + j < st.session_state['num_booths']:
+                booth_index = i + j
+                booth_name = f"ブース{booth_index+1}"
                 
-                current_info = seating_data.get(booth_name, {"生徒名": "-- 空席 --", "状態": "出席"})
-                current_seat = current_info["生徒名"]
-                current_status = current_info["状態"]
-                
-                options = ["-- 空席 --"] + student_names
-                
-                new_occupant = st.selectbox(
-                    "生徒名", 
-                    options, 
-                    index=options.index(current_seat) if current_seat in options else 0, 
-                    key=f"seat_{i}"
-                )
-                
-                if new_occupant != "-- 空席 --":
-                    status_options = ["出席", "遅刻", "欠席連絡あり"]
-                    new_status = st.radio(
-                        "状態", 
-                        status_options, 
-                        index=status_options.index(current_status) if current_status in status_options else 0,
-                        horizontal=True, 
-                        key=f"status_{i}"
-                    )
-                else:
-                    new_status = "出席" 
-                    
-                new_seating[booth_name] = {"生徒名": new_occupant, "状態": new_status}
+                with cols[j]:
+                    with st.container(border=True):
+                        st.markdown(f"**🪑 {booth_name}**")
+                        
+                        current_info = seating_data.get(booth_name, {"生徒名": "-- 空席 --", "状態": "出席"})
+                        current_seat = current_info["生徒名"]
+                        current_status = current_info["状態"]
+                        
+                        options = ["-- 空席 --"] + student_names
+                        
+                        # ⚠️ ポイント: keyを f"seat_{booth_index}" にしてエラーを防ぐ！
+                        new_occupant = st.selectbox(
+                            "生徒名", 
+                            options, 
+                            index=options.index(current_seat) if current_seat in options else 0, 
+                            key=f"seat_{booth_index}"
+                        )
+                        
+                        if new_occupant != "-- 空席 --":
+                            status_options = ["出席", "遅刻", "欠席連絡あり"]
+                            new_status = st.radio(
+                                "状態", 
+                                status_options, 
+                                index=status_options.index(current_status) if current_status in status_options else 0,
+                                horizontal=True, 
+                                key=f"status_{booth_index}"
+                            )
+                        else:
+                            new_status = "出席" 
+                            
+                        new_seating[booth_name] = {"生徒名": new_occupant, "状態": new_status}
     
     st.divider()
     if st.button("💾 本日の座席表を確定・共有する", type="primary", use_container_width=True):
