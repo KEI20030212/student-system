@@ -36,11 +36,29 @@ def render_attendance_seat_page():
 
     new_seating = {}
     
-    # ==========================================
-    # 🌟 ここから「3つずつ行を作る作戦」に大改造！
-    # ==========================================
+    # =========================================================
+    # 🌟 新機能：現在「どこかのブース」にいる生徒をリストアップ！
+    # =========================================================
+    assigned_students = set()
+    for i in range(st.session_state['num_booths']):
+        key = f"seat_{i}"
+        if key in st.session_state:
+            # 画面上で今選ばれている生徒
+            seat_val = st.session_state[key]
+            if seat_val != "-- 空席 --":
+                assigned_students.add(seat_val)
+        else:
+            # 初回読み込み時は、保存されているデータから拾う
+            booth_name = f"ブース{i+1}"
+            info = seating_data.get(booth_name, {"生徒名": "-- 空席 --"})
+            if info.get("生徒名") != "-- 空席 --":
+                assigned_students.add(info["生徒名"])
+
+    # =========================================================
+    # 🌟 3つずつ行を作る作戦（選択肢のフィルター機能追加）
+    # =========================================================
     for i in range(0, st.session_state['num_booths'], 3):
-        cols = st.columns(3) # 1行ごとに3つの列を作る
+        cols = st.columns(3)
         
         for j in range(3):
             if i + j < st.session_state['num_booths']:
@@ -52,12 +70,18 @@ def render_attendance_seat_page():
                         st.markdown(f"**🪑 {booth_name}**")
                         
                         current_info = seating_data.get(booth_name, {"生徒名": "-- 空席 --", "状態": "出席"})
-                        current_seat = current_info["生徒名"]
-                        current_status = current_info["状態"]
                         
-                        options = ["-- 空席 --"] + student_names
+                        # 最新の選択状況（セッションステート）があれば優先、なければデータから
+                        current_seat = st.session_state.get(f"seat_{booth_index}", current_info["生徒名"])
+                        current_status = st.session_state.get(f"status_{booth_index}", current_info["状態"])
                         
-                        # ⚠️ ポイント: keyを f"seat_{booth_index}" にしてエラーを防ぐ！
+                        # 🎯 選択肢をスマートに絞り込む！
+                        options = ["-- 空席 --"]
+                        for s in student_names:
+                            # 「まだ誰にも選ばれていない生徒」 OR 「今このブースに座っている生徒」 だけを選択肢に入れる
+                            if (s not in assigned_students) or (s == current_seat):
+                                options.append(s)
+                        
                         new_occupant = st.selectbox(
                             "生徒名", 
                             options, 
