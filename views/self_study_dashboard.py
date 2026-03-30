@@ -85,7 +85,7 @@ def render_self_study_dashboard():
     with col2:
         if st.button("🖨️ グラフを印刷"):
             components.html("<script>window.parent.print();</script>", height=0)
-
+        st.caption("※スマホはブラウザの「共有」メニューからプリントしてください")
     st.write("自習時間と授業時間を合算したり、学年ごとに絞り込んだりできる究極のグラフです🔥")
 
     with st.spinner("あらゆる学習データをかき集めています..."):
@@ -188,10 +188,16 @@ def render_self_study_dashboard():
         """
         st.markdown(title_html, unsafe_allow_html=True)
 
+        # 1. グラフを描く前に、データを「合計時間が多い順」に並び替える！
+        merged = merged.sort_values(by='合計時間(分)', ascending=False)
+        
+        # 2. 並び替えたあとの「生徒名のリスト」を作る
+        sorted_students = merged['生徒名'].tolist() 
+
         chart_height = max(300, len(merged) * 45)
         
-        # グラフのY軸（生徒名の並び順）の設定
-        y_encoding = alt.Y('生徒名:N', sort=alt.EncodingSortField(field="合計時間(分)", op="sum", order="descending"), title='生徒名', axis=alt.Axis(labelFontSize=14))
+        # 3. Y軸の設定の「sort=」の部分を、さっき作ったリストに書き換える！
+        y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=14))
 
         if mode == "自習時間 ＋ 授業時間":
             plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
