@@ -24,7 +24,7 @@ from views.salary_dashboard import render_salary_dashboard_page
 from utils.g_sheets import load_textbook_master
 
 # ページの基本設定
-st.set_page_config(page_title="学習塾管理システム", page_icon="icon.png", layout="wide")
+st.set_page_config(page_title="学習塾管理システム", page_icon="icon.jpg", layout="wide")
 
 # 🔑 パスワード設定
 ADMIN_USER = "admin"
