@@ -149,7 +149,7 @@ def render_multi_input_page(textbook_master):
                                 "next_hw_text": selected_hw_text, "next_hw_pages": next_hw_pages
                             })
 
-       st.divider()
+        st.divider()
         if len(input_data_list) == num_students:
             if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
                 for data in input_data_list:
