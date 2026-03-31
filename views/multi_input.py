@@ -149,17 +149,36 @@ def render_multi_input_page(textbook_master):
                                 "next_hw_text": selected_hw_text, "next_hw_pages": next_hw_pages
                             })
 
-        st.divider()
+       st.divider()
         if len(input_data_list) == num_students:
             if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
                 for data in input_data_list:
-                    # ⚠️ 注意：あとで utils/g_sheets.py の save_to_spreadsheet も書き換える必要があります！
+                    # 🌟 hw_status を消して、代わりに今回作った新しいデータたちを追加！
+                    # ※ 引数の順番やズレによるエラーを防ぐため、「キーワード指定（名前=中身）」で渡すように強化しました！
                     save_to_spreadsheet(
-                        data["name"], data["subject"], data["text_name"], 
-                        data["advanced_p"], data["quiz_records"], 
-                        date, data["hw_status"], teacher_name, class_type, data["attendance"],
-                        class_slot, data["advice"], data["parent_msg"], data["next_handover"] # 🌟 新しいデータを追加
+                        name=data["name"], 
+                        subject=data["subject"], 
+                        text_name=data["text_name"], 
+                        advanced_p=data["advanced_p"], 
+                        quiz_records=data["quiz_records"], 
+                        date=date, 
+                        # data["hw_status"] は削除しました！
+                        teacher_name=teacher_name, 
+                        class_type=class_type, 
+                        attendance=data["attendance"],
+                        class_slot=class_slot, 
+                        advice=data["advice"], 
+                        parent_msg=data["parent_msg"], 
+                        next_handover=data["next_handover"],
+                        # 👇 ここからが今回追加した新しいデータ！
+                        assigned_p=data["assigned_p"],
+                        completed_p=data["completed_p"],
+                        motivation_rank=data["motivation_rank"],
+                        next_hw_text=data["next_hw_text"],
+                        next_hw_pages=data["next_hw_pages"]
                     )
+                    
+                    # 🌟 先生が作っていた最強の連携機能はそのまま残します！
                     update_student_homework_rate(data["name"])
                     
                 st.success(f"✅ {num_students}名全員の記録を保存し、カルテの「やる気」データを自動更新しました！")
