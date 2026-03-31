@@ -91,37 +91,38 @@ def get_last_page_from_sheet(name):
     if not df.empty and 'ページ数' in df.columns:
         return int(df['ページ数'].iloc[-1])
     return 0
-def save_to_spreadsheet(name, subject, text_name, advanced_p, quiz_records, date, hw_status="-", teacher_name="未入力", class_type="1:1", attendance="出席（通常）", class_slot="-", advice="-", parent_msg="-", next_handover="-"):
+def save_to_spreadsheet(name, subject, text_name, advanced_p, quiz_records, date, teacher_name="未入力", class_type="1:1", attendance="出席（通常）", class_slot="-", advice="-", parent_msg="-", next_handover="-", assigned_p=0, completed_p=0, motivation_rank=0, next_hw_text="-", next_hw_pages=0):
     gc = get_gc_client()
     try:
         sh = gc.open_by_key(SPREADSHEET_ID)
         existing_sheets = [ws.title for ws in sh.worksheets()]
         
-        # 🌟 追加：新しく増やしたい列名もリストに加えます
-        new_columns = ["宿題", "担当講師", "授業形態", "出欠", "授業コマ", "アドバイス", "保護者への連絡", "次回への引継ぎ"]
+        # 🌟 追加：昔の列名に加えて、新メンバー5人を追加します！
+        new_columns = ["宿題", "担当講師", "授業形態", "出欠", "授業コマ", "アドバイス", "保護者への連絡", "次回への引継ぎ", "出した宿題P", "やった宿題P", "やる気ランク", "次回の宿題テキスト", "次回の宿題ページ数"]
         
         if name in existing_sheets:
             worksheet = sh.worksheet(name)
             header = worksheet.row_values(1)
-            # 先生の神コード！足りない列名があれば自動で右に追加してくれます
+            # 先生の神コード！足りない列名があれば自動で右に追加
             for col_name in new_columns:
                 if col_name not in header:
                     worksheet.update_cell(1, len(header) + 1, col_name)
                     header.append(col_name)
         else:
             worksheet = sh.add_worksheet(title=name, rows="100", cols="20")
-            # 新しい生徒が来た時の最初の1行目（ヘッダー）も一新！
-            header = ["日時", "名前", "科目", "テキスト", "終了ページ", "単元", "点数", "宿題", "担当講師", "授業形態", "出欠", "授業コマ", "アドバイス", "保護者への連絡", "次回への引継ぎ"]
+            # 新しい生徒の時のヘッダーにも、右端に新メンバーを追加！
+            header = ["日時", "名前", "科目", "テキスト", "終了ページ", "単元", "点数", "宿題", "担当講師", "授業形態", "出欠", "授業コマ", "アドバイス", "保護者への連絡", "次回への引継ぎ", "出した宿題P", "やった宿題P", "やる気ランク", "次回の宿題テキスト", "次回の宿題ページ数"]
             worksheet.append_row(header)
         
         date_str = date.strftime("%Y/%m/%d")
         
-        # 🌟 変更：advanced_p は「P.45〜47」のように文字で来るようになったので、 f"p.{advanced_p}" からそのまま advanced_p に変更しました！
+        # 🚨 超重要ポイント！
+        # 列がズレないように、昔「宿題 (hw_status)」が入っていた8番目の場所にはダミーの "-" を入れます！
         if not quiz_records:
-            worksheet.append_row([date_str, name, subject, text_name, advanced_p, "-", "-", hw_status, teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover])
+            worksheet.append_row([date_str, name, subject, text_name, advanced_p, "-", "-", "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, next_hw_text, next_hw_pages])
         else:
             for q in quiz_records:
-                worksheet.append_row([date_str, name, subject, text_name, advanced_p, f"第{q['unit']}章", q['score'], hw_status, teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover])
+                worksheet.append_row([date_str, name, subject, text_name, advanced_p, f"第{q['unit']}章", q['score'], "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, next_hw_text, next_hw_pages])
         return True
     except Exception as e:
         print(f"スプレッドシート保存エラー: {e}") # 万が一のエラー時に原因をターミナルに出す親切設計
@@ -534,7 +535,6 @@ def get_last_handover(name, subject):
 
     except Exception as e:
         return f"（データ取得エラー: {e}）"
-
 def add_new_textbook(new_name):
     """
     アプリから新規テキストを登録し、自動で五十音順（A列基準）に並べ替える魔法！
