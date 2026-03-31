@@ -1,6 +1,6 @@
 import streamlit as st
 import datetime
-
+import time
 # さっき作った裏方部隊から、必要な関数を呼び出します
 from utils.g_sheets import (
     get_all_student_names, 
@@ -181,6 +181,8 @@ def render_multi_input_page(textbook_master):
                     # 🌟 先生が作っていた最強の連携機能はそのまま残します！
                     update_student_homework_rate(data["name"])
                     
+                    time.sleep(2)
+
                 st.success(f"✅ {num_students}名全員の記録を保存し、カルテの「やる気」データを自動更新しました！")
 
     # ==========================================
