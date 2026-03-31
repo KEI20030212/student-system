@@ -7,7 +7,8 @@ from utils.g_sheets import (
     save_to_spreadsheet, 
     get_last_page_from_sheet, 
     update_student_homework_rate,
-    save_self_study_record
+    save_self_study_record,
+    get_last_handover
 )
 
 def render_multi_input_page(textbook_master):
@@ -67,7 +68,8 @@ def render_multi_input_page(textbook_master):
                             # 🌟 追加：「前回の引継ぎ事項」を自動表示！
                             # ※今はデザインだけですが、後でスプレッドシートから引っ張る関数に繋ぎます！
                             # ==========================================
-                            st.info(f"💡 **【前回 ({subject}) の引継ぎ】**\n\n(※ここに {name} さんのスプレッドシート上の前回データが表示されるようになります！)")
+                            last_note = get_last_handover(name, subject) # 本物のデータを取ってくる！
+                            st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
 
                             text_name = st.selectbox("テキスト", list(textbook_master.keys()), key=f"text_{i}")
                             st.divider()
