@@ -18,7 +18,7 @@ from views.search_page import render_search_page
 from views.salary_dashboard import render_salary_dashboard_page
 # from views.tuition import render_tuition_dashboard_page
 # 👇 これを app.py の上の方（インポート部分）に追加！
-from calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
+from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
