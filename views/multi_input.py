@@ -10,6 +10,11 @@ from utils.g_sheets import (
     save_self_study_record,
     get_last_handover,
 )
+from utils.calc_logic import (
+    calculate_hw_rate, 
+    calculate_quiz_points, 
+    calculate_motivation_rank
+)
 
 def render_multi_input_page(textbook_master):
     st.header("📝 授業・自習記録の入力")
