@@ -534,3 +534,64 @@ def get_last_handover(name, subject):
 
     except Exception as e:
         return f"（データ取得エラー: {e}）"
+
+def add_new_textbook(new_name):
+    """
+    アプリから新規テキストを登録し、自動で五十音順（A列基準）に並べ替える魔法！
+    """
+    import streamlit as st
+    gc = get_gc_client()
+    try:
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("テキスト情報一覧")
+        
+        # 先生のシートは「テキスト」と「章」の2列構成なので、
+        # 新規登録時はとりあえず章に「-」を入れて追加します
+        worksheet.append_row([new_name, "-"])
+        
+        # 🌟 ここが自動並べ替えの魔法！
+        # 1行目（ヘッダー）は残したまま、2行目以降を1列目（テキスト名）の昇順でソートします
+        worksheet.sort((1, 'asc'), range='A2:B1000')
+        return True
+    except Exception as e:
+        st.error(f"🚨 新規テキストの裏側でエラー発生: {e}")
+        return False
+
+def get_last_homework_info(name, subject):
+    """
+    前回の『次回の宿題テキスト』と『ページ数』を探し出す関数！
+    """
+    gc = get_gc_client()
+    try:
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        existing_sheets = [ws.title for ws in sh.worksheets()]
+        if name not in existing_sheets:
+            return "なし", 0
+
+        ws = sh.worksheet(name)
+        all_data = ws.get_all_values()
+        if len(all_data) <= 1:
+            return "なし", 0
+            
+        header = all_data[0]
+        
+        # 新しい項目がどこにあるか探す
+        try:
+            sub_idx = header.index("科目")
+            hw_text_idx = header.index("次回の宿題テキスト") 
+            hw_pages_idx = header.index("次回の宿題ページ数")
+        except ValueError:
+            # まだ一度も宿題が出されていなくて列が無い場合は「なし」を返す
+            return "なし", 0
+
+        # 下（最新）から順番に見て、同じ科目のデータを探す
+        for row in reversed(all_data[1:]):
+            # 行のデータがしっかり埋まっていて、科目が一致するかチェック
+            if len(row) > max(sub_idx, hw_text_idx, hw_pages_idx) and row[sub_idx] == subject:
+                text_name = row[hw_text_idx]
+                pages = row[hw_pages_idx]
+                return text_name if text_name and text_name != "-" else "なし", pages if pages else 0
+                
+        return "なし", 0
+    except Exception as e:
+        return "なし", 0
