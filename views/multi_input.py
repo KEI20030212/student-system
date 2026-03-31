@@ -59,47 +59,86 @@ def render_multi_input_page(textbook_master):
                             input_data_list.append({
                                 "name": name, "subject": "-", "text_name": "-", "advanced_p": "-", 
                                 "quiz_records": [], "hw_status": "-", "attendance": attendance,
-                                "advice": "-", "parent_msg": "-", "next_handover": "-"
+                                "advice": "-", "parent_msg": "-", "next_handover": "-",
+                                # 👇 欠席の時も空のデータを入れておく
+                                "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
+                                "next_hw_text": "-", "next_hw_pages": 0
                             })
                         else:
                             subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], key=f"sub_{i}")
                             
-                            # ==========================================
-                            # 🌟 追加：「前回の引継ぎ事項」を自動表示！
-                            # ※今はデザインだけですが、後でスプレッドシートから引っ張る関数に繋ぎます！
-                            # ==========================================
-                            last_note = get_last_handover(name, subject) # 本物のデータを取ってくる！
+                            last_note = get_last_handover(name, subject)
                             st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
 
                             text_name = st.selectbox("テキスト", list(textbook_master.keys()), key=f"text_{i}")
                             st.divider()
-                            hw_status = st.radio("🏠 宿題", ["やってきた", "やってない", "なし"], horizontal=True, key=f"hw_{i}")
+
+                            # ==========================================
+                            # 🌟 追加：宿題の確認と入力
+                            # ==========================================
+                            last_hw_text, last_hw_pages = get_last_homework_info(name, subject)
+                            st.markdown(f"🚩 **前回の宿題:** {last_hw_text} ({last_hw_pages} ページ分)")
+
+                            col_hw1, col_hw2 = st.columns(2)
+                            with col_hw1:
+                                assigned_p = st.number_input("出したページ数", value=int(last_hw_pages) if str(last_hw_pages).isdigit() else 0, key=f"assigned_{i}")
+                            with col_hw2:
+                                completed_p = st.number_input("やってきたページ数", min_value=0, max_value=assigned_p if assigned_p > 0 else 100, key=f"completed_{i}")
+
+                            # 🌟 ここで裏方の計算ロジックが発動！
+                            current_hw_rate = calculate_hw_rate(assigned_p, completed_p)
+                            if assigned_p > 0:
+                                st.caption(f"📊 宿題履行率: {current_hw_rate:.1f}%")
                             
-                            # 🌟 改良：「どこまで進んだか」を分かりやすくテキスト入力に変更
+                            st.divider()
+
                             last_page = get_last_page_from_sheet(name)
                             advanced_p = st.text_input("📖 授業でどこまで進んだか", value=f"P.{last_page} 〜 ", placeholder="例：P.45〜47、関係代名詞", key=f"adv_{i}")
                             
                             quiz_done = st.checkbox("💯 小テストを実施した", key=f"q_done_{i}")
                             quiz_records = []
+                            current_quiz_pts = 0 # 🌟 テストの点数もここで計算
+                            
                             if quiz_done:
                                 target_chap = st.number_input("実施した章", min_value=1, value=1, step=1, key=f"q_chap_{i}")
                                 w_nums = st.text_input("ミス問題番号", key=f"w_{i}")
                                 score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
                                 quiz_records.append({"unit": target_chap, "score": score})
+                                current_quiz_pts += calculate_quiz_points(score) # 点数をポイントに変換
+
+                            # 🌟 宿題履行率とテストポイントから「やる気ランク(1〜5)」を算出！
+                            motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
 
                             st.divider()
                             # ==========================================
-                            # 🌟 追加：アドバイス・保護者連絡・引継ぎ
+                            # 🌟 追加：次回の宿題指示
                             # ==========================================
+                            st.write("🚀 **次回の宿題指示**")
+                            hw_text_options = ["-- 選択 --", "🆕 新規テキスト入力"] + list(get_textbook_master().keys())
+                            selected_hw_text = st.selectbox("次回の宿題テキスト", hw_text_options, key=f"hw_text_{i}")
+
+                            if selected_hw_text == "🆕 新規テキスト入力":
+                                new_text_name = st.text_input("新規テキスト名を入力", key=f"new_hw_text_{i}")
+                                if new_text_name:
+                                    add_new_textbook(new_text_name)
+                                    selected_hw_text = new_text_name
+
+                            next_hw_pages = st.number_input("宿題ページ数（合計何P分か）", min_value=0, key=f"next_hw_p_{i}")
+
+                            st.divider()
                             advice = st.text_area("🗣️ 授業でのアドバイス（褒めた点など）", height=80, key=f"advc_{i}")
                             parent_msg = st.text_area("👪 保護者への連絡事項", height=80, key=f"p_msg_{i}")
                             next_handover = st.text_area("🔄 次回への引継ぎ事項", height=80, key=f"next_h_{i}")
 
+                            # 🌟 算出した「やる気ランク」や「次回の宿題」もリストに全部詰める！
                             input_data_list.append({
                                 "name": name, "subject": subject, "text_name": text_name,
                                 "advanced_p": advanced_p, "quiz_records": quiz_records, 
-                                "hw_status": hw_status, "attendance": attendance,
-                                "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover
+                                "attendance": attendance,
+                                "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover,
+                                "assigned_p": assigned_p, "completed_p": completed_p,
+                                "motivation_rank": motivation_rank, # 👈 これがグラフを動かす鍵！
+                                "next_hw_text": selected_hw_text, "next_hw_pages": next_hw_pages
                             })
 
         st.divider()
