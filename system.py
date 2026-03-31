@@ -17,11 +17,12 @@ from views.analysis import render_analysis_page
 from views.search_page import render_search_page
 from views.salary_dashboard import render_salary_dashboard_page
 # from views.tuition import render_tuition_dashboard_page
-
+# 👇 これを app.py の上の方（インポート部分）に追加！
+from calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
-from utils.g_sheets import load_textbook_master
+from utils.g_sheets import load_textbook_master, get_textbook_master, add_new_textbook, get_last_homework_info
 
 # ページの基本設定
 img = Image.open("icon.jpg")
