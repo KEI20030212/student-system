@@ -8,7 +8,7 @@ from utils.g_sheets import (
     get_last_page_from_sheet, 
     update_student_homework_rate,
     save_self_study_record,
-    get_last_handover
+    get_last_handover,
 )
 
 def render_multi_input_page(textbook_master):
