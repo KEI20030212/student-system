@@ -498,3 +498,39 @@ def get_textbook_master():
         # 🚨 【透視メガネ】裏側でエラーが起きたら、その理由を画面に叫ぶ！
         st.error(f"🚨 マスタ取得の裏側でエラー発生: {e}")
         return {}
+def get_last_handover(name, subject):
+    """
+    指定された生徒のシートから、特定の科目の「最新の引継ぎ事項」を抜き出す関数
+    """
+    gc = get_gc_client()
+    try:
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        existing_sheets = [ws.title for ws in sh.worksheets()]
+        
+        if name not in existing_sheets:
+            return "（初回授業のため、前回の記録はありません）"
+            
+        worksheet = sh.worksheet(name)
+        all_data = worksheet.get_all_values() # 全データを取得
+        
+        if len(all_data) <= 1:
+            return "（記録がまだありません）"
+            
+        # ヘッダーから「科目」と「次回への引継ぎ」が何列目にあるか探す
+        header = all_data[0]
+        try:
+            sub_idx = header.index("科目")
+            note_idx = header.index("次回への引継ぎ")
+        except ValueError:
+            return "（シートの項目が正しく設定されていません）"
+
+        # 下の行（最新）から順番に見て、同じ科目のデータを探す
+        for row in reversed(all_data[1:]):
+            if row[sub_idx] == subject:
+                last_note = row[note_idx]
+                return last_note if last_note and last_note != "-" else "（前回の引継ぎ事項は空欄でした）"
+        
+        return f"（{subject} の過去の記録は見つかりませんでした）"
+
+    except Exception as e:
+        return f"（データ取得エラー: {e}）"
