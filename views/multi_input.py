@@ -9,6 +9,9 @@ from utils.g_sheets import (
     update_student_homework_rate,
     save_self_study_record,
     get_last_handover,
+    get_last_homework_info,  # 👈 これを必ず追加！！
+    add_new_textbook,        # 👈 これも忘れずに！！
+    get_textbook_master
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
