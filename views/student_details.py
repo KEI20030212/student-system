@@ -88,15 +88,16 @@ def render_student_details_page():
 
             st.caption(f"💡 【自動参照】最新偏差値: **{latest_dev}** / 最新内申点: **{latest_naishin}**")
             
-            hw_rate = st.slider(f"✍️ {selected_subject}の宿題履行率 (直近 %)", 0, 100, 100, key=f"hw_{selected_subject}")
+            info = get_student_info(selected_student)
+            current_hw_rate = float(info.get('宿題履行率', 0.0))
+            current_motivation = int(info.get('やる気', 1))
             
             ability = calculate_ability_rank(latest_naishin, latest_dev)
-            motivation = calculate_motivation_rank(hw_rate, 100) 
             
             df_coord = pd.DataFrame({
                 "生徒": [selected_student],
                 "能力 (X)": [ability],
-                "やる気 (Y)": [motivation]
+                "やる気 (Y)": [current_motivation]
             })
             
             chart = alt.Chart(df_coord).mark_circle(size=800, color="#FF4B4B").encode(
