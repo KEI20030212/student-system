@@ -68,9 +68,8 @@ def render_multi_input_page(textbook_master):
                                 "name": name, "subject": "-", "text_name": "-", "advanced_p": "-", 
                                 "quiz_records": [], "hw_status": "-", "attendance": attendance,
                                 "advice": "-", "parent_msg": "-", "next_handover": "-",
-                                # 👇 欠席の時も空のデータを入れておく
                                 "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
-                                "next_hw_text": "-", "next_hw_pages": 0
+                                "next_hw_text": "-", "next_hw_pages": "-"
                             })
                         else:
                             subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], key=f"sub_{i}")
@@ -82,18 +81,33 @@ def render_multi_input_page(textbook_master):
                             st.divider()
 
                             # ==========================================
-                            # 🌟 追加：宿題の確認と入力
+                            # 🌟 変更：宿題の確認と入力（開始P〜終了Pの範囲入力に進化！）
                             # ==========================================
                             last_hw_text, last_hw_pages = get_last_homework_info(name, subject)
-                            st.markdown(f"🚩 **前回の宿題:** {last_hw_text} ({last_hw_pages} ページ分)")
+                            # 前回出した宿題が「P.10〜20」のような文字で入ってくるので、そのまま表示！
+                            st.markdown(f"🚩 **前回の宿題:** {last_hw_text} (範囲: {last_hw_pages})")
 
                             col_hw1, col_hw2 = st.columns(2)
                             with col_hw1:
-                                assigned_p = st.number_input("出したページ数", value=int(last_hw_pages) if str(last_hw_pages).isdigit() else 0, key=f"assigned_{i}")
-                            with col_hw2:
-                                completed_p = st.number_input("やってきたページ数", min_value=0, max_value=assigned_p if assigned_p > 0 else 100, key=f"completed_{i}")
+                                st.write("📖 出した範囲")
+                                # 範囲を入れるためのミニ2列
+                                hw_s_col, hw_e_col = st.columns(2)
+                                hw_start = hw_s_col.number_input("開始P", min_value=0, value=0, key=f"hw_start_{i}")
+                                hw_end = hw_e_col.number_input("終了P", min_value=0, value=0, key=f"hw_end_{i}")
+                                
+                                # 自動計算：終了P - 開始P + 1 で「出したページ数」を算出
+                                if hw_end >= hw_start and hw_end > 0:
+                                    assigned_p = hw_end - hw_start + 1
+                                else:
+                                    assigned_p = 0
+                                st.caption(f"計 {assigned_p} ページ分")
 
-                            # 🌟 ここで裏方の計算ロジックが発動！
+                            with col_hw2:
+                                st.write("✅ 実施状況")
+                                # 出したページ数を上限にする（0の時は1000を上限にしてエラー回避）
+                                completed_p = st.number_input("やってきたページ数", min_value=0, max_value=assigned_p if assigned_p > 0 else 1000, key=f"completed_{i}")
+
+                            # 🌟 裏方の計算ロジック
                             current_hw_rate = calculate_hw_rate(assigned_p, completed_p)
                             if assigned_p > 0:
                                 st.caption(f"📊 宿題履行率: {current_hw_rate:.1f}%")
@@ -105,21 +119,21 @@ def render_multi_input_page(textbook_master):
                             
                             quiz_done = st.checkbox("💯 小テストを実施した", key=f"q_done_{i}")
                             quiz_records = []
-                            current_quiz_pts = 0 # 🌟 テストの点数もここで計算
+                            current_quiz_pts = 0 
                             
                             if quiz_done:
                                 target_chap = st.number_input("実施した章", min_value=1, value=1, step=1, key=f"q_chap_{i}")
                                 w_nums = st.text_input("ミス問題番号", key=f"w_{i}")
                                 score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
                                 quiz_records.append({"unit": target_chap, "score": score})
-                                current_quiz_pts += calculate_quiz_points(score) # 点数をポイントに変換
+                                current_quiz_pts += calculate_quiz_points(score)
 
-                            # 🌟 宿題履行率とテストポイントから「やる気ランク(1〜5)」を算出！
+                            # 🌟 やる気ランクの算出
                             motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
 
                             st.divider()
                             # ==========================================
-                            # 🌟 追加：次回の宿題指示
+                            # 🌟 変更：次回の宿題指示（開始P〜終了Pの範囲入力に進化！）
                             # ==========================================
                             st.write("🚀 **次回の宿題指示**")
                             hw_text_options = ["-- 選択 --", "🆕 新規テキスト入力"] + list(get_textbook_master().keys())
@@ -131,30 +145,41 @@ def render_multi_input_page(textbook_master):
                                     add_new_textbook(new_text_name)
                                     selected_hw_text = new_text_name
 
-                            next_hw_pages = st.number_input("宿題ページ数（合計何P分か）", min_value=0, key=f"next_hw_p_{i}")
+                            # 次回の宿題も「範囲」で入力！
+                            st.write("宿題の範囲")
+                            n_s_col, n_e_col = st.columns(2)
+                            next_start = n_s_col.number_input("次 開始P", min_value=0, value=0, key=f"n_start_{i}")
+                            next_end = n_e_col.number_input("次 終了P", min_value=0, value=0, key=f"n_end_{i}")
+                            
+                            # 「P.〇〜△」の文字列を自動生成
+                            if next_end >= next_start and next_end > 0:
+                                next_hw_pages_str = f"P.{next_start}〜{next_end}"
+                            else:
+                                next_hw_pages_str = "-"
+                                
+                            st.caption(f"スプレッドシートに保存される範囲: {next_hw_pages_str}")
 
                             st.divider()
                             advice = st.text_area("🗣️ 授業でのアドバイス（褒めた点など）", height=80, key=f"advc_{i}")
                             parent_msg = st.text_area("👪 保護者への連絡事項", height=80, key=f"p_msg_{i}")
                             next_handover = st.text_area("🔄 次回への引継ぎ事項", height=80, key=f"next_h_{i}")
 
-                            # 🌟 算出した「やる気ランク」や「次回の宿題」もリストに全部詰める！
+                            # 🌟 算出したデータをリストに詰める
                             input_data_list.append({
                                 "name": name, "subject": subject, "text_name": text_name,
                                 "advanced_p": advanced_p, "quiz_records": quiz_records, 
                                 "attendance": attendance,
                                 "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover,
                                 "assigned_p": assigned_p, "completed_p": completed_p,
-                                "motivation_rank": motivation_rank, # 👈 これがグラフを動かす鍵！
-                                "next_hw_text": selected_hw_text, "next_hw_pages": next_hw_pages
+                                "motivation_rank": motivation_rank, 
+                                "next_hw_text": selected_hw_text, 
+                                "next_hw_pages": next_hw_pages_str # 👈 ★ここが「P.10〜20」の文字で保存されます！
                             })
 
         st.divider()
         if len(input_data_list) == num_students:
             if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
                 for data in input_data_list:
-                    # 🌟 hw_status を消して、代わりに今回作った新しいデータたちを追加！
-                    # ※ 引数の順番やズレによるエラーを防ぐため、「キーワード指定（名前=中身）」で渡すように強化しました！
                     save_to_spreadsheet(
                         name=data["name"], 
                         subject=data["subject"], 
@@ -162,7 +187,6 @@ def render_multi_input_page(textbook_master):
                         advanced_p=data["advanced_p"], 
                         quiz_records=data["quiz_records"], 
                         date=date, 
-                        # data["hw_status"] は削除しました！
                         teacher_name=teacher_name, 
                         class_type=class_type, 
                         attendance=data["attendance"],
@@ -170,7 +194,6 @@ def render_multi_input_page(textbook_master):
                         advice=data["advice"], 
                         parent_msg=data["parent_msg"], 
                         next_handover=data["next_handover"],
-                        # 👇 ここからが今回追加した新しいデータ！
                         assigned_p=data["assigned_p"],
                         completed_p=data["completed_p"],
                         motivation_rank=data["motivation_rank"],
@@ -178,7 +201,6 @@ def render_multi_input_page(textbook_master):
                         next_hw_pages=data["next_hw_pages"]
                     )
                     
-                    # 🌟 先生が作っていた最強の連携機能はそのまま残します！
                     update_student_homework_rate(data["name"])
                     
                     time.sleep(2)
