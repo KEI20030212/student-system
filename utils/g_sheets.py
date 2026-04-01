@@ -559,19 +559,19 @@ def add_new_textbook(new_name):
 
 def get_last_homework_info(name, subject):
     """
-    前回の『次回の宿題テキスト』と『ページ数』を探し出す関数！
+    前回の『次回の宿題テキスト』と『ページ数（範囲）』を探し出す関数！
     """
     gc = get_gc_client()
     try:
         sh = gc.open_by_key(SPREADSHEET_ID)
         existing_sheets = [ws.title for ws in sh.worksheets()]
         if name not in existing_sheets:
-            return "なし", 0
+            return "なし", "-"  # 🌟 0 から "-" に変更
 
         ws = sh.worksheet(name)
         all_data = ws.get_all_values()
         if len(all_data) <= 1:
-            return "なし", 0
+            return "なし", "-"  # 🌟 ここも
             
         header = all_data[0]
         
@@ -582,7 +582,7 @@ def get_last_homework_info(name, subject):
             hw_pages_idx = header.index("次回の宿題ページ数")
         except ValueError:
             # まだ一度も宿題が出されていなくて列が無い場合は「なし」を返す
-            return "なし", 0
+            return "なし", "-"  # 🌟 ここも
 
         # 下（最新）から順番に見て、同じ科目のデータを探す
         for row in reversed(all_data[1:]):
@@ -590,8 +590,9 @@ def get_last_homework_info(name, subject):
             if len(row) > max(sub_idx, hw_text_idx, hw_pages_idx) and row[sub_idx] == subject:
                 text_name = row[hw_text_idx]
                 pages = row[hw_pages_idx]
-                return text_name if text_name and text_name != "-" else "なし", pages if pages else 0
+                # 🌟 データがあればそのまま（15でも P.10〜20 でも）返し、空っぽなら "-" を返す
+                return text_name if text_name and text_name != "-" else "なし", pages if pages else "-"
                 
-        return "なし", 0
+        return "なし", "-"
     except Exception as e:
-        return "なし", 0
+        return "なし", "-"
