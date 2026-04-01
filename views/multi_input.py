@@ -1,6 +1,8 @@
 import streamlit as st
 import datetime
 import time
+import re
+
 # さっき作った裏方部隊から、必要な関数を呼び出します
 from utils.g_sheets import (
     get_all_student_names, 
@@ -26,17 +28,15 @@ def render_multi_input_page(textbook_master):
     st.divider()
 
     # ==========================================
-    # 📖 「授業」が選ばれた時の画面（大改修版！）
+    # 📖 「授業」が選ばれた時の画面
     # ==========================================
     if record_type == "📖 授業":
         with st.container(border=True):
-            # 🌟 追加：コマ選択を入れるために4列にしました！
             c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.5, 2])
             date = c1.date_input("授業日", datetime.date.today())
             teacher_name = c2.text_input("👨‍🏫 担当講師", placeholder="例：山田")
             class_type = c3.radio("👥 授業形態", ["1:1", "1:2", "1:3"], horizontal=True)
             
-            # 🌟 追加：授業コマの選択
             time_slots = [
                 "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
                 "0コマ目 (13:10~14:40)", "1コマ目 (15:00~16:30)",
@@ -66,7 +66,7 @@ def render_multi_input_page(textbook_master):
                             st.warning("欠席のため、進捗・テスト入力はスキップされます。")
                             input_data_list.append({
                                 "name": name, "subject": "-", "text_name": "-", "advanced_p": "-", 
-                                "quiz_records": [], "hw_status": "-", "attendance": attendance,
+                                "quiz_records": [], "attendance": attendance,
                                 "advice": "-", "parent_msg": "-", "next_handover": "-",
                                 "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
                                 "next_hw_text": "-", "next_hw_pages": "-"
@@ -81,36 +81,47 @@ def render_multi_input_page(textbook_master):
                             st.divider()
 
                             # ==========================================
-                            # 🌟 変更：宿題の確認と入力（開始P〜終了Pの範囲入力に進化！）
+                            # 🌟 変更：宿題の確認と「やってきた範囲」の入力
                             # ==========================================
                             last_hw_text, last_hw_pages = get_last_homework_info(name, subject)
-                            # 前回出した宿題が「P.10〜20」のような文字で入ってくるので、そのまま表示！
-                            st.markdown(f"🚩 **前回の宿題:** {last_hw_text} (範囲: {last_hw_pages})")
+                            
+                            # 🌟 追加：過去の文字列「P.10〜15」などから「出したページ数」を自動で読み取る！
+                            assigned_p = 0
+                            hw_str = str(last_hw_pages)
+                            if "〜" in hw_str:
+                                # 文字列の中から数字だけを取り出す
+                                nums = [int(n) for n in re.findall(r'\d+', hw_str)]
+                                if len(nums) >= 2:
+                                    assigned_p = nums[1] - nums[0] + 1
+                            elif hw_str.isdigit():
+                                assigned_p = int(hw_str)
 
+                            st.markdown(f"🚩 **前回の宿題:** {last_hw_text} (範囲: {last_hw_pages} / 計 {assigned_p} P分)")
+
+                            st.write("✅ **実施状況（やってきた範囲）**")
                             col_hw1, col_hw2 = st.columns(2)
                             with col_hw1:
-                                st.write("📖 出した範囲")
-                                # 範囲を入れるためのミニ2列
-                                hw_s_col, hw_e_col = st.columns(2)
-                                hw_start = hw_s_col.number_input("開始P", min_value=0, value=0, key=f"hw_start_{i}")
-                                hw_end = hw_e_col.number_input("終了P", min_value=0, value=0, key=f"hw_end_{i}")
-                                
-                                # 自動計算：終了P - 開始P + 1 で「出したページ数」を算出
-                                if hw_end >= hw_start and hw_end > 0:
-                                    assigned_p = hw_end - hw_start + 1
-                                else:
-                                    assigned_p = 0
-                                st.caption(f"計 {assigned_p} ページ分")
-
+                                done_start = st.number_input("やってきた 開始P", min_value=0, value=0, key=f"done_start_{i}")
                             with col_hw2:
-                                st.write("✅ 実施状況")
-                                # 出したページ数を上限にする（0の時は1000を上限にしてエラー回避）
-                                completed_p = st.number_input("やってきたページ数", min_value=0, max_value=assigned_p if assigned_p > 0 else 1000, key=f"completed_{i}")
+                                done_end = st.number_input("やってきた 終了P", min_value=0, value=0, key=f"done_end_{i}")
+                            
+                            # 🌟 「やってきたページ数」を自動計算
+                            if done_end >= done_start and done_end > 0:
+                                completed_p = done_end - done_start + 1
+                            else:
+                                completed_p = 0
+                                
+                            st.caption(f"やってきたページ数: 計 {completed_p} P分")
 
-                            # 🌟 裏方の計算ロジック
-                            current_hw_rate = calculate_hw_rate(assigned_p, completed_p)
+                            # 🌟 宿題履行率の計算と、100%での頭打ち（キャップ）処理！
+                            current_hw_rate = calculate_hw_rate(assigned_p, completed_p) if assigned_p > 0 else 0.0
+                            if current_hw_rate > 100.0:
+                                current_hw_rate = 100.0
+                                
                             if assigned_p > 0:
                                 st.caption(f"📊 宿題履行率: {current_hw_rate:.1f}%")
+                            else:
+                                st.caption("📊 宿題履行率: - % (宿題なし)")
                             
                             st.divider()
 
@@ -128,12 +139,11 @@ def render_multi_input_page(textbook_master):
                                 quiz_records.append({"unit": target_chap, "score": score})
                                 current_quiz_pts += calculate_quiz_points(score)
 
-                            # 🌟 やる気ランクの算出
                             motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
 
                             st.divider()
                             # ==========================================
-                            # 🌟 変更：次回の宿題指示（開始P〜終了Pの範囲入力に進化！）
+                            # 次回の宿題指示
                             # ==========================================
                             st.write("🚀 **次回の宿題指示**")
                             hw_text_options = ["-- 選択 --", "🆕 新規テキスト入力"] + list(get_textbook_master().keys())
@@ -145,13 +155,11 @@ def render_multi_input_page(textbook_master):
                                     add_new_textbook(new_text_name)
                                     selected_hw_text = new_text_name
 
-                            # 次回の宿題も「範囲」で入力！
                             st.write("宿題の範囲")
                             n_s_col, n_e_col = st.columns(2)
                             next_start = n_s_col.number_input("次 開始P", min_value=0, value=0, key=f"n_start_{i}")
                             next_end = n_e_col.number_input("次 終了P", min_value=0, value=0, key=f"n_end_{i}")
                             
-                            # 「P.〇〜△」の文字列を自動生成
                             if next_end >= next_start and next_end > 0:
                                 next_hw_pages_str = f"P.{next_start}〜{next_end}"
                             else:
@@ -164,7 +172,6 @@ def render_multi_input_page(textbook_master):
                             parent_msg = st.text_area("👪 保護者への連絡事項", height=80, key=f"p_msg_{i}")
                             next_handover = st.text_area("🔄 次回への引継ぎ事項", height=80, key=f"next_h_{i}")
 
-                            # 🌟 算出したデータをリストに詰める
                             input_data_list.append({
                                 "name": name, "subject": subject, "text_name": text_name,
                                 "advanced_p": advanced_p, "quiz_records": quiz_records, 
@@ -173,7 +180,7 @@ def render_multi_input_page(textbook_master):
                                 "assigned_p": assigned_p, "completed_p": completed_p,
                                 "motivation_rank": motivation_rank, 
                                 "next_hw_text": selected_hw_text, 
-                                "next_hw_pages": next_hw_pages_str # 👈 ★ここが「P.10〜20」の文字で保存されます！
+                                "next_hw_pages": next_hw_pages_str
                             })
 
         st.divider()
