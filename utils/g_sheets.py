@@ -127,26 +127,75 @@ def save_to_spreadsheet(name, subject, text_name, advanced_p, quiz_records, date
     except Exception as e:
         print(f"スプレッドシート保存エラー: {e}") # 万が一のエラー時に原因をターミナルに出す親切設計
         return False
+import pandas as pd
+import datetime
+
 def update_student_homework_rate(name):
     from utils.calc_logic import calculate_quiz_points, calculate_motivation_rank
+    
+    # 生徒の全データを取得
     df = load_all_data(name)
-    if df.empty or '宿題' not in df.columns: return
+    if df.empty: return
     
-    df_hw = df[df['宿題'].isin(['やってきた', 'やってない'])].tail(4)
-    if df_hw.empty: return
+    # ==========================================
+    # ⚠️ 先生へ：以下の3つの変数名（''の中身）を、
+    # 実際のスプレッドシートの「1行目（見出し）」の文字とピッタリ合わせてください！
+    # ==========================================
+    date_col = '日付'             # 例: '日付', '授業日' など
+    assigned_col = '出した宿題P'      # 例: '指示ページ数', '宿題出したP' など
+    completed_col = 'やった宿題P' # 例: '実施ページ数', '宿題やってきたP' など
+    score_col = '点数'            # 例: '小テスト点数', '点数' など
+
+    # 日付列がない場合は計算できないのでストップ
+    if date_col not in df.columns:
+        return
+
+    # 1. 「今月」のデータだけに絞り込む
+    # 日付データをPandasが計算しやすい形式に変換
+    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
     
-    done_count = len(df_hw[df_hw['宿題'] == 'やってきた'])
-    hw_rate = int((done_count / len(df_hw)) * 100)
-    
+    today = datetime.date.today()
+    current_month = today.month
+    current_year = today.year
+
+    # 今月＆今年のデータだけを抽出
+    df_this_month = df[(df[date_col].dt.month == current_month) & (df[date_col].dt.year == current_year)]
+
+    if df_this_month.empty:
+        return
+
+    # 2. 今月の「宿題ページ数」の合計を出す
+    total_assigned = 0
+    total_completed = 0
+
+    if assigned_col in df_this_month.columns and completed_col in df_this_month.columns:
+        # 空欄や「-」などの文字を無視して、数字だけを合計する
+        total_assigned = pd.to_numeric(df_this_month[assigned_col], errors='coerce').fillna(0).sum()
+        total_completed = pd.to_numeric(df_this_month[completed_col], errors='coerce').fillna(0).sum()
+
+    # 3. 宿題履行率の計算 (0除算を防止しつつ、最大100%でストップさせる)
+    if total_assigned > 0:
+        hw_rate = (total_completed / total_assigned) * 100
+        if hw_rate > 100.0:
+            hw_rate = 100.0
+    else:
+        hw_rate = 0.0
+
+    # 83.3333... のようになるので、小数点第1位で丸める
+    hw_rate = round(hw_rate, 1)
+
+    # 4. 今月の小テストの合計ポイントを計算
     info = get_student_info(name)
     total_points = 0
-    if '点数' in df.columns:
-        scores = pd.to_numeric(df['点数'], errors='coerce').dropna()
+    if score_col in df_this_month.columns:
+        scores = pd.to_numeric(df_this_month[score_col], errors='coerce').dropna()
         for s in scores:
             total_points += calculate_quiz_points(s)
             
+    # 5. 新しいやる気ランクを算出
     new_motivation = calculate_motivation_rank(hw_rate, total_points)
     
+    # 6. 生徒マスターを更新
     update_student_info(
         name, 
         info.get('学年', ''), info.get('学校名', ''), info.get('志望校・目的', ''), info.get('受講科目', ''),
