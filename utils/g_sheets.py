@@ -689,15 +689,14 @@ def update_instructor_master(df_updated):
         print(f"講師マスタ更新エラー: {e}")
 
 def get_all_teacher_names():
-    """講師マスタ（または該当のシート）から講師名のリストを取得して五十音順にする"""
-    # ⚠️ 先生のスプレッドシートに合わせてシート名や列を調整してください
+    """講師マスタから講師名のリストを取得して五十音順にする"""
     try:
-        sheet = client.open(SPREADSHEET_NAME).worksheet("講師マスタ") # シート名
-        # 1行目が見出しで、A列に名前がある場合
+        sheet = client.open(SPREADSHEET_NAME).worksheet("講師マスタ")
         names = sheet.col_values(1)[1:] 
-        # 空白を除去して五十音順（文字コード順）に並び替え
         names = sorted([name.strip() for name in names if name.strip()])
         return names
     except Exception as e:
-        print(f"講師マスタ取得エラー: {e}")
+        # 🌟 変更：エラーを裏側で隠さず、Streamlitの画面に赤い警告として出す！
+        import streamlit as st
+        st.error(f"🚨 講師マスタの取得に失敗しました！原因: {e}")
         return []
