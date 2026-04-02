@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import math
-from utils.g_sheets import get_all_student_names, load_all_data, load_instructor_master, update_instructor_master # 👈 updateも追加！
-from utils.pdf_generator import generate_payslip_pdf
+from utils.g_sheets import get_all_student_names, load_all_data, load_instructor_master, update_instructor_master
+from utils.pdf_generator import generate_payslip_pdf # 👈 PDF職人もバッチリ読み込み！
 
 def render_salary_dashboard_page():
     st.header("💰 給与・交通費ダッシュボード")
@@ -11,10 +11,9 @@ def render_salary_dashboard_page():
     student_names = get_all_student_names()
     if not student_names: return
 
-    # 🌟 講師マスタを読み込む
+    # 講師マスタを読み込む
     df_instructors = load_instructor_master()
     if df_instructors.empty:
-        # マスタが空の場合の仮データ（列の枠組みだけ作る）
         df_instructors = pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
 
     with st.expander("🏢 新規講師用の「基本」コマ単価設定", expanded=False):
@@ -48,11 +47,10 @@ def render_salary_dashboard_page():
 
     st.divider()
 
-    # 今月稼働した先生のリストを取得
     teachers = df_month['担当講師'].dropna().unique()
     valid_teachers = [t for t in teachers if t not in ["未入力", ""]]
 
-    # 🌟 ここがポイント！今月稼働したのにマスタにいない先生を自動追加する
+    # 今月稼働したのにマスタにいない先生を自動追加
     master_teacher_names = df_instructors['講師名'].tolist() if not df_instructors.empty else []
     new_rows = []
     for t in valid_teachers:
@@ -65,25 +63,21 @@ def render_salary_dashboard_page():
     if new_rows:
         df_instructors = pd.concat([df_instructors, pd.DataFrame(new_rows)], ignore_index=True)
 
-    st.subheader("👨‍🏫 講師ごとの単価・設定（ここで直接編集できます！）")
-    
-    # 🌟 data_editor でマスタの情報を直接いじれるようにする！
+    st.subheader("👨‍🏫 講師ごとの単価・設定")
     edited_prices = st.data_editor(df_instructors, hide_index=True, use_container_width=True, num_rows="dynamic")
 
-    # 🌟 保存ボタン
     if st.button("💾 変更をスプレッドシート（マスタ）に保存する"):
         update_instructor_master(edited_prices)
         st.success("✅ 講師マスタを更新しました！次回の計算からはこの設定が適用されます。")
 
     st.divider()
 
-    # 計算ループ（正確なコマ数計算）
+    # 計算ループ
     summary_list = []
     for teacher in valid_teachers:
         df_teacher = df_month[df_month['担当講師'] == teacher].copy()
         df_teacher['日付'] = df_teacher['日時'].dt.date
         
-        # 画面の表（edited_prices）から先生の行を引っ張る
         t_row_df = edited_prices[edited_prices["講師名"] == teacher]
         if t_row_df.empty: continue
         t_row = t_row_df.iloc[0]
@@ -94,7 +88,6 @@ def render_salary_dashboard_page():
         trans = t_row.get('交通費', 0)
         allowance = t_row.get('役職手当', 0)
 
-        # 高精度コマ数計算
         koma_11, koma_12, koma_13 = 0, 0, 0
         if '授業コマ' in df_teacher.columns:
             for (date, period), group in df_teacher.groupby(['日付', '授業コマ']):
@@ -118,27 +111,28 @@ def render_salary_dashboard_page():
             "役職手当 (円)": int(allowance), "出勤日数": working_days, 
             "交通費合計 (円)": int(transport_total), "💰 最終支給額 (円)": int(final_salary)
         })
-        if summary_list:
-            df_summary = pd.DataFrame(summary_list)
-            df_summary = df_summary.sort_values(by="💰 最終支給額 (円)", ascending=False)
-            st.subheader(f"📊 {selected_month} の稼働・給与一覧")
-            st.dataframe(df_summary, hide_index=True, use_container_width=True)
-            # === views/salary_dashboard.py の一番最後に追加 ===
-            st.divider()
-            st.subheader("📄 給与明細PDFの自動発行")
-            st.write("各先生の給与明細をPDFでダウンロードできます。")
-            # ボタンを横に並べるためのコンテナ
-            col_count = 3 # 3列で並べる
-            cols = st.columns(col_count)
-            for i, row_data in enumerate(summary_list):
-                # PDFデータを生成
-                pdf_bytes = generate_payslip_pdf(row_data, selected_month)
-                # 順番にカラムにボタンを配置
-                with cols[i % col_count]:
-                    st.download_button(
-                        label=f"📥 {row_data['👨‍🏫 担当講師']} 先生",
-                        data=pdf_bytes,
-                        file_name=f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf",
-                        mime="application/pdf",
-                        key=f"pdf_{row_data['👨‍🏫 担当講師']}" # ボタンの重複エラーを防ぐキー
-                        )
+
+    # 結果表示とPDFボタン（ここでインデントを完璧に揃えています！）
+    if summary_list:
+        df_summary = pd.DataFrame(summary_list)
+        df_summary = df_summary.sort_values(by="💰 最終支給額 (円)", ascending=False)
+        st.subheader(f"📊 {selected_month} の稼働・給与一覧")
+        st.dataframe(df_summary, hide_index=True, use_container_width=True)
+
+        st.divider()
+        st.subheader("📄 給与明細PDFの自動発行")
+        st.write("各先生の給与明細をPDFでダウンロードできます。")
+        
+        col_count = 3
+        cols = st.columns(col_count)
+        
+        for i, row_data in enumerate(summary_list):
+            pdf_bytes = generate_payslip_pdf(row_data, selected_month)
+            with cols[i % col_count]:
+                st.download_button(
+                    label=f"📥 {row_data['👨‍🏫 担当講師']} 先生",
+                    data=pdf_bytes,
+                    file_name=f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf",
+                    mime="application/pdf",
+                    key=f"pdf_{row_data['👨‍🏫 担当講師']}"
+                )
