@@ -9,7 +9,7 @@ def render_analytics_dashboard_page():
     # --- 列名の設定（ここを実際のシートに合わせます） ---
     report_col = 'アドバイス'  # 指導報告の列名
     hw_content_col = '次回の宿題ページ数'  # 宿題を出した内容の列名
-    hw_status_col = '宿題'  # 🌟重要：宿題の「結果(A,B,Cなど)」を入れている列名
+    hw_status_col = 'やった宿題P'  # 🌟重要：宿題の「結果(A,B,Cなど)」を入れている列名
 
     # 月の選択肢準備
     today = pd.Timestamp.now()
