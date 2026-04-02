@@ -690,13 +690,19 @@ def update_instructor_master(df_updated):
 
 def get_all_teacher_names():
     """講師マスタから講師名のリストを取得して五十音順にする"""
+    gc = get_gc_client() # 👈 先生の環境に合わせた接続！
     try:
-        sheet = client.open(SPREADSHEET_NAME).worksheet("講師マスタ")
-        names = sheet.col_values(1)[1:] 
+        sh = gc.open_by_key(SPREADSHEET_ID) # 👈 IDで開く！
+        
+        # ⚠️ スプレッドシート側のシート名が「講師マスタ」であることを確認してください。
+        # (もし「設定_講師一覧」など別の名前で作っている場合は、ここを変更します)
+        sheet = sh.worksheet("講師マスタ")
+        
+        names = sheet.col_values(1)[1:] # 1行目の見出しを飛ばしてA列を取得
         names = sorted([name.strip() for name in names if name.strip()])
         return names
+        
     except Exception as e:
-        # 🌟 変更：エラーを裏側で隠さず、Streamlitの画面に赤い警告として出す！
         import streamlit as st
         st.error(f"🚨 講師マスタの取得に失敗しました！原因: {e}")
         return []
