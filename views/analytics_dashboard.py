@@ -41,7 +41,7 @@ def render_analytics_dashboard_page():
                 df_all['宿題を出した先生'] = df_all.groupby(['生徒名', '科目'])['担当講師'].shift(1)
 
             # 指導報告書の「熱量（文字数）」を計算
-            report_col = '指導内容' if '指導内容' in df_all.columns else None
+            report_col = 'アドバイス' if 'アドバイス' in df_all.columns else None
             if report_col:
                 df_all['報告文字数'] = df_all[report_col].astype(str).apply(lambda x: len(x) if x != 'nan' else 0)
 
@@ -84,7 +84,7 @@ def render_analytics_dashboard_page():
             st.bar_chart(koma_counts.set_index('講師名'))
 
         with c2:
-            report_col = '指導内容' if '指導内容' in df_month.columns else None
+            report_col = 'アドバイス' if 'アドバイス' in df_month.columns else None
             if report_col and '報告文字数' in df_month.columns:
                 st.markdown(f"**🔥 指導報告の熱量（平均文字数）ランキング**")
                 avg_chars = df_month.groupby('担当講師')['報告文字数'].mean().reset_index()
