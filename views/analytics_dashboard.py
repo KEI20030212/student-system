@@ -29,7 +29,7 @@ def render_analytics_dashboard_page():
 
     # --- 列名の設定 ---
     report_col = 'アドバイス'
-    hw_content_col = '次回のページ数'
+    hw_content_col = '次回の宿題ページ数'
     hw_status_col = 'やった宿題P'
 
     # 月の選択肢準備
