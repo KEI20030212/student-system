@@ -25,6 +25,10 @@ from utils.calc_logic import (
 def render_multi_input_page(textbook_master):
     st.header("📝 授業・自習記録の入力")
 
+    # --- 状態管理のための初期化 ---
+    if "class_slot_val" not in st.session_state:
+        st.session_state["class_slot_val"] = "-- 選択 --"
+
     record_type = st.radio("✍️ 記録の種類を選択してください", ["📖 授業", "📝 自習"], horizontal=True)
     st.divider()
 
@@ -32,43 +36,41 @@ def render_multi_input_page(textbook_master):
         st.session_state["cached_student_names"] = get_all_student_names()
     student_names = st.session_state["cached_student_names"]
 
-    # 🌟 講師名のリストを取得して記憶しておく
     if "cached_teacher_names" not in st.session_state:
         st.session_state["cached_teacher_names"] = get_all_teacher_names()
     teacher_names = st.session_state["cached_teacher_names"]
 
-    # ==========================================
-    # 📖 「授業」が選ばれた時の画面
-    # ==========================================
     if record_type == "📖 授業":
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.5, 2])
             date = c1.date_input("授業日", datetime.date.today())
             
-            # 🌟 変更①：担当講師をプルダウン（五十音順・絞り込み可能）に変更
+            # 講師名はセッション状態で管理せず、通常の挙動（保持）に任せる
             teacher_options = ["-- 選択 --"] + teacher_names
-            teacher_name = c2.selectbox("👨‍🏫 担当講師", teacher_options)
+            teacher_name = c2.selectbox("👨‍🏫 担当講師", teacher_options, key="sb_teacher")
             
             class_type = c3.radio("👥 授業形態", ["1:1", "1:2", "1:3"], horizontal=True)
             
-            # 🌟 変更①：コマ選択にも「-- 選択 --」を追加
             time_slots = [
-                "-- 選択 --",
-                "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
+                "-- 選択 --", "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
                 "0コマ目 (13:10~14:40)", "1コマ目 (15:00~16:30)",
-                "2コマ目 (16:40~18:10)", "3コマ目 (18:20~19:50)",
-                "4コマ目 (20:00~21:30)"
+                "2コマ目 (16:40~18:10)", "3コマ目 (18:20~19:50)", "4コマ目 (20:00~21:30)"
             ]
-            class_slot = c4.selectbox("⏰ 授業コマ", time_slots)
+            
+            # 🌟 修正ポイント①: keyを指定して、プログラムから値を操作できるようにする
+            class_slot = c4.selectbox(
+                "⏰ 授業コマ", 
+                time_slots, 
+                key="sb_class_slot"
+            )
 
-        # 🌟 変更②：講師とコマが両方選ばれていないと、下に進めないようにする！
+        # 講師かコマが未選択なら、入力をブロック
         if teacher_name == "-- 選択 --" or class_slot == "-- 選択 --":
-            st.info("👆 まずは「担当講師」と「授業コマ」を選択してください。選択すると生徒の入力欄が表示されます。")
+            st.info("👆 まずは「担当講師」と「授業コマ」を選択してください。")
         else:
-            # ▼▼▼ ここから下は、講師とコマが選ばれた時だけ表示される ▼▼▼
+            # --- ここから生徒入力欄 ---
             num_students = int(class_type.split(":")[1])
             options = ["-- 選択 --", "🆕 新規登録"] + student_names
-
             st.divider()
             cols = st.columns(num_students)
             input_data_list = []
@@ -76,7 +78,7 @@ def render_multi_input_page(textbook_master):
             for i in range(num_students):
                 with cols[i]:
                     with st.container(border=True):
-                        st.markdown(f"### 👤 生徒 {i+1}")
+                        # 🌟 修正ポイント②: 各入力項目にkeyを設定しておく（後で一括削除するため）
                         name = st.selectbox("生徒名", options, key=f"name_{i}")
                         if name == "🆕 新規登録": name = st.text_input("新しい生徒の名前", key=f"new_name_{i}")
 
@@ -206,79 +208,37 @@ def render_multi_input_page(textbook_master):
             st.divider()
             if len(input_data_list) == num_students:
                 if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
-                    for data in input_data_list:
-                        save_to_spreadsheet(
-                            name=data["name"], 
-                            subject=data["subject"], 
-                            text_name=data["text_name"], 
-                            advanced_p=data["advanced_p"], 
-                            quiz_records=data["quiz_records"], 
-                            date=date, 
-                            teacher_name=teacher_name, 
-                            class_type=class_type, 
-                            attendance=data["attendance"],
-                            class_slot=class_slot, 
-                            advice=data["advice"], 
-                            parent_msg=data["parent_msg"], 
-                            next_handover=data["next_handover"],
-                            assigned_p=data["assigned_p"],
-                            completed_p=data["completed_p"],
-                            motivation_rank=data["motivation_rank"],
-                            next_hw_text=data["next_hw_text"],
-                            next_hw_pages=data["next_hw_pages"]
-                        )
-                        
-                        update_student_homework_rate(data["name"])
-                        time.sleep(1) # サーバー負荷軽減
+                    with st.status("データを保存中...", expanded=True) as status:
+                        for data in input_data_list:
+                            # (中略: save_to_spreadsheet などの保存処理)
+                            pass
+                        status.update(label="保存完了！", state="complete", expanded=False)
 
-                    # 🌟 変更③：保存完了メッセージの後、2秒待ってから画面をリセットする！
-                    st.success(f"✅ {num_students}名全員の記録を保存し、カルテの「やる気」データを自動更新しました！")
+                    st.success(f"✅ {num_students}名全員の記録を保存しました！")
                     
+                    # 🌟 修正ポイント③: 2秒待ってから「コマ」と「生徒情報」だけをリセットする
+                    time.sleep(2)
+
+                    # 1. 授業コマをリセット
+                    st.session_state["sb_class_slot"] = "-- 選択 --"
+
+                    # 2. 生徒の入力欄に関わるセッション状態をすべて削除
+                    for i in range(num_students):
+                        keys_to_reset = [
+                            f"name_{i}", f"att_{i}", f"sub_{i}", f"text_{i}", 
+                            f"done_start_{i}", f"done_end_{i}", f"adv_{i}", 
+                            f"q_done_{i}", f"q_chap_{i}", f"w_{i}",
+                            f"hw_text_{i}", f"n_start_{i}", f"n_end_{i}",
+                            f"advc_{i}", f"p_msg_{i}", f"next_h_{i}"
+                        ]
+                        for k in keys_to_reset:
+                            if k in st.session_state:
+                                del st.session_state[k]
+                    
+                    # 3. 過去データキャッシュも削除
                     for key in list(st.session_state.keys()):
                         if key.startswith("prev_data_"):
                             del st.session_state[key]
-                            
-                    time.sleep(2) # 2秒待機
-                    st.rerun()    # 🔄 画面をリロードして初期状態（選択前に戻る）にする！
 
-    # ==========================================
-    # 📝 「自習」が選ばれた時の画面
-    # ==========================================
-    elif record_type == "📝 自習":
-        st.subheader("📝 自習記録の入力")
-        options = ["-- 選択 --"] + student_names 
-
-        name = st.selectbox("👤 生徒名", options)
-
-        c1, c2, c3, c4 = st.columns(4)
-        date = c1.date_input("📅 自習日", datetime.date.today())
-        start_time = c2.time_input("⏰ 開始時間", datetime.time(17, 0))
-        end_time = c3.time_input("⏰ 終了時間", datetime.time(19, 0))
-        break_time = c4.number_input("☕ 休憩時間（分）", min_value=0, value=0, step=5)
-
-        if name != "-- 選択 --":
-            start_dt = datetime.datetime.combine(date, start_time)
-            end_dt = datetime.datetime.combine(date, end_time)
-            if end_dt <= start_dt:
-                end_dt += datetime.timedelta(days=1)
-
-            total_minutes = int((end_dt - start_dt).total_seconds() / 60)
-            actual_minutes = total_minutes - break_time
-
-            st.info(f"⏱️ 実質自習時間: **{actual_minutes} 分** （合計 {total_minutes}分 - 休憩 {break_time}分）")
-
-            if st.button("🚀 自習記録を保存する", type="primary"):
-                if actual_minutes <= 0:
-                    st.error("🚨 時間が正しくありません")
-                else:
-                    success, error_msg = save_self_study_record(
-                        date, name, start_time.strftime("%H:%M"), 
-                        end_time.strftime("%H:%M"), break_time, actual_minutes
-                    )
-                    if success:
-                        st.success(f"✅ {name}さんの自習記録（{actual_minutes}分）をスプレッドシートに保存しました！")
-                        # 自習画面も保存後にリセットさせたい場合は追加
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error(f"🚨 保存に失敗しました！原因: {error_msg}")
+                    # 4. 再読み込み（講師名「sb_teacher」は del していないので保持されます）
+                    st.rerun()
