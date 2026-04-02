@@ -16,10 +16,10 @@ from views.analysis import render_analysis_page
 # from views.quiz_list import render_quiz_list_page
 from views.search_page import render_search_page
 from views.salary_dashboard import render_salary_dashboard_page
+from views.analytics_dashboard import render_analytics_dashboard_page
 # from views.tuition import render_tuition_dashboard_page
 # 👇 これを app.py の上の方（インポート部分）に追加！
 from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
-from views.analytics_dashboard import render_analytics_dashboard_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
@@ -91,6 +91,7 @@ def main():
             "✅ 本日の出欠・座席表",
             "🔍 全生徒の過去ログ検索",
             "💰 給与・交通費ダッシュボード",
+            "📈 講師分析ダッシュボード",
             # "💴 月謝（請求額）管理ダッシュボード"  # ←未作成
         ])
         
@@ -121,6 +122,7 @@ def main():
     # elif page == "💯 小テスト成績・アラート": render_quiz_list_page(textbook_master)
     elif page == "🔍 全生徒の過去ログ検索": render_search_page(),
     elif page == "💰 給与・交通費ダッシュボード": render_salary_dashboard_page(),
+    elif menu == "📈 講師分析ダッシュボード": render_analytics_dashboard_page(),
     # elif page == "💴 月謝（請求額）管理ダッシュボード": render_tuition_dashboard_page()
 
 if __name__ == "__main__":
