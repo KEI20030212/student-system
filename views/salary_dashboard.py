@@ -119,20 +119,53 @@ def render_salary_dashboard_page():
         st.subheader(f"📊 {selected_month} の稼働・給与一覧")
         st.dataframe(df_summary, hide_index=True, use_container_width=True)
 
+        # === （前略）st.dataframe(df_summary, ...) の下から書き換えます ===
+
         st.divider()
         st.subheader("📄 給与明細PDFの自動発行")
-        st.write("各先生の給与明細をPDFでダウンロードできます。")
+
+        # --- 🌟 神アイデア：塾長専用！「全員分の一括ZIPダウンロード」 ---
+        st.write("💡 **管理者用：** 全員の明細を1つのフォルダ（ZIP）にまとめて一括ダウンロードします。")
         
-        col_count = 3
-        cols = st.columns(col_count)
+        import zipfile
+        import io
         
-        for i, row_data in enumerate(summary_list):
-            pdf_bytes = generate_payslip_pdf(row_data, selected_month)
-            with cols[i % col_count]:
-                st.download_button(
-                    label=f"📥 {row_data['👨‍🏫 担当講師']} 先生",
-                    data=pdf_bytes,
-                    file_name=f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf",
-                    mime="application/pdf",
-                    key=f"pdf_{row_data['👨‍🏫 担当講師']}"
-                )
+        # ZIPファイルを作る準備
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for row_data in summary_list:
+                pdf_bytes = generate_payslip_pdf(row_data, selected_month)
+                file_name = f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf"
+                zip_file.writestr(file_name, pdf_bytes)
+        
+        # type="primary" と use_container_width=True で、ボタンを大きく目立たせます！
+        st.download_button(
+            label=f"📦 【一括作成】{selected_month}の全員分の明細をZIPでダウンロード",
+            data=zip_buffer.getvalue(),
+            file_name=f"{selected_month}_給与明細一括.zip",
+            mime="application/zip",
+            type="primary", 
+            use_container_width=True 
+        )
+
+        st.write("---") # 区切り線
+        
+        # --- 🌟 先生のアイデア：プルダウン式の個別ダウンロード ---
+        st.write("👤 **個別発行（先生を指定してダウンロード）**")
+        
+        # プルダウンの選択肢（先生の名前リスト）を作る
+        teacher_names = [row['👨‍🏫 担当講師'] for row in summary_list]
+        selected_teacher_for_pdf = st.selectbox("👩‍🏫 明細を発行する先生を選択してください", teacher_names)
+        
+        if selected_teacher_for_pdf:
+            # 選ばれた先生のデータを引っ張ってくる
+            selected_data = next(item for item in summary_list if item['👨‍🏫 担当講師'] == selected_teacher_for_pdf)
+            pdf_bytes_single = generate_payslip_pdf(selected_data, selected_month)
+            
+            # こっちは通常のシンプルなボタン
+            st.download_button(
+                label=f"📥 {selected_teacher_for_pdf} 先生の明細をダウンロード",
+                data=pdf_bytes_single,
+                file_name=f"給与明細_{selected_month}_{selected_teacher_for_pdf}.pdf",
+                mime="application/pdf"
+            )
