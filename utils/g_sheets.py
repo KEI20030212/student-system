@@ -645,3 +645,18 @@ def get_last_homework_info(name, subject):
         return "なし", "-"
     except Exception as e:
         return "なし", "-"
+
+        # utils/g_sheets.py に追加
+
+def load_instructor_master():
+    """
+    スプレッドシートの「講師マスタ」シートのデータを読み込む
+    """
+    try:
+        # load_raw_data に "講師マスタ" というシート名を入れて呼び出すだけ！
+        df = load_raw_data("講師マスタ")
+        return df
+    except Exception as e:
+        print(f"講師マスタ読み込みエラー: {e}")
+        import pandas as pd
+        return pd.DataFrame() # エラーの時は空の表を返す
