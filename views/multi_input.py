@@ -11,8 +11,8 @@ from utils.g_sheets import (
     update_student_homework_rate,
     save_self_study_record,
     get_last_handover,
-    get_last_homework_info,  # 👈 これを必ず追加！！
-    add_new_textbook,        # 👈 これも忘れずに！！
+    get_last_homework_info,  
+    add_new_textbook,        
     get_textbook_master
 )
 from utils.calc_logic import (
@@ -26,6 +26,11 @@ def render_multi_input_page(textbook_master):
 
     record_type = st.radio("✍️ 記録の種類を選択してください", ["📖 授業", "📝 自習"], horizontal=True)
     st.divider()
+
+    # 🌟 APIエラー回避①：生徒リストを何度も取得しないように記憶させる！
+    if "cached_student_names" not in st.session_state:
+        st.session_state["cached_student_names"] = get_all_student_names()
+    student_names = st.session_state["cached_student_names"]
 
     # ==========================================
     # 📖 「授業」が選ばれた時の画面
@@ -46,7 +51,6 @@ def render_multi_input_page(textbook_master):
             class_slot = c4.selectbox("⏰ 授業コマ", time_slots)
 
         num_students = int(class_type.split(":")[1])
-        student_names = get_all_student_names()
         options = ["-- 選択 --", "🆕 新規登録"] + student_names
 
         st.divider()
@@ -74,22 +78,34 @@ def render_multi_input_page(textbook_master):
                         else:
                             subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], key=f"sub_{i}")
                             
-                            last_note = get_last_handover(name, subject)
+                            # ==========================================
+                            # 🌟 APIエラー回避②：過去データの通信を最小限にする！
+                            # ==========================================
+                            cache_key = f"prev_data_{name}_{subject}"
+                            # その生徒・科目のデータが「記憶」になければ、初めて通信して取得する
+                            if cache_key not in st.session_state:
+                                with st.spinner("☁️ 過去のデータを読み込み中..."):
+                                    st.session_state[cache_key] = {
+                                        "note": get_last_handover(name, subject),
+                                        "hw_info": get_last_homework_info(name, subject),
+                                        "page": get_last_page_from_sheet(name)
+                                    }
+                            
+                            # 通信せず、記憶（キャッシュ）から素早くデータを取り出す！
+                            cached_data = st.session_state[cache_key]
+                            last_note = cached_data["note"]
+                            last_hw_text, last_hw_pages = cached_data["hw_info"]
+                            last_page = cached_data["page"]
+                            # ==========================================
+
                             st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
 
                             text_name = st.selectbox("テキスト", list(textbook_master.keys()), key=f"text_{i}")
                             st.divider()
 
-                            # ==========================================
-                            # 🌟 変更：宿題の確認と「やってきた範囲」の入力
-                            # ==========================================
-                            last_hw_text, last_hw_pages = get_last_homework_info(name, subject)
-                            
-                            # 🌟 追加：過去の文字列「P.10〜15」などから「出したページ数」を自動で読み取る！
                             assigned_p = 0
                             hw_str = str(last_hw_pages)
-                            if "〜" in hw_str:
-                                # 文字列の中から数字だけを取り出す
+                            if "〜" in hw_str or "~" in hw_str: # 全角・半角チルダ両対応
                                 nums = [int(n) for n in re.findall(r'\d+', hw_str)]
                                 if len(nums) >= 2:
                                     assigned_p = nums[1] - nums[0] + 1
@@ -105,7 +121,6 @@ def render_multi_input_page(textbook_master):
                             with col_hw2:
                                 done_end = st.number_input("やってきた 終了P", min_value=0, value=0, key=f"done_end_{i}")
                             
-                            # 🌟 「やってきたページ数」を自動計算
                             if done_end >= done_start and done_end > 0:
                                 completed_p = done_end - done_start + 1
                             else:
@@ -113,7 +128,6 @@ def render_multi_input_page(textbook_master):
                                 
                             st.caption(f"やってきたページ数: 計 {completed_p} P分")
 
-                            # 🌟 宿題履行率の計算と、100%での頭打ち（キャップ）処理！
                             current_hw_rate = calculate_hw_rate(assigned_p, completed_p) if assigned_p > 0 else 0.0
                             if current_hw_rate > 100.0:
                                 current_hw_rate = 100.0
@@ -125,7 +139,6 @@ def render_multi_input_page(textbook_master):
                             
                             st.divider()
 
-                            last_page = get_last_page_from_sheet(name)
                             advanced_p = st.text_input("📖 授業でどこまで進んだか", value=f"P.{last_page} 〜 ", placeholder="例：P.45〜47、関係代名詞", key=f"adv_{i}")
                             
                             quiz_done = st.checkbox("💯 小テストを実施した", key=f"q_done_{i}")
@@ -142,9 +155,6 @@ def render_multi_input_page(textbook_master):
                             motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
 
                             st.divider()
-                            # ==========================================
-                            # 次回の宿題指示
-                            # ==========================================
                             st.write("🚀 **次回の宿題指示**")
                             hw_text_options = ["-- 選択 --", "🆕 新規テキスト入力"] + list(get_textbook_master().keys())
                             selected_hw_text = st.selectbox("次回の宿題テキスト", hw_text_options, key=f"hw_text_{i}")
@@ -209,18 +219,21 @@ def render_multi_input_page(textbook_master):
                     )
                     
                     update_student_homework_rate(data["name"])
-                    
                     time.sleep(2)
 
                 st.success(f"✅ {num_students}名全員の記録を保存し、カルテの「やる気」データを自動更新しました！")
+                
+                # 🌟 APIエラー回避③：保存が終わったら、次回のために記憶（キャッシュ）を消去しておく
+                for key in list(st.session_state.keys()):
+                    if key.startswith("prev_data_"):
+                        del st.session_state[key]
 
     # ==========================================
-    # 📝 「自習」が選ばれた時の画面（そのまま！）
+    # 📝 「自習」が選ばれた時の画面
     # ==========================================
     elif record_type == "📝 自習":
         st.subheader("📝 自習記録の入力")
-        student_names = get_all_student_names()
-        options = ["-- 選択 --"] + student_names
+        options = ["-- 選択 --"] + student_names # 記憶済みのリストを使用！
 
         name = st.selectbox("👤 生徒名", options)
 
