@@ -117,7 +117,17 @@ def render_analytics_dashboard_page():
                 st.metric("アドバイス平均文字数", f"{int(df_t['報告文字数'].mean())} 文字")
 
         st.divider()
-        
+        # --- 🔍 診断用デバッグ表示（確認したら消してOK） ---
+        with st.expander("🛠️ システム内部のデータ確認（デバッグ）"):
+            st.write("スキャンした全列名:", df_month.columns.tolist())
+            st.write("分析対象の先生:", selected_teacher)
+            st.write("データ総数:", len(df_month))
+            
+            # 条件に合うデータが何件あるか内訳を表示
+            cond1 = (df_all['宿題を出した先生'] == selected_teacher)
+            cond2 = (df_all['前回出された宿題内容'].notna())
+            st.write(f"1. {selected_teacher} 先生が宿題を出した記録: {cond1.sum()} 件")
+            st.write(f"2. そのうち宿題内容が書かれている記録: {(cond1 & cond2).sum()} 件")
         # --- 🌟 超進化した宿題コントロール力 分析 ---
         st.markdown(f"**📝 宿題量コントロール力（生徒のキャパシティ把握度）**")
         st.caption("※先生が出した宿題の合計ページ数に対して、生徒が実際に解いてきた合計ページ数の割合です。")
