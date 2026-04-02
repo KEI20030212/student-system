@@ -37,8 +37,14 @@ def render_analytics_dashboard_page():
 
             # --- 🌟 指導報告の「熱量（文字数）」を計算 ---
             if report_col in df_all.columns:
-                df_all['報告文字数'] = df_all[report_col].astype(str).apply(lambda x: len(x) if x not in ['nan', 'None', ''] else 0)
-
+                # どんなデータが来ても安全に文字数を数える無敵の関数
+                def count_chars(text):
+                    if pd.isna(text): return 0
+                    text_str = str(text).strip()
+                    if text_str.lower() in ['nan', 'none', '<na>', '']: return 0
+                    return len(text_str)
+                
+                df_all['報告文字数'] = df_all[report_col].apply(count_chars)
             # --- 🌟 宿題履行率の追跡ロジック ---
             if '科目' in df_all.columns and '担当講師' in df_all.columns:
                 df_all = df_all.sort_values(by=['生徒名', '科目', '日時'])
