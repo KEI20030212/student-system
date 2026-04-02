@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import math
 from utils.g_sheets import get_all_student_names, load_all_data, load_instructor_master, update_instructor_master # 👈 updateも追加！
+from utils.pdf_generator import generate_payslip_pdf
 
 def render_salary_dashboard_page():
     st.header("💰 給与・交通費ダッシュボード")
@@ -123,3 +124,27 @@ def render_salary_dashboard_page():
         df_summary = df_summary.sort_values(by="💰 最終支給額 (円)", ascending=False)
         st.subheader(f"📊 {selected_month} の稼働・給与一覧")
         st.dataframe(df_summary, hide_index=True, use_container_width=True)
+
+        # === views/salary_dashboard.py の一番最後に追加 ===
+    
+    st.divider()
+    st.subheader("📄 給与明細PDFの自動発行")
+    st.write("各先生の給与明細をPDFでダウンロードできます。")
+    
+    # ボタンを横に並べるためのコンテナ
+    col_count = 3 # 3列で並べる
+    cols = st.columns(col_count)
+    
+    for i, row_data in enumerate(summary_list):
+        # PDFデータを生成
+        pdf_bytes = generate_payslip_pdf(row_data, selected_month)
+        
+        # 順番にカラムにボタンを配置
+        with cols[i % col_count]:
+            st.download_button(
+                label=f"📥 {row_data['👨‍🏫 担当講師']} 先生",
+                data=pdf_bytes,
+                file_name=f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf",
+                mime="application/pdf",
+                key=f"pdf_{row_data['👨‍🏫 担当講師']}" # ボタンの重複エラーを防ぐキー
+            )
