@@ -118,31 +118,27 @@ def render_salary_dashboard_page():
             "役職手当 (円)": int(allowance), "出勤日数": working_days, 
             "交通費合計 (円)": int(transport_total), "💰 最終支給額 (円)": int(final_salary)
         })
-
-    if summary_list:
-        df_summary = pd.DataFrame(summary_list)
-        df_summary = df_summary.sort_values(by="💰 最終支給額 (円)", ascending=False)
-        st.subheader(f"📊 {selected_month} の稼働・給与一覧")
-        st.dataframe(df_summary, hide_index=True, use_container_width=True)
-
-        # === views/salary_dashboard.py の一番最後に追加 ===
-        st.divider()
-        st.subheader("📄 給与明細PDFの自動発行")
-        st.write("各先生の給与明細をPDFでダウンロードできます。")
-    
-        # ボタンを横に並べるためのコンテナ
-        col_count = 3 # 3列で並べる
-        cols = st.columns(col_count)
-        for i, row_data in enumerate(summary_list):
-            # PDFデータを生成
-            pdf_bytes = generate_payslip_pdf(row_data, selected_month)
-            
-            # 順番にカラムにボタンを配置
-            with cols[i % col_count]:
-                st.download_button(
-                    label=f"📥 {row_data['👨‍🏫 担当講師']} 先生",
-                    data=pdf_bytes,
-                    file_name=f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf",
-                    mime="application/pdf",
-                    key=f"pdf_{row_data['👨‍🏫 担当講師']}" # ボタンの重複エラーを防ぐキー
-                    )
+        if summary_list:
+            df_summary = pd.DataFrame(summary_list)
+            df_summary = df_summary.sort_values(by="💰 最終支給額 (円)", ascending=False)
+            st.subheader(f"📊 {selected_month} の稼働・給与一覧")
+            st.dataframe(df_summary, hide_index=True, use_container_width=True)
+            # === views/salary_dashboard.py の一番最後に追加 ===
+            st.divider()
+            st.subheader("📄 給与明細PDFの自動発行")
+            st.write("各先生の給与明細をPDFでダウンロードできます。")
+            # ボタンを横に並べるためのコンテナ
+            col_count = 3 # 3列で並べる
+            cols = st.columns(col_count)
+            for i, row_data in enumerate(summary_list):
+                # PDFデータを生成
+                pdf_bytes = generate_payslip_pdf(row_data, selected_month)
+                # 順番にカラムにボタンを配置
+                with cols[i % col_count]:
+                    st.download_button(
+                        label=f"📥 {row_data['👨‍🏫 担当講師']} 先生",
+                        data=pdf_bytes,
+                        file_name=f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf",
+                        mime="application/pdf",
+                        key=f"pdf_{row_data['👨‍🏫 担当講師']}" # ボタンの重複エラーを防ぐキー
+                        )
