@@ -26,7 +26,7 @@ def get_gc_client():
     credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
     return gspread.authorize(credentials)
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def get_all_student_names():
     gc = get_gc_client()
     try:
