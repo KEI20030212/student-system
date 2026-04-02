@@ -122,7 +122,7 @@ def main():
     # elif page == "💯 小テスト成績・アラート": render_quiz_list_page(textbook_master)
     elif page == "🔍 全生徒の過去ログ検索": render_search_page(),
     elif page == "💰 給与・交通費ダッシュボード": render_salary_dashboard_page(),
-    elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page(),
+    elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page()
     # elif page == "💴 月謝（請求額）管理ダッシュボード": render_tuition_dashboard_page()
 
 if __name__ == "__main__":
