@@ -660,3 +660,30 @@ def load_instructor_master():
         print(f"講師マスタ読み込みエラー: {e}")
         import pandas as pd
         return pd.DataFrame() # エラーの時は空の表を返す
+
+def update_instructor_master(df_updated):
+    """
+    画面上で編集されたデータフレームを「講師マスタ」シートに全体上書き保存する
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("講師マスタ")
+        
+        # 1. 今シートにある古いデータを一旦まっさらにクリアする
+        ws.clear()
+        
+        # 2. DataFrameをスプレッドシートに書き込める形（リストのリスト）に変換する
+        # （1行目にヘッダー、2行目以降にデータが入る形になります）
+        data_to_write = [df_updated.columns.tolist()] + df_updated.values.tolist()
+        
+        # 3. A1セルを起点にして、新しいデータを一気にドーンと書き込む
+        # ※もしここでエラーが出る場合は、 gspreadのバージョンに合わせて ws.update('A1', data_to_write) に変更してみてください。
+        ws.update(data_to_write, 'A1') 
+        
+        # 4. Streamlitのキャッシュをクリアして、次回から最新状態が読み込まれるようにする
+        import streamlit as st
+        st.cache_data.clear()
+        
+    except Exception as e:
+        print(f"講師マスタ更新エラー: {e}")
