@@ -92,9 +92,10 @@ def render_student_details_page():
             raw_hw_rate = str(info.get('宿題履行率', '0.0')).replace('%', '').strip()
             try:
                 current_hw_rate = float(raw_hw_rate)
-                except ValueError:
-                    current_hw_rate = 0.0
-                    current_motivation = int(info.get('やる気', 1))
+            except ValueError:
+                current_hw_rate = 0.0
+                
+            current_motivation = int(info.get('やる気', 1))
             
             ability = calculate_ability_rank(latest_naishin, latest_dev)
             
