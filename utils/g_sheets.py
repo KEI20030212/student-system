@@ -439,7 +439,7 @@ def load_test_scores():
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("成績_定期テスト")
     return pd.DataFrame(ws.get_all_records())
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=120)
 def load_board_message():
     """掲示板のメッセージを取得する"""
     gc = get_gc_client()
