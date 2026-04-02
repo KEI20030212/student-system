@@ -24,10 +24,10 @@ from utils.calc_logic import (
 
 def render_multi_input_page(textbook_master):
     st.header("📝 授業・自習記録の入力")
+
     # --- 状態管理のための初期化 ---
-    # 1. 授業コマをリセット（代入ではなく、記憶から削除する！）
-    if "sb_class_slot" in st.session_state:
-        del st.session_state["sb_class_slot"]
+    if "class_slot_val" not in st.session_state:
+        st.session_state["class_slot_val"] = "-- 選択 --"
 
     record_type = st.radio("✍️ 記録の種類を選択してください", ["📖 授業", "📝 自習"], horizontal=True)
     st.divider()
@@ -219,8 +219,9 @@ def render_multi_input_page(textbook_master):
                     # 🌟 修正ポイント③: 2秒待ってから「コマ」と「生徒情報」だけをリセットする
                     time.sleep(2)
 
-                    # 1. 授業コマをリセット
-                    st.session_state["sb_class_slot"] = "-- 選択 --"
+                    # 1. 授業コマをリセット（代入ではなく、記憶から削除する！）
+                    if "sb_class_slot" in st.session_state:
+                        del st.session_state["sb_class_slot"]
 
                     # 2. 生徒の入力欄に関わるセッション状態をすべて削除
                     for i in range(num_students):
