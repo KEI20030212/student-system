@@ -95,7 +95,14 @@ def render_student_details_page():
             except ValueError:
                 current_hw_rate = 0.0
                 
-            current_motivation = int(info.get('やる気', 1))
+            # やる気のデータを文字として取得（エラー対策）
+            raw_motivation = str(info.get('やる気', '1')).strip()
+            try:
+                # 一旦小数(float)にしてから整数(int)にする（"1.0"などの表示ズレ対策）
+                current_motivation = int(float(raw_motivation))
+            except ValueError:
+                # エラーが出たら、標準値の 1 にする
+                current_motivation = 1
             
             ability = calculate_ability_rank(latest_naishin, latest_dev)
             
