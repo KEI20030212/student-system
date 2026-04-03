@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import math
+import time # 🌟 必須！APIエラー防止の息継ぎ用に追加
+
 from utils.g_sheets import get_all_student_names, load_all_data, load_instructor_master, update_instructor_master
 from utils.pdf_generator import generate_payslip_pdf # 👈 PDF職人もバッチリ読み込み！
 
@@ -25,12 +27,25 @@ def render_salary_dashboard_page():
 
     # 授業データの集計
     all_data_list = []
-    with st.spinner('集計中...'):
-        for s_name in student_names:
+    
+    # 🌟 API対策1: ループ内の連続アクセスを優しくする＆プログレスバー追加！
+    with st.spinner('☁️ 生徒の授業データを集計中...（APIエラー防止のため、少しずつ読み込みます☕）'):
+        progress_bar = st.progress(0) # 進捗バーを表示
+        total_students = len(student_names)
+        
+        for i, s_name in enumerate(student_names):
             df = load_all_data(s_name)
             if not df.empty:
                 df['生徒名'] = s_name
                 all_data_list.append(df)
+            
+            # Google APIへの息継ぎ（0.5秒待つ）
+            time.sleep(0.5)
+            
+            # 進捗バーを更新（例: 5/10人なら50%）
+            progress_bar.progress((i + 1) / total_students)
+            
+        progress_bar.empty() # 終わったら進捗バーを消す
     
     if not all_data_list: return
     df_all = pd.concat(all_data_list, ignore_index=True)
@@ -66,9 +81,15 @@ def render_salary_dashboard_page():
     st.subheader("👨‍🏫 講師ごとの単価・設定")
     edited_prices = st.data_editor(df_instructors, hide_index=True, use_container_width=True, num_rows="dynamic")
 
+    # 🌟 API対策2: マスタ保存時の連打防止とキャッシュクリア
     if st.button("💾 変更をスプレッドシート（マスタ）に保存する"):
-        update_instructor_master(edited_prices)
+        with st.spinner("☁️ マスタを保存中...（連打しないでね）"):
+            update_instructor_master(edited_prices)
+            time.sleep(1) # 息継ぎ
+            st.cache_data.clear() # 古い記憶を消去
         st.success("✅ 講師マスタを更新しました！次回の計算からはこの設定が適用されます。")
+        time.sleep(1.5) # メッセージを見せるための待機
+        st.rerun() # リロードして画面をスッキリ最新状態に！
 
     st.divider()
 
@@ -112,14 +133,12 @@ def render_salary_dashboard_page():
             "交通費合計 (円)": int(transport_total), "💰 最終支給額 (円)": int(final_salary)
         })
 
-    # 結果表示とPDFボタン（ここでインデントを完璧に揃えています！）
+    # 結果表示とPDFボタン
     if summary_list:
         df_summary = pd.DataFrame(summary_list)
         df_summary = df_summary.sort_values(by="💰 最終支給額 (円)", ascending=False)
         st.subheader(f"📊 {selected_month} の稼働・給与一覧")
         st.dataframe(df_summary, hide_index=True, use_container_width=True)
-
-        # === （前略）st.dataframe(df_summary, ...) の下から書き換えます ===
 
         st.divider()
         st.subheader("📄 給与明細PDFの自動発行")
@@ -138,7 +157,6 @@ def render_salary_dashboard_page():
                 file_name = f"給与明細_{selected_month}_{row_data['👨‍🏫 担当講師']}.pdf"
                 zip_file.writestr(file_name, pdf_bytes)
         
-        # type="primary" と use_container_width=True で、ボタンを大きく目立たせます！
         st.download_button(
             label=f"📦 【一括作成】{selected_month}の全員分の明細をZIPでダウンロード",
             data=zip_buffer.getvalue(),
@@ -148,21 +166,18 @@ def render_salary_dashboard_page():
             use_container_width=True 
         )
 
-        st.write("---") # 区切り線
+        st.write("---")
         
         # --- 🌟 先生のアイデア：プルダウン式の個別ダウンロード ---
         st.write("👤 **個別発行（先生を指定してダウンロード）**")
         
-        # プルダウンの選択肢（先生の名前リスト）を作る
         teacher_names = [row['👨‍🏫 担当講師'] for row in summary_list]
         selected_teacher_for_pdf = st.selectbox("👩‍🏫 明細を発行する先生を選択してください", teacher_names)
         
         if selected_teacher_for_pdf:
-            # 選ばれた先生のデータを引っ張ってくる
             selected_data = next(item for item in summary_list if item['👨‍🏫 担当講師'] == selected_teacher_for_pdf)
             pdf_bytes_single = generate_payslip_pdf(selected_data, selected_month)
             
-            # こっちは通常のシンプルなボタン
             st.download_button(
                 label=f"📥 {selected_teacher_for_pdf} 先生の明細をダウンロード",
                 data=pdf_bytes_single,
