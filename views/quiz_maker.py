@@ -99,19 +99,24 @@ def render_quiz_maker_page():
 
     if 'pdf_q' in st.session_state and 'pdf_a' in st.session_state:
         st.divider()
-        st.subheader("👀 ダウンロード ＆ 印刷 (PDF)") # タイトルを少し変えました
+        st.subheader("👀 ダウンロード ＆ 印刷 (PDF)")
         tab_q, tab_a = st.tabs(["📝 問題 (A〜I列)", "💡 解答 (J〜R列)"])
 
         def display_pdf(pdf_bytes, filename):
-            st.download_button(
-                label=f"📥 【 {filename} 】を開く / 印刷する",
-                data=pdf_bytes, 
-                file_name=filename, 
-                mime="application/pdf", 
-                type="primary", 
-                use_container_width=True
-            )
-            # ▼ ここにあったプレビュー用の iframe のコードを削除しました！▼
+            # 🌟 修正ポイント：PDFデータを文字(Base64)に変換する
+            b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+            
+            # 🌟 修正ポイント：HTMLで「別タブ(target="_blank")」で開くボタンを作る
+            html_button = f'''
+            <a href="data:application/pdf;base64,{b64_pdf}" download="{filename}" target="_blank" 
+               style="display: block; text-align: center; padding: 12px; background-color: #FF4B4B; 
+                      color: white; text-decoration: none; border-radius: 8px; font-weight: bold; 
+                      margin-bottom: 10px; transition: 0.3s;">
+                📥 【 {filename} 】を開く / 印刷する
+            </a>
+            '''
+            # 作ったHTMLボタンを画面に表示する
+            st.markdown(html_button, unsafe_allow_html=True)
 
         with tab_q: display_pdf(st.session_state['pdf_q'], "確認テスト_問題.pdf")
         with tab_a: display_pdf(st.session_state['pdf_a'], "確認テスト_解答.pdf")
