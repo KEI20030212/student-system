@@ -1,7 +1,8 @@
 import streamlit as st
-import pandas as pd# 必須！データフレーム（表）を扱うため
-import altair as alt# 必須！グラフを描画するため
-import datetime# 必須！日付を扱うため
+import pandas as pd # 必須！データフレーム（表）を扱うため
+import altair as alt # 必須！グラフを描画するため
+import datetime # 必須！日付を扱うため
+import time # 🌟 追加：APIエラー防止の「息継ぎ」に必須！
 
 # 📊 スプレッドシート関連は g_sheets から
 from utils.g_sheets import (
@@ -12,7 +13,7 @@ from utils.g_sheets import (
     load_test_scores
 )
 
-# 🧮 計算ロジックは calc_logic から（これを追加！）
+# 🧮 計算ロジックは calc_logic から
 from utils.calc_logic import (
     calculate_ability_rank,
     calculate_motivation_rank
@@ -51,7 +52,7 @@ def render_student_details_page():
             st.markdown(f"**🎯 志望校・目的**: {info.get('志望校・目的', '未設定')}")
             st.markdown(f"**📚 受講科目**: {info.get('受講科目', '未設定')}")
             
-            if st.session_state['role'] == 'admin':
+            if st.session_state.get('role') == 'admin':
                 with st.expander("✏️ 基本情報を編集する (教室長のみ)"):
                     with st.form("edit_student_info_form"):
                         new_grade = st.text_input("学年 (例: 中2)", value=info.get('学年', ''))
@@ -59,9 +60,14 @@ def render_student_details_page():
                         new_target = st.text_input("志望校・通塾目的", value=info.get('志望校・目的', ''))
                         new_subjects = st.text_input("受講科目 (例: 英語, 数学)", value=info.get('受講科目', ''))
                         
+                        # 🌟 API対策1: プロフィール保存
                         if st.form_submit_button("💾 基本情報を保存", type="primary"):
-                            update_student_info(selected_student, new_grade, new_school, new_target, new_subjects, info.get('能力', 3), info.get('やる気', 3), info.get('内申点', 3), info.get('最新偏差値', 50), info.get('宿題履行率', 100))
+                            with st.spinner("☁️ 情報を保存中...（連打しないでね）"):
+                                update_student_info(selected_student, new_grade, new_school, new_target, new_subjects, info.get('能力', 3), info.get('やる気', 3), info.get('内申点', 3), info.get('最新偏差値', 50), info.get('宿題履行率', 100))
+                                time.sleep(1) # 息継ぎ
+                                st.cache_data.clear() # 最新データを読み込むために記憶を消去
                             st.success(f"基本情報を保存しました！")
+                            time.sleep(1.5) # 画面リセット前の待機
                             st.rerun()
             else:
                 st.info("※プロフィールの編集は教室長のみ可能です。")
@@ -95,13 +101,10 @@ def render_student_details_page():
             except ValueError:
                 current_hw_rate = 0.0
                 
-            # やる気のデータを文字として取得（エラー対策）
             raw_motivation = str(info.get('やる気', '1')).strip()
             try:
-                # 一旦小数(float)にしてから整数(int)にする（"1.0"などの表示ズレ対策）
                 current_motivation = int(float(raw_motivation))
             except ValueError:
-                # エラーが出たら、標準値の 1 にする
                 current_motivation = 1
             
             ability = calculate_ability_rank(latest_naishin, latest_dev)
@@ -146,9 +149,15 @@ def render_student_details_page():
                 n_home = n8.number_input("家庭 内申", 1, 5, value=None)
                 n_mus = n9.number_input("音楽 内申", 1, 5, value=None)
                 
+                # 🌟 API対策2: 内申点保存
                 if st.button("💾 内申点を登録する", type="primary"):
-                    save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, None, None, None, None, None, None, None, n_pe, n_tech, n_home, n_mus, is_naishin=True)
+                    with st.spinner("☁️ 内申点を保存中...（連打しないでね）"):
+                        save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, None, None, None, None, None, None, None, n_pe, n_tech, n_home, n_mus, is_naishin=True)
+                        time.sleep(1) # 息継ぎ
+                        st.cache_data.clear() # 最新データを読み込むために記憶を消去
                     st.success("内申点を登録しました！カルテ画面のマトリクスに反映されます。")
+                    time.sleep(1.5) # 画面リセット前の待機
+                    st.rerun() # 自動リロードでグラフに即反映
 
             else:
                 with st.expander("⚙️ 各教科の満点設定（基本100点/副教科50点）"):
@@ -194,9 +203,15 @@ def render_student_details_page():
                     home = sc8.number_input(f"家庭科 (/{m_home})", 0, m_home, value=None)
                     mus = sc9.number_input(f"音楽 (/{m_mus})", 0, m_mus, value=None)
 
+                # 🌟 API対策3: テスト成績保存
                 if st.button("💾 この成績を登録する", type="primary"):
-                    save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, dev_3, dev_5, pe, tech, home, mus, is_naishin=False)
+                    with st.spinner("☁️ 成績を保存中...（連打しないでね）"):
+                        save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, dev_3, dev_5, pe, tech, home, mus, is_naishin=False)
+                        time.sleep(1) # 息継ぎ
+                        st.cache_data.clear() # 最新データを読み込むために記憶を消去
                     st.success("成績を登録しました！")
+                    time.sleep(1.5) # 画面リセット前の待機
+                    st.rerun() # 自動リロードでグラフに即反映
 
     with tab_view:
         if not df_student_tests.empty:
