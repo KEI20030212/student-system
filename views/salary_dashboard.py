@@ -103,11 +103,19 @@ def render_salary_dashboard_page():
         if t_row_df.empty: continue
         t_row = t_row_df.iloc[0]
 
-        p11 = t_row.get('1:1単価', 1500)
-        p12 = t_row.get('1:2単価', 1800)
-        p13 = t_row.get('1:3単価', 2000)
-        trans = t_row.get('交通費', 0)
-        allowance = t_row.get('役職手当', 0)
+        def safe_int(val, default=0):
+            try:
+                if pd.isna(val) or val == "": 
+                    return default
+                return int(float(val))
+            except:
+                return default
+
+        p11 = safe_int(t_row.get('1:1単価', 1500), 1500)
+        p12 = safe_int(t_row.get('1:2単価', 1800), 1800)
+        p13 = safe_int(t_row.get('1:3単価', 2000), 2000)
+        trans = safe_int(t_row.get('交通費', 0), 0)
+        allowance = safe_int(t_row.get('役職手当', 0), 0)
 
         koma_11, koma_12, koma_13 = 0, 0, 0
         if '授業コマ' in df_teacher.columns:
