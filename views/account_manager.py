@@ -9,7 +9,10 @@ def render_account_manager_page():
     if st.session_state.get('role') != 'admin':
         st.error("⛔ このページは教室長（管理者）専用です。")
         return
-
+    if 'toast_msg' in st.session_state:
+        st.toast(st.session_state['toast_msg'], icon="✨")
+        del st.session_state['toast_msg']
+        
     st.header("⚙️ アカウント・システム設定")
     
     # 1. 現在のアカウント一覧を取得
