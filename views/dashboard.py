@@ -2,15 +2,14 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import datetime 
-import time # 🌟 必須：APIエラー防止の息継ぎ用
+import time 
 
-# 裏方部隊から、スプレッドシートのデータを読み込む関数を呼び出します
+# 🌟 変更点1：先ほど作った新しい「一括取得関数」を呼び出す！
 from utils.g_sheets import (
     get_all_student_names,
-    get_student_info,
+    get_all_student_info_dict, # 👈 これに変更しました
     load_all_data
 )
-# 計算ロジック部隊からポイント計算関数を呼び出します
 from utils.calc_logic import calculate_quiz_points 
 
 def render_dashboard_page():
@@ -21,16 +20,14 @@ def render_dashboard_page():
     
     all_grades = ["すべて"]
     all_subjects = ["すべて"]
-    student_info_dict = {}
     
-    # 🌟 改善ポイント1：生徒情報の読み込みループにプログレスバーと息継ぎを追加！
-    with st.spinner("☁️ 生徒基本データを読み込み中...（APIエラー防止のため少しずつ取得します☕）"):
-        progress_bar_info = st.progress(0)
-        total_students = len(student_names)
+    # 🌟 変更点2：ループで1人ずつ通信するのをやめ、1回で全員分を取得する！
+    with st.spinner("☁️ 生徒基本データを一括読み込み中...（通信は1回だけ！一瞬で終わります🚀）"):
+        student_info_dict = get_all_student_info_dict() # 👈 通信はここで1回だけ！
         
-        for i, s_name in enumerate(student_names):
-            info = get_student_info(s_name)
-            student_info_dict[s_name] = info
+        # あとは通信なし（Pythonのメモリ上）で爆速で処理します
+        for s_name in student_names:
+            info = student_info_dict.get(s_name, {}) # エラー防止のため .get() を使用
             
             # 学年リストの作成
             grade = info.get('学年', '未設定')
@@ -45,13 +42,6 @@ def render_dashboard_page():
                     if sub and sub not in all_subjects:
                         all_subjects.append(sub)
             
-            # APIエラー回避の息継ぎ
-            time.sleep(0.3)
-            # 進捗バーの更新
-            progress_bar_info.progress((i + 1) / total_students)
-            
-        progress_bar_info.empty() # 完了したらバーを消す
-            
     # 🎛️ 学年と科目のコントローラーを横並びで配置
     col1, col2 = st.columns(2)
     with col1:
@@ -62,7 +52,7 @@ def render_dashboard_page():
     # 🎯 ターゲット生徒の絞り込み
     target_students = []
     for s in student_names:
-        info = student_info_dict[s]
+        info = student_info_dict.get(s, {}) # 🌟 ここも .get() に変更
         
         match_grade = (selected_grade == "すべて" or info.get('学年') == selected_grade)
         student_subject_str = str(info.get('受講科目', ''))
@@ -80,7 +70,7 @@ def render_dashboard_page():
     
     matrix_data = []
     for s_name in target_students:
-        info = student_info_dict[s_name]
+        info = student_info_dict.get(s_name, {}) # 🌟 ここも .get() に変更
         matrix_data.append({
             "生徒名": s_name,
             "能力 (X)": int(info.get('能力', 3) or 3),
@@ -101,7 +91,7 @@ def render_dashboard_page():
     current_month_str = datetime.date.today().strftime("%Y年%m月")
     summary_data = []
     
-    # 🌟 改善ポイント2：成績データの集計ループにもプログレスバーと息継ぎを追加！
+    # 🌟 成績データの集計ループ（ここは各自のシートを開くため、息継ぎを残します！）
     with st.spinner(f'☁️ {current_month_str} のデータを集計中...'):
         progress_bar_data = st.progress(0)
         total_targets = len(target_students)
@@ -112,15 +102,14 @@ def render_dashboard_page():
             
             if not df.empty:
                 if '点数' in df.columns:
-                    for s in pd.to_numeric(df['点数'], errors='coerce').dropna():
-                        total_points += calculate_quiz_points(s)
+                    for s_val in pd.to_numeric(df['点数'], errors='coerce').dropna():
+                        total_points += calculate_quiz_points(s_val)
                 
                 if '日時' in df.columns:
                     df['日時'] = pd.to_datetime(df['日時'], format='mixed', errors='coerce')
                     df_month = df[df['日時'].dt.strftime("%Y年%m月") == current_month_str]
                     
                     if not df_month.empty:
-                        # ページ数に関するエラーも防ぐための安全バリアをこっそり追加！
                         try:
                             max_p = pd.to_numeric(df_month['ページ数'], errors='coerce').max()
                             min_p = pd.to_numeric(df_month['ページ数'], errors='coerce').min()
@@ -138,14 +127,14 @@ def render_dashboard_page():
                 "累計ポイント": total_points
             })
             
-            # APIエラー回避の息継ぎ
+            # APIエラー回避の息継ぎ（各生徒の成績シートへのアクセス用）
             time.sleep(0.5)
             # 進捗バーの更新
             progress_bar_data.progress((i + 1) / total_targets)
             
         progress_bar_data.empty() # 完了したらバーを消す
 
-    # --- 以下は元の表示コードそのまま ---
+    # --- 以下は表示コード ---
     if summary_data:
         df_summary = pd.DataFrame(summary_data)
         st.subheader(f"🏆 累計獲得ポイント ランキング TOP3 ({selected_grade} / {selected_subject})")
