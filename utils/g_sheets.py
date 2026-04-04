@@ -732,3 +732,68 @@ def get_all_student_info_dict():
             info_dict[name] = row
             
     return info_dict  
+
+@st.cache_data(ttl=600)
+def get_all_accounts():
+    """設定_アカウントシートからIDとパスワードのリストを取得"""
+    # ▼▼ スプレッドシートの接続コードはご自身の環境に合わせてください ▼▼
+    gc = get_gc_client() 
+    sh = gc.open_by_key(SPREADSHEET_ID) 
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    
+    try:
+        ws = sh.worksheet("設定_アカウント")
+        records = ws.get_all_records()
+        
+        # IDをキーにした辞書に変換します
+        # 例: {'suzuki_t': {'パスワード': 'suzuki1234', '講師名': '鈴木先生', '権限': 'teacher'}}
+        accounts = {}
+        for row in records:
+            if row.get('ID'):
+                accounts[str(row['ID'])] = row
+        return accounts
+    except Exception as e:
+        st.error("アカウントシートの読み込みに失敗しました。")
+        return {}
+
+# utils/g_sheets.py の下の方に追加してください
+
+def publish_salary_data(month_str, df_summary):
+    """教室長が計算した給与データを「給与公開用データ」シートに保存する"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID) # 👈 ご自身の環境のsheet_idに合わせてください
+    
+    # シートがなければ自動で作成
+    try:
+        ws = sh.worksheet("給与公開用データ")
+    except:
+        ws = sh.add_worksheet(title="給与公開用データ", rows=1000, cols=10)
+    
+    # 既存のデータを取得
+    records = ws.get_all_records()
+    df_existing = pd.DataFrame(records)
+    
+    # 今回保存するデータに「年月」列を追加
+    df_new = df_summary.copy()
+    df_new['年月'] = month_str
+    
+    # 既に同じ月のデータがあれば削除して上書き（修正して再公開できるようにするため）
+    if not df_existing.empty and '年月' in df_existing.columns:
+        df_existing = df_existing[df_existing['年月'] != month_str]
+        
+    df_final = pd.concat([df_existing, df_new], ignore_index=True)
+    
+    # シートをクリアして最新データを書き込み
+    ws.clear()
+    ws.update([df_final.columns.values.tolist()] + df_final.fillna("").values.tolist())
+
+@st.cache_data(ttl=600)
+def load_published_salary():
+    """先生用のページで公開済みの給与データを読み込む"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID) # 👈 ご自身の環境のsheet_idに合わせてください
+    try:
+        ws = sh.worksheet("給与公開用データ")
+        return pd.DataFrame(ws.get_all_records())
+    except:
+        return pd.DataFrame() # まだ公開データがない場合        
