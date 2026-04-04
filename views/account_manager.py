@@ -67,7 +67,7 @@ def render_account_manager_page():
                             del st.session_state[key]
                     
                     # 成功メッセージを表示（toastは画面右下にフワッと出ます）
-                    st.toast(f"✅ {new_name} 先生のアカウントを作成しました！", icon="✨")
+                    st.session_state['toast_msg'] = f"✅ {new_name} 先生のアカウントを作成しました！"
                     
                     # 画面を再起動して最新のリストを再読み込み
                     st.rerun()
