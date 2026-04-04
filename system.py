@@ -18,12 +18,14 @@ from views.search_page import render_search_page
 from views.salary_dashboard import render_salary_dashboard_page
 from views.analytics_dashboard import render_analytics_dashboard_page
 # from views.tuition import render_tuition_dashboard_page
+from views.my_salary import render_my_salary_page
 # 👇 これを app.py の上の方（インポート部分）に追加！
 from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
 from utils.g_sheets import load_textbook_master, get_textbook_master, add_new_textbook, get_last_homework_info
+from utils.g_sheets import get_all_accounts
 
 # ページの基本設定
 img = Image.open("icon.jpg")
@@ -53,6 +55,16 @@ def login_screen():
                 elif username == TEACHER_USER and password == TEACHER_PASS:
                     st.session_state.update({'logged_in': True, 'role': 'teacher', 'username': '先生'})
                     st.rerun()
+                else:
+                    accounts = get_all_accounts()
+                    # IDが存在し、かつパスワード（数字のみの場合に備えてstr変換）が一致するかチェック
+                    if username in accounts and str(accounts[username].get('パスワード')) == str(password):
+                        st.session_state.update({
+                            'logged_in': True, 
+                            'role': accounts[username].get('権限', 'teacher'),
+                            'username': accounts[username].get('講師名', '先生')
+                        })
+                        st.rerun()
                 else:
                     st.error("⚠️ IDまたはパスワードが間違っています。")
 
@@ -84,6 +96,7 @@ def main():
         "📊 個別分析・履歴・振替管理",
         "📝 小テスト進捗マップ",
         "📊 自習時間ランキング",
+        "💴 自分の給与確認"
     ]
     
     if st.session_state['role'] == 'admin':
@@ -122,8 +135,9 @@ def main():
     # elif page == "💯 小テスト成績・アラート": render_quiz_list_page(textbook_master)
     elif page == "🔍 全生徒の過去ログ検索": render_search_page(),
     elif page == "💰 給与・交通費ダッシュボード": render_salary_dashboard_page(),
-    elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page()
+    elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page(),
     # elif page == "💴 月謝（請求額）管理ダッシュボード": render_tuition_dashboard_page()
+    elif page == "💴 自分の給与確認": render_my_salary_page()
 
 if __name__ == "__main__":
     main()
