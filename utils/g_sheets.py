@@ -707,3 +707,28 @@ def get_all_teacher_names():
         import streamlit as st
         st.error(f"🚨 講師マスタの取得に失敗しました！原因: {e}")
         return []
+
+@st.cache_data(ttl=600)
+def get_all_student_info_dict():
+    """
+    全員分の生徒情報を「1回のAPI通信」で一括取得し、
+    {'生徒A': {データ}, '生徒B': {データ}} の辞書にする神関数
+    """
+    # ▼▼ ここは g_sheets.py の他の関数に合わせて接続コードを書いてください ▼▼
+    gc = get_gc_client() 
+    sh = gc.open_by_key(SPREADSHEET_ID) # ← ご自身の環境の変数名に合わせてください
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    
+    ws = sh.worksheet("設定_生徒情報")
+    
+    # 🌟 ここで全員分のデータを一括取得！（通信はここで1回だけ）
+    records = ws.get_all_records() 
+    
+    info_dict = {}
+    for row in records:
+        # スプレッドシートの列名（生徒名/氏名/名前など）に対応
+        name = row.get('生徒名') or row.get('氏名') or row.get('名前')
+        if name:
+            info_dict[name] = row
+            
+    return info_dict  
