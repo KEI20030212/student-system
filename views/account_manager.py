@@ -12,7 +12,7 @@ def render_account_manager_page():
     if 'toast_msg' in st.session_state:
         st.toast(st.session_state['toast_msg'], icon="✨")
         del st.session_state['toast_msg']
-        
+
     st.header("⚙️ アカウント・システム設定")
     
     # 1. 現在のアカウント一覧を取得
@@ -63,12 +63,7 @@ def render_account_manager_page():
                     success = add_new_account(new_id, new_pass, new_name, new_role)
                 
                 if success:
-                    # 古いアカウント情報を「ピンポイントで」忘れさせる
-                    keys_to_clear = ['all_accounts', 'accounts_dict']
-                    for key in keys_to_clear:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    
+                    get_all_accounts(force_refresh=True)
                     # 成功メッセージを表示（toastは画面右下にフワッと出ます）
                     st.session_state['toast_msg'] = f"✅ {new_name} 先生のアカウントを作成しました！"
                     
