@@ -10,6 +10,12 @@ from utils.g_sheets import publish_salary_data
 def render_salary_dashboard_page():
     st.header("💰 給与・交通費ダッシュボード")
     
+    # 🔄 最新データ再読み込みボタン
+    if st.button("🔄 最新の授業データを読み込み直す"):
+        if 'salary_df_all' in st.session_state:
+            del st.session_state['salary_df_all'] # 記憶を消去
+        st.rerun() # 画面を再読み込み
+        
     # 1. データのロード
     student_names = get_all_student_names()
     if not student_names: return
@@ -27,29 +33,32 @@ def render_salary_dashboard_page():
         base_price_1on3 = c3.number_input("1:3 基本単価 (円)", value=2000, step=100)
 
     # 授業データの集計
-    all_data_list = []
-    
-    # 🌟 API対策1: ループ内の連続アクセスを優しくする＆プログレスバー追加！
-    with st.spinner('☁️ 生徒の授業データを集計中...（APIエラー防止のため、少しずつ読み込みます☕）'):
-        progress_bar = st.progress(0) # 進捗バーを表示
-        total_students = len(student_names)
+    if 'salary_df_all' not in st.session_state:
+        all_data_list = []
+        with st.spinner('☁️ 生徒の授業データを集計中...（APIエラー防止のため、少しずつ読み込みます☕）'):
+            progress_bar = st.progress(0)
+            total_students = len(student_names)
+            
+            for i, s_name in enumerate(student_names):
+                df = load_all_data(s_name)
+                if not df.empty:
+                    df['生徒名'] = s_name
+                    all_data_list.append(df)
+                
+                time.sleep(0.5) # 息継ぎ
+                progress_bar.progress((i + 1) / total_students)
+                
+            progress_bar.empty()
+            
+        if not all_data_list: return
         
-        for i, s_name in enumerate(student_names):
-            df = load_all_data(s_name)
-            if not df.empty:
-                df['生徒名'] = s_name
-                all_data_list.append(df)
-            
-            # Google APIへの息継ぎ（0.5秒待つ）
-            time.sleep(0.5)
-            
-            # 進捗バーを更新（例: 5/10人なら50%）
-            progress_bar.progress((i + 1) / total_students)
-            
-        progress_bar.empty() # 終わったら進捗バーを消す
-    
-    if not all_data_list: return
-    df_all = pd.concat(all_data_list, ignore_index=True)
+        # 読み込んだデータを一つにまとめて、Streamlitの脳内に記憶させる🧠
+        df_all = pd.concat(all_data_list, ignore_index=True)
+        st.session_state['salary_df_all'] = df_all
+        
+    else:
+        # 既に記憶していれば、APIを使わずに脳内から一瞬で取り出す！⚡
+        df_all = st.session_state['salary_df_all']
     
     if '担当講師' not in df_all.columns: return
 
