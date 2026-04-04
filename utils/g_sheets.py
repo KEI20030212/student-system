@@ -734,27 +734,34 @@ def get_all_student_info_dict():
     return info_dict  
 
 @st.cache_data(ttl=600)
-def get_all_accounts():
+def get_all_accounts(force_refresh=False):
     """設定_アカウントシートからIDとパスワードのリストを取得"""
-    # ▼▼ スプレッドシートの接続コードはご自身の環境に合わせてください ▼▼
-    gc = get_gc_client() 
-    sh = gc.open_by_key(SPREADSHEET_ID) 
-    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    import streamlit as st
     
-    try:
-        ws = sh.worksheet("設定_アカウント")
-        records = ws.get_all_records()
+    # ① 強制リフレッシュの指示が出た時、またはまだ記憶がない時だけ読みに行く
+    if force_refresh or 'all_accounts' not in st.session_state:
+        gc = get_gc_client() 
+        sh = gc.open_by_key(SPREADSHEET_ID) 
         
-        # IDをキーにした辞書に変換します
-        # 例: {'suzuki_t': {'パスワード': 'suzuki1234', '講師名': '鈴木先生', '権限': 'teacher'}}
-        accounts = {}
-        for row in records:
-            if row.get('ID'):
-                accounts[str(row['ID'])] = row
-        return accounts
-    except Exception as e:
-        st.error("アカウントシートの読み込みに失敗しました。")
-        return {}
+        try:
+            ws = sh.worksheet("設定_アカウント")
+            records = ws.get_all_records()
+            
+            # IDをキーにした辞書に変換します
+            accounts = {}
+            for row in records:
+                if row.get('ID'):
+                    accounts[str(row['ID'])] = row
+                    
+            # ② 【重要】ここで、取得したデータをStreamlitの脳内に保存する！
+            st.session_state['all_accounts'] = accounts
+            
+        except Exception as e:
+            st.error("アカウントシートの読み込みに失敗しました。")
+            return {}
+
+    # ③ もし記憶があればそれをそのまま返すし、新しく取得した場合もそれを返す
+    return st.session_state['all_accounts']
 
 # utils/g_sheets.py の下の方に追加してください
 
