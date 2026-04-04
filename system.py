@@ -101,7 +101,7 @@ def main():
         "💴 自分の給与確認"
     ]
     
-    if st.session_state['role'] == 'admin':
+    if st.session_state['role'] in ['admin', 'owner']:
         menu_options.extend([
             "✅ 本日の出欠・座席表",
             "🔍 全生徒の過去ログ検索",
