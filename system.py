@@ -58,16 +58,6 @@ def login_screen():
                     st.rerun()
                 else:
                     accounts = get_all_accounts()
-
-                    st.write("🔍 デバッグ用：現在のデータ", accounts)
-                    # IDが存在し、かつパスワード（数字のみの場合に備えてstr変換）が一致するかチェック
-                    if username in accounts and str(accounts[username].get('パスワード')) == str(password):
-                        st.session_state.update({
-                            'logged_in': True, 
-                            'role': accounts[username].get('権限', 'teacher'),
-                            'username': accounts[username].get('講師名', '先生')
-                        })
-                        st.rerun()
                     else:
                         st.error("⚠️ IDまたはパスワードが間違っています。")
 
