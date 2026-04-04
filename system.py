@@ -105,6 +105,7 @@ def main():
             "🔍 全生徒の過去ログ検索",
             "💰 給与・交通費ダッシュボード",
             "📈 講師分析ダッシュボード",
+            "⚙️ アカウント・システム設定"
             # "💴 月謝（請求額）管理ダッシュボード"  # ←未作成
         ])
         
@@ -138,6 +139,7 @@ def main():
     elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page(),
     # elif page == "💴 月謝（請求額）管理ダッシュボード": render_tuition_dashboard_page()
     elif page == "💴 自分の給与確認": render_my_salary_page()
+    elif page == "⚙️ アカウント・システム設定": render_account_manager_page()
 
 if __name__ == "__main__":
     main()
