@@ -65,8 +65,8 @@ def login_screen():
                             'username': accounts[username].get('講師名', '先生')
                         })
                         st.rerun()
-                else:
-                    st.error("⚠️ IDまたはパスワードが間違っています。")
+                    else:
+                        st.error("⚠️ IDまたはパスワードが間違っています。")
 
 # --------------------------------------------------
 # 🚀 メイン画面＆ルーティング（司令塔）
