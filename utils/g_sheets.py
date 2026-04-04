@@ -744,7 +744,7 @@ def get_all_accounts(force_refresh=False):
         
         try:
             ws = sh.worksheet("設定_アカウント")
-            records = ws.get_all_records(numericise_ignore=["ID", "パスワード"])
+            records = ws.get_all_records(numericise_ignore=["all"])
             
             # IDをキーにした辞書に変換します
             accounts = {}
