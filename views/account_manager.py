@@ -47,7 +47,18 @@ def render_account_manager_page():
             new_name = st.text_input("🏷️ 講師名 (例: 田中 太郎)")
         with col2:
             new_pass = st.text_input("🔑 初期パスワード", type="password")
-            new_role = st.selectbox("🛡️ 権限", options=["teacher", "admin"], format_func=lambda x: "👩‍🏫 先生" if x == "teacher" else "👑 教室長")
+            role_mapping = {
+                "owner": "👑 オーナー",
+                "admin": "🏢 教室長",
+                "am": "👔 AM",
+                "head_teacher": "🎓 主任講師",
+                "teacher": "👩‍🏫 講師"
+            }
+            new_role = st.selectbox(
+                "🛡️ 権限", 
+                options=["owner", "admin", "am", "head_teacher", "teacher"], 
+                format_func=lambda x: role_mapping[x]
+            )
             
         submit_btn = st.form_submit_button("✨ この内容でアカウントを作成する", use_container_width=True)
         
