@@ -60,8 +60,18 @@ def render_account_manager_page():
                     success = add_new_account(new_id, new_pass, new_name, new_role)
                 
                 if success:
-                    st.success(f"✅ {new_name} 先生のアカウントを作成しました！")
+                    keys_to_clear = ['all_accounts', 'accounts_dict'] # 使っていそうな名前を念のため両方
+                    for key in keys_to_clear:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    
+                    # 2. キャッシュ機能（@st.cache_data）を使っている場合はそれもクリア
+                    try:
+                        st.cache_data.clear() 
+                    except:
+                        pass
+                    st.toast(f"✅ {new_name} 先生のアカウントを作成しました！")
                     # 登録後に最新状態を読み込み直す
-                    if 'all_accounts' in st.session_state:
-                        del st.session_state['all_accounts'] 
+                    #if 'all_accounts' in st.session_state:
+                        #del st.session_state['all_accounts'] 
                     st.rerun()
