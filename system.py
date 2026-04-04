@@ -19,6 +19,7 @@ from views.salary_dashboard import render_salary_dashboard_page
 from views.analytics_dashboard import render_analytics_dashboard_page
 # from views.tuition import render_tuition_dashboard_page
 from views.my_salary import render_my_salary_page
+from views.account_manager import render_account_manager_page
 # 👇 これを app.py の上の方（インポート部分）に追加！
 from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
 # ==========================================
