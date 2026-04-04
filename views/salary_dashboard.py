@@ -5,6 +5,7 @@ import time # 🌟 必須！APIエラー防止の息継ぎ用に追加
 
 from utils.g_sheets import get_all_student_names, load_all_data, load_instructor_master, update_instructor_master
 from utils.pdf_generator import generate_payslip_pdf # 👈 PDF職人もバッチリ読み込み！
+from utils.g_sheets import publish_salary_data
 
 def render_salary_dashboard_page():
     st.header("💰 給与・交通費ダッシュボード")
@@ -192,3 +193,13 @@ def render_salary_dashboard_page():
                 file_name=f"給与明細_{selected_month}_{selected_teacher_for_pdf}.pdf",
                 mime="application/pdf"
             )
+        
+        st.divider()
+        st.subheader("📢 先生のページへ給与データを公開")
+        st.info("※給与が確定したら、以下のボタンを押して先生たちの「自分の給与確認」ページにデータを送ってください。")
+        
+        if st.button(f"🚀 {selected_month} の給与を確定して公開する", use_container_width=True):
+            with st.spinner("☁️ 先生たちのページにデータを送信中..."):
+                publish_salary_data(selected_month, df_summary)
+                time.sleep(1)
+            st.success(f"✅ {selected_month} の給与データを公開しました！先生が自分のアカウントで確認・PDFダウンロードできるようになりました。")
