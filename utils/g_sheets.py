@@ -733,7 +733,6 @@ def get_all_student_info_dict():
             
     return info_dict  
 
-@st.cache_data(ttl=600)
 def get_all_accounts(force_refresh=False):
     """設定_アカウントシートからIDとパスワードのリストを取得"""
     import streamlit as st
