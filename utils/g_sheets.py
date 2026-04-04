@@ -762,9 +762,6 @@ def get_all_accounts(force_refresh=False):
 
     # ③ もし記憶があればそれをそのまま返すし、新しく取得した場合もそれを返す
     return st.session_state['all_accounts']
-
-# utils/g_sheets.py の下の方に追加してください
-
 def publish_salary_data(month_str, df_summary):
     """教室長が計算した給与データを「給与公開用データ」シートに保存する"""
     gc = get_gc_client()
@@ -821,7 +818,7 @@ def add_new_account(user_id, password, teacher_name, role):
         
         # 新しい行として追加（列の順番が ID, パスワード, 講師名, 権限 だと仮定しています）
         # もしスプレッドシートの列の順番が違う場合は、ここを並び替えてください！
-        ws.append_row([user_id, password, teacher_name, role])
+        ws.append_row([user_id, f"'{password}", teacher_name, role])
         return True
     except Exception as e:
         import streamlit as st
