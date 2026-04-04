@@ -761,32 +761,37 @@ def get_all_accounts():
 def publish_salary_data(month_str, df_summary):
     """教室長が計算した給与データを「給与公開用データ」シートに保存する"""
     gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID) # 👈 ご自身の環境のsheet_idに合わせてください
-    
-    # シートがなければ自動で作成
     try:
-        ws = sh.worksheet("給与公開用データ")
-    except:
-        ws = sh.add_worksheet(title="給与公開用データ", rows=1000, cols=10)
-    
-    # 既存のデータを取得
-    records = ws.get_all_records()
-    df_existing = pd.DataFrame(records)
-    
-    # 今回保存するデータに「年月」列を追加
-    df_new = df_summary.copy()
-    df_new['年月'] = month_str
-    
-    # 既に同じ月のデータがあれば削除して上書き（修正して再公開できるようにするため）
-    if not df_existing.empty and '年月' in df_existing.columns:
-        df_existing = df_existing[df_existing['年月'] != month_str]
+        sh = gc.open_by_key(SPREADSHEET_ID) # 👈 先生の書き方で完璧です！
         
-    df_final = pd.concat([df_existing, df_new], ignore_index=True)
-    
-    # シートをクリアして最新データを書き込み
-    ws.clear()
-    ws.update([df_final.columns.values.tolist()] + df_final.fillna("").values.tolist())
-
+        # シートがなければ自動で作成
+        try:
+            ws = sh.worksheet("給与公開用データ")
+        except:
+            ws = sh.add_worksheet(title="給与公開用データ", rows=1000, cols=10)
+        
+        # 既存のデータを取得
+        records = ws.get_all_records()
+        df_existing = pd.DataFrame(records)
+        
+        # ⚠️ データ型の不一致によるエラーを防ぐため、一旦すべて文字(str)に変換
+        df_new = df_summary.astype(str).copy()
+        df_new['年月'] = month_str
+        
+        # 既に同じ月のデータがあれば削除して上書き
+        if not df_existing.empty and '年月' in df_existing.columns:
+            df_existing = df_existing[df_existing['年月'] != month_str]
+            
+        df_final = pd.concat([df_existing, df_new], ignore_index=True)
+        
+        # シートをクリアして最新データを書き込み
+        ws.clear()
+        ws.update([df_final.columns.values.tolist()] + df_final.fillna("").values.tolist())
+        
+    except Exception as e:
+        import streamlit as st
+        # 隠されてしまうエラーの正体を、直接画面に表示させます！
+        st.error(f"🚨 スプレッドシートの保存中にエラーが発生しました！原因: {e}")
 @st.cache_data(ttl=600)
 def load_published_salary():
     """先生用のページで公開済みの給与データを読み込む"""
