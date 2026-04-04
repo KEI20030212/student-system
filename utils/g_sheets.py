@@ -802,3 +802,21 @@ def load_published_salary():
         return pd.DataFrame(ws.get_all_records())
     except:
         return pd.DataFrame() # まだ公開データがない場合        
+
+        # utils/g_sheets.py の下の方に追加
+
+def add_new_account(user_id, password, teacher_name, role):
+    """新しいアカウントをスプレッドシートに追加する"""
+    gc = get_gc_client()
+    try:
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("設定_アカウント") # 👈 実際のアカウント管理シート名に合わせてください
+        
+        # 新しい行として追加（列の順番が ID, パスワード, 講師名, 権限 だと仮定しています）
+        # もしスプレッドシートの列の順番が違う場合は、ここを並び替えてください！
+        ws.append_row([user_id, password, teacher_name, role])
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"🚨 アカウントの保存に失敗しました: {e}")
+        return False
