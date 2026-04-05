@@ -2,23 +2,42 @@ import streamlit as st
 import pandas as pd
 from utils.g_sheets import get_all_student_names, load_all_data, get_textbook_master
 
+# ==========================================
+# 🌟 APIエラー対策：キャッシュ（一時保存）機能の追加
+# ==========================================
+# 頻繁に変更されないデータは、一度取得したら一定時間使い回すことで通信回数を減らします。
+
+@st.cache_data(ttl=600)  # 600秒(10分)間は再取得せず、手元のデータを使い回す
+def cached_get_student_names():
+    return get_all_student_names()
+
+@st.cache_data(ttl=600)  # マスタデータも10分間キャッシュ
+def cached_get_textbook_master():
+    return get_textbook_master()
+
+@st.cache_data(ttl=60)   # 生徒の成績データは更新される可能性があるので、短め(1分)にキャッシュ
+def cached_load_all_data(student_name):
+    return load_all_data(student_name)
+
+# ==========================================
+
 def render_quiz_list_page():
     st.header("📝 小テスト進捗＆習熟度マップ")
     st.write("縦軸がテキスト、横軸が章です。タブを切り替えて各テキストの進捗を確認しましょう🎨")
 
-    # 1. 生徒の選択
-    student_names = get_all_student_names()
+    # 1. 生徒の選択（🌟キャッシュ版を使用）
+    student_names = cached_get_student_names()
     selected_student = st.selectbox("👤 生徒を選択", ["-- 選択 --"] + student_names)
     
     if selected_student == "-- 選択 --":
         st.stop()
 
     with st.spinner("習熟度データを集計中..."):
-        # 2. データの読み込み
-        df_history = load_all_data(selected_student)
+        # 2. データの読み込み（🌟キャッシュ版を使用）
+        df_history = cached_load_all_data(selected_student)
         
-        # --- マスタデータの処理 ---
-        master_dict = get_textbook_master()
+        # --- マスタデータの処理 ---（🌟キャッシュ版を使用）
+        master_dict = cached_get_textbook_master()
         flat_data = []
         for text_name, chaps in master_dict.items():
             for chap in chaps:
