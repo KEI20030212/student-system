@@ -1,59 +1,60 @@
 import streamlit as st
 
 # 裏方部隊（utils/g_sheets.py）から必要な関数を呼び出します
-# ※今はまだ app.py にある関数（load_board_messageなど）も、
-# 次のステップで utils に移動させるので、先取りしてここで import しておきます！
 from utils.g_sheets import (
     load_seating_data,
     load_board_message,
     save_board_message,
-    get_my_messages,
-    get_all_accounts
+    get_my_messages,   # 追加
+    get_all_accounts   # 追加
 )
 
 def render_home_page():
     st.header("📢 ホーム・連絡掲示板")
+    
+    # ==========================================
+    # 🌟 個別メッセージエリア
+    # ==========================================
     st.subheader("💌 あなた宛てのメッセージ")
     
     my_user_id = st.session_state.get('user_id')
     if my_user_id:
-        # さっき作った関数でメッセージを取得
         messages = get_my_messages(my_user_id)
         
         if not messages:
             st.info("現在、新しいメッセージはありません。")
         else:
             raw_accounts = get_all_accounts()
-            # すべてのIDを「完全な文字」にして、前後のスペースも消した辞書を作ります
+            # IDを小文字に統一し、余計な空白を消す
             safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
-
+            
             with st.container(height=350):
-            # メッセージを1つずつ表示
                 for msg in messages:
                     date_str = msg.get("送信日時", "")
-                    sender_id = str(msg.get("送信者ID", ""))
+                    
+                    # 👇 おそらくこの行が消えてしまっていました！
+                    raw_sender_id = msg.get("送信者ID", "") 
                     text = msg.get("メッセージ内容", "")
-                
+                    
                     sender_id_clean = str(raw_sender_id).strip().lower()
                     
-                    # 講師名を取得。見つからなければ「ID（不明）」と表示してデバッグしやすくします
+                    # 講師名を取得
                     account_info = safe_accounts.get(sender_id_clean, {})
                     sender_name = account_info.get("講師名")
                     
-                    # 名前が見つからない場合のバックアップ表示
                     if not sender_name:
                         sender_name = f"ID:{raw_sender_id} (名前未設定)"
-                
-                    # チャット風のUIで綺麗に表示！
+                    
                     with st.chat_message("user"):
-                        st.markdown(f"**{sender_name} 先生** からのメッセージ 🕒 {date_str}")
+                        st.markdown(f"**{sender_name}** 🕒 {date_str}")
                         st.write(text)
     else:
         st.warning("⚠️ ユーザー情報が取得できません。一度ログアウトして入り直してください。")
         
     st.divider()
+    
     # ==========================================
-    # 🌟 1. 掲示板を上に移動しました！
+    # 🌟 掲示板エリア
     # ==========================================
     st.subheader("📌 講師向け 連絡事項・掲示板")
     current_message = load_board_message()
@@ -67,10 +68,10 @@ def render_home_page():
                 st.success("掲示板を更新しました！全先生のホーム画面に反映されます。")
                 st.rerun()
 
-    st.divider() # 間に区切り線を入れてスッキリさせます
+    st.divider() 
     
     # ==========================================
-    # 🌟 2. 座席表を下に移動しました！
+    # 🌟 座席表エリア
     # ==========================================
     st.subheader("🗺️ 現在の教室状況 (座席マップ)")
     
@@ -81,10 +82,8 @@ def render_home_page():
         if num_booths == 0:
              st.info("座席データがまだありません。左のメニューから登録してください。")
         else:
-            # さっき直した「3個ずつ並べる作戦」のままです！
             for i in range(0, num_booths, 3):
                 cols = st.columns(3)
-                
                 for j in range(3):
                     if i + j < num_booths:
                         booth_index = i + j
@@ -106,4 +105,3 @@ def render_home_page():
                                     st.markdown(f"<div style='text-align:center; font-size:0.9em; padding-bottom:5px;'>{status_html}</div>", unsafe_allow_html=True)
     except Exception as e:
         st.error("データの読み込みに失敗しました。")
-
