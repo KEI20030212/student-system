@@ -62,43 +62,70 @@ def render_message_sender_page():
             if not sent_msgs:
                 st.info("まだ送信したメッセージはありません。")
             else:
-                with st.container(height=500):
-                    for msg in sent_msgs:
+                # 🌟 未読（相手がまだ読んでいない）と既読（相手が読んだ）に振り分け！
+                unread_msgs = [m for m in sent_msgs if m.get("状態", "未読") in ["未読", "False"]]
+                read_msgs = [m for m in sent_msgs if m not in unread_msgs]
+
+                # ----------------------------------------
+                # 📩 相手が未読のメッセージ枠（そのまま表示）
+                # ----------------------------------------
+                if unread_msgs:
+                    st.markdown("##### 📩 相手がまだ読んでいないメッセージ (未読)")
+                    for msg in unread_msgs:
                         date_str = msg.get("送信日時", "")
                         raw_receiver_id = msg.get("受信者ID", "")
                         text = msg.get("メッセージ内容", "")
-                        
-                        # 🌟 スプレッドシートから状態（既読/未読）を取得
-                        read_status = msg.get("状態", "未読")
-                        if read_status == "既読":
-                            status_icon = "✅ 既読"
-                        else:
-                            status_icon = "📩 未読"
                         
                         receiver_id = str(raw_receiver_id).strip().lower()
                         account_info = safe_accounts.get(receiver_id, {})
                         base_name = account_info.get("講師名")
                         role = str(account_info.get("権限", "")).strip().lower()
 
-                        if receiver_id == "admin":
-                            receiver_name = "教室長"
-                        elif receiver_id == "owner":
-                            receiver_name = "社長"
-                        elif receiver_id == "head_teacher":
-                            receiver_name = "主任講師"
+                        if receiver_id == "admin": receiver_name = "教室長"
+                        elif receiver_id == "owner": receiver_name = "社長"
+                        elif receiver_id == "head_teacher": receiver_name = "主任講師"
                         elif base_name:
-                            if role == "admin":
-                                receiver_name = f"{base_name} 教室長"
-                            elif role == "owner":
-                                receiver_name = f"{base_name} 社長"
-                            elif role == "head_teacher":
-                                receiver_name = f"{base_name} 主任講師"
-                            else:
-                                receiver_name = f"{base_name} 先生"
-                        else:
-                            receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
+                            if role == "admin": receiver_name = f"{base_name} 教室長"
+                            elif role == "owner": receiver_name = f"{base_name} 社長"
+                            elif role == "head_teacher": receiver_name = f"{base_name} 主任講師"
+                            else: receiver_name = f"{base_name} 先生"
+                        else: receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
                         
-                        with st.chat_message("assistant"):
-                            st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str} / **{status_icon}**")
+                        with st.chat_message("assistant"): # 未読は目立たせる
+                            st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str} / **📩 未読**")
                             formatted_text = text.replace('\n', '  \n')
                             st.write(formatted_text)
+
+                # ----------------------------------------
+                # ✅ 相手が確認済みのメッセージ枠（折りたたみ）
+                # ----------------------------------------
+                if read_msgs:
+                    # 未読がなければ最初から開いておく
+                    is_expanded = len(unread_msgs) == 0
+                    
+                    with st.expander("✅ 相手が確認済みのメッセージ (既読) を見る", expanded=is_expanded):
+                        with st.container(height=300):
+                            for msg in read_msgs:
+                                date_str = msg.get("送信日時", "")
+                                raw_receiver_id = msg.get("受信者ID", "")
+                                text = msg.get("メッセージ内容", "")
+                                
+                                receiver_id = str(raw_receiver_id).strip().lower()
+                                account_info = safe_accounts.get(receiver_id, {})
+                                base_name = account_info.get("講師名")
+                                role = str(account_info.get("権限", "")).strip().lower()
+
+                                if receiver_id == "admin": receiver_name = "教室長"
+                                elif receiver_id == "owner": receiver_name = "社長"
+                                elif receiver_id == "head_teacher": receiver_name = "主任講師"
+                                elif base_name:
+                                    if role == "admin": receiver_name = f"{base_name} 教室長"
+                                    elif role == "owner": receiver_name = f"{base_name} 社長"
+                                    elif role == "head_teacher": receiver_name = f"{base_name} 主任講師"
+                                    else: receiver_name = f"{base_name} 先生"
+                                else: receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
+                                
+                                with st.chat_message("user"): # 既読は控えめなアイコンに
+                                    st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str} / **✅ 既読**")
+                                    formatted_text = text.replace('\n', '  \n')
+                                    st.write(formatted_text)
