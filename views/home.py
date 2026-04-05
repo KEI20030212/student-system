@@ -33,7 +33,7 @@ def render_home_page():
             safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
             
             # ----------------------------------------
-            # 📩 新着メッセージ枠（スクロールなしでそのまま表示！）
+            # 📩 新着メッセージ枠（そのまま表示）
             # ----------------------------------------
             if unread_msgs:
                 st.markdown("##### 📩 新着メッセージ")
@@ -63,14 +63,19 @@ def render_home_page():
                         st.write(formatted_text)
             
             # ----------------------------------------
-            # ✅ 過去のメッセージ枠（折りたたみ＆スクロールでスッキリ！）
+            # ✅ 過去のメッセージ枠（検索機能つき！）
             # ----------------------------------------
             if read_msgs:
-                # 新着メッセージがない場合は最初から開いておく、ある場合は閉じておく
                 is_expanded = len(unread_msgs) == 0
                 
                 with st.expander("✅ 過去のメッセージ (既読) を見る", expanded=is_expanded):
+                    
+                    # 🌟 検索ボックスを追加
+                    search_query = st.text_input("🔍 受信メッセージを検索", placeholder="送り主の名前や、メッセージのキーワードを入力...")
+                    
                     with st.container(height=300):
+                        found_count = 0
+                        
                         for msg in read_msgs:
                             date_str = msg.get("送信日時", "")
                             raw_sender_id = msg.get("送信者ID", "")
@@ -91,10 +96,20 @@ def render_home_page():
                                 else: sender_name = f"{base_name} 先生"
                             else: sender_name = f"ID:{raw_sender_id} (名前未設定)"
                             
+                            # 🌟 検索キーワードでの絞り込み
+                            if search_query:
+                                if search_query.lower() not in text.lower() and search_query.lower() not in sender_name.lower():
+                                    continue
+                            
+                            found_count += 1
+                            
                             with st.chat_message("user"):
                                 st.markdown(f"**{sender_name}** からのメッセージ 🕒 {date_str}")
                                 formatted_text = text.replace('\n', '  \n')
                                 st.write(formatted_text)
+                        
+                        if search_query and found_count == 0:
+                            st.info(f"「{search_query}」を含むメッセージは見つかりませんでした。")
     else:
         st.warning("⚠️ ユーザー情報が取得できません。一度ログアウトして入り直してください。")
         
