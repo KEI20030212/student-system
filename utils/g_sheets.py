@@ -52,6 +52,7 @@ def get_student_info(name):
         if r.get('生徒名') == name:
             return r
     return {}
+@st.cache_data(ttl=60)
 def load_seating_data():
     """スプレッドシートから最新の座席情報を取得する"""
     gc = get_gc_client()
@@ -738,7 +739,7 @@ def get_all_student_info_dict():
             info_dict[name] = row
             
     return info_dict  
-
+@st.cache_data(ttl=600)
 def get_all_accounts(force_refresh=False):
     """設定_アカウントシートからIDとパスワードのリストを取得"""
     import streamlit as st
@@ -878,7 +879,7 @@ def mark_messages_as_read(receiver_id):
                 
     except Exception as e:
         print(f"既読処理に失敗しました: {e}")
-
+@st.cache_data(ttl=60)
 def get_my_messages(receiver_id):
     """自分（receiver_id）宛てのメッセージを取得する"""
     try:
