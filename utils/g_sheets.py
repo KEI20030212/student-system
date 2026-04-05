@@ -874,48 +874,52 @@ def mark_messages_as_read(receiver_id):
     except Exception as e:
         print(f"既読処理に失敗しました: {e}")
 
-def get_my_messages(user_id):
-    """自分宛てのメッセージを取得する関数"""
+def get_my_messages(receiver_id):
+    """自分（receiver_id）宛てのメッセージを取得する"""
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("連絡_メッセージ")
+        all_vals = ws.get_all_values()
         
-        # numericise_ignore=["all"] をつけて、IDのゼロ消えなどを防ぎます
-        records = ws.get_all_records(numericise_ignore=["all"])
+        my_msgs = []
+        target_id = str(receiver_id).strip().lower()
         
-        my_messages = []
-        for row in records:
-            # 受信者IDが、今ログインしている人のIDと一致するかチェック
-            if str(row.get("受信者ID", "")) == str(user_id):
-                my_messages.append(row)
-        
-        # 新しいメッセージが一番上に来るように、リストの順番をひっくり返す
-        my_messages.reverse()
-        return my_messages
-        
+        for row in all_vals[1:]: # ヘッダーを飛ばす
+            if len(row) >= 3 and str(row[2]).strip().lower() == target_id:
+                my_msgs.append({
+                    "送信日時": row[0],
+                    "送信者ID": row[1],
+                    "受信者ID": row[2],
+                    "メッセージ内容": row[3],
+                    "状態": row[4] if len(row) >= 5 else "未読" # 🌟 5列目を取得！
+                })
+        # 新しい順に並び替え
+        return sorted(my_msgs, key=lambda x: x['送信日時'], reverse=True)
     except Exception as e:
-        import streamlit as st
-        st.error(f"メッセージの読み込みに失敗しました: {e}")
         return []
-def get_sent_messages(user_id):
-    """自分が送信したメッセージの履歴を取得する関数"""
+
+def get_sent_messages(sender_id):
+    """自分（sender_id）が送信したメッセージ履歴を取得する"""
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("連絡_メッセージ")
-        records = ws.get_all_records(numericise_ignore=["all"])
+        all_vals = ws.get_all_values()
         
-        sent_messages = []
-        for row in records:
-            # 送信者IDが自分のIDと一致するものだけを集める
-            if str(row.get("送信者ID", "")) == str(user_id):
-                sent_messages.append(row)
+        sent_msgs = []
+        target_id = str(sender_id).strip().lower()
         
-        sent_messages.reverse() # 最新のものを一番上にする
-        return sent_messages
-        
+        for row in all_vals[1:]: # ヘッダーを飛ばす
+            if len(row) >= 2 and str(row[1]).strip().lower() == target_id:
+                sent_msgs.append({
+                    "送信日時": row[0],
+                    "送信者ID": row[1],
+                    "受信者ID": row[2],
+                    "メッセージ内容": row[3],
+                    "状態": row[4] if len(row) >= 5 else "未読" # 🌟 5列目を取得！
+                })
+        # 新しい順に並び替え
+        return sorted(sent_msgs, key=lambda x: x['送信日時'], reverse=True)
     except Exception as e:
-        import streamlit as st
-        st.error(f"送信履歴の読み込みに失敗しました: {e}")
         return []
