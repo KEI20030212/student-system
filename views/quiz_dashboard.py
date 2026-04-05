@@ -120,6 +120,18 @@ def render_quiz_list_page():
                 if pivot_df.empty:
                     st.info("このテキストのテスト記録はまだありません。")
                     continue
+                import re
+                
+                def sort_chapter_key(col_name):
+                    # 文字の中から数字だけを抜き出して、数値として比較する
+                    nums = re.findall(r'\d+', str(col_name))
+                    if nums:
+                        return int(nums[0]) # "10"なら10、"2"なら2として扱う
+                    return 9999 # もし「まとめ」など数字以外の章があれば一番右端に寄せる
+
+                # 正しい順番に並び替えた列名リストを作って、表を上書き！
+                sorted_cols = sorted(pivot_df.columns.tolist(), key=sort_chapter_key)
+                pivot_df = pivot_df[sorted_cols]
 
                 # --- ✨ アイコン化＆カラーリングの魔法（絶対表示させる版） ---
                 def add_icon_to_score(val):
