@@ -824,6 +824,7 @@ def add_new_account(user_id, password, teacher_name, role):
 def save_message(sender_id, receiver_id, message):
     """メッセージを「連絡_メッセージ」シートに保存する関数"""
     try:
+        gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID) # ※SPREADSHEET_KEYの部分は、先生の環境に合わせてください
         ws = sh.worksheet("連絡_メッセージ")
         
