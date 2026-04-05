@@ -20,7 +20,19 @@ def render_message_sender_page():
         user_options = {}
         for target_id, info in safe_accounts.items():
             name = info.get("講師名", "不明")
-            user_options[f"{name} 先生 (ID: {target_id})"] = target_id
+            role = info.get("権限", "")
+            
+            # 権限によって敬称を使い分ける
+            if role == "admin":
+                suffix = "教室長"
+            elif role == "owner":
+                suffix = "社長"
+            elif role == "head_teacher":
+                suffix = "主任"
+            else:
+                suffix = "先生"
+
+            user_options[f"{name} {suffix} (ID: {target_id})"] = target_id
 
         with st.container(border=True):
             with st.form("send_message_form", clear_on_submit=True):
@@ -61,10 +73,30 @@ def render_message_sender_page():
                         raw_receiver_id = msg.get("受信者ID", "")
                         text = msg.get("メッセージ内容", "")
                         
-                        receiver_id = str(raw_receiver_id).strip()
-                        # 受信者の名前を検索
-                        receiver_name = safe_accounts.get(receiver_id, {}).get("講師名", receiver_id)
+                        receiver_id = str(raw_receiver_id).strip().lower()
+                        account_info = safe_accounts.get(receiver_id, {})
+                        base_name = account_info.get("講師名")
+                        role = account_info.get("権限", "")
+
+                        # 受信者の名前と役職を決定
+                        if receiver_id == "admin":
+                            receiver_name = "教室長"
+                        elif receiver_id == "owner":
+                            receiver_name = "社長"
+                        elif receiver_id == "head_teacher":
+                            receiver_name = "主任講師"
+                        elif base_name:
+                            if role == "admin":
+                                receiver_name = f"{base_name} 教室長"
+                            elif role == "owner":
+                                receiver_name = f"{base_name} 社長"
+                            elif role == "head_teacher":
+                                receiver_name = f"{base_name} 主任"
+                            else:
+                                receiver_name = f"{base_name} 先生"
+                        else:
+                            receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
                         
                         with st.chat_message("assistant"):
-                            st.markdown(f"**{receiver_name} 先生** 宛て 🕒 {date_str}")
+                            st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str}")
                             st.write(text)
