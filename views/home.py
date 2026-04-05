@@ -23,22 +23,24 @@ def render_home_page():
         if not messages:
             st.info("現在、新しいメッセージはありません。")
         else:
-            # 誰から送られたか「名前」を表示するために、アカウント一覧を取得
-            accounts = get_all_accounts()
+            raw_accounts = get_all_accounts()
+            # すべてのIDを「完全な文字」にして、前後のスペースも消した辞書を作ります
+            safe_accounts = {str(k).strip(): v for k, v in raw_accounts.items()}
             
+            with st.container(height=350):
             # メッセージを1つずつ表示
-            for msg in messages:
-                date_str = msg.get("送信日時", "")
-                sender_id = str(msg.get("送信者ID", ""))
-                text = msg.get("メッセージ内容", "")
+                for msg in messages:
+                    date_str = msg.get("送信日時", "")
+                    sender_id = str(msg.get("送信者ID", ""))
+                    text = msg.get("メッセージ内容", "")
                 
-                # 送信者IDから名前を引っ張ってくる（見つからなければIDをそのまま表示）
-                sender_name = accounts.get(sender_id, {}).get("講師名", sender_id)
+                    # 送信者IDから名前を引っ張ってくる（見つからなければIDをそのまま表示）
+                    sender_name = accounts.get(sender_id, {}).get("講師名", sender_id)
                 
-                # チャット風のUIで綺麗に表示！
-                with st.chat_message("user"):
-                    st.markdown(f"**{sender_name} 先生** からのメッセージ 🕒 {date_str}")
-                    st.write(text)
+                    # チャット風のUIで綺麗に表示！
+                    with st.chat_message("user"):
+                        st.markdown(f"**{sender_name} 先生** からのメッセージ 🕒 {date_str}")
+                        st.write(text)
     else:
         st.warning("⚠️ ユーザー情報が取得できません。一度ログアウトして入り直してください。")
         
