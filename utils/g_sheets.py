@@ -13,9 +13,10 @@ import altair as alt # 座標グラフを描くための魔法の絵の具
 
 def get_jst_now():
     """現在時刻を日本時間(JST)で取得する"""
-    # UTCから9時間進めた時間を日本時間とする
-    jst = timezone(timedelta(hours=+9), 'JST')
-    return datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S')
+    jst = datetime.timezone(datetime.timedelta(hours=9), 'JST')
+    
+    # 🌟 ポイント： datetime.datetime.now(...) と2回重ねる！
+    return datetime.datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S')
 # --------------------------------------------------
 # ⚙️ 設定（デザインとファイル連携）
 # --------------------------------------------------
