@@ -8,6 +8,22 @@ from utils.g_sheets import (
     mark_messages_as_read
 )
 
+@st.cache_data(ttl=60)  # 個別メッセージは1分間キャッシュ
+def cached_get_my_messages(user_id):
+    return get_my_messages(user_id)
+
+@st.cache_data(ttl=600) # アカウント情報は滅多に変わらないので10分間キャッシュ
+def cached_get_all_accounts():
+    return get_all_accounts()
+
+@st.cache_data(ttl=120) # 掲示板は2分間キャッシュ
+def cached_load_board_message():
+    return load_board_message()
+
+@st.cache_data(ttl=60)  # 座席表は1分間キャッシュ
+def cached_load_seating_data():
+    return load_seating_data()
+
 def render_home_page():
     st.header("📢 ホーム・連絡掲示板")
     
@@ -18,7 +34,7 @@ def render_home_page():
     
     my_user_id = st.session_state.get('user_id')
     if my_user_id:
-        messages = get_my_messages(my_user_id)
+        messages = cached_get_my_messages(my_user_id)
         
         if not messages:
             st.info("現在、新しいメッセージはありません。")
@@ -26,10 +42,11 @@ def render_home_page():
             unread_msgs = [m for m in messages if m.get("状態", "未読") in ["未読", "False"]]
             read_msgs = [m for m in messages if m not in unread_msgs]
             
-            # 振り分けが終わったので、スプレッドシートのデータを「既読」に更新する
-            mark_messages_as_read(my_user_id)
+            if unread_msgs:
+                mark_messages_as_read(my_user_id)
+                cached_get_my_messages.clear()
             
-            raw_accounts = get_all_accounts()
+            raw_accounts = cached_get_all_accounts()
             safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
             
             # ----------------------------------------
@@ -119,7 +136,7 @@ def render_home_page():
     # 🌟 掲示板エリア
     # ==========================================
     st.subheader("📌 講師向け 連絡事項・掲示板")
-    current_message = load_board_message()
+    current_message = cached_load_board_message()
     
     formatted_message = current_message.replace('\n', '  \n')
     st.info(formatted_message)
@@ -129,6 +146,7 @@ def render_home_page():
             new_msg = st.text_area("先生たちへのメッセージを入力", value=current_message, height=150)
             if st.button("💾 掲示板を更新", type="primary"):
                 save_board_message(new_msg)
+                cached_load_board_message.clear()
                 st.success("掲示板を更新しました！全先生のホーム画面に反映されます。")
                 st.rerun()
 
@@ -140,7 +158,7 @@ def render_home_page():
     st.subheader("🗺️ 現在の教室状況 (座席マップ)")
     
     try:
-        seating_data = load_seating_data()
+        seating_data = cached_load_seating_data()
         num_booths = len(seating_data)
         
         if num_booths == 0:
