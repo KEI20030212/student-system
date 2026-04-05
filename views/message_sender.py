@@ -68,6 +68,9 @@ def render_message_sender_page():
                         raw_receiver_id = msg.get("受信者ID", "")
                         text = msg.get("メッセージ内容", "")
                         
+                        read_status = msg.get("状態", "未読")
+                        status_icon = "✅ 既読" if read_status == "既読" else "📩 未読"
+
                         receiver_id = str(raw_receiver_id).strip().lower()
                         account_info = safe_accounts.get(receiver_id, {})
                         base_name = account_info.get("講師名")
@@ -92,5 +95,6 @@ def render_message_sender_page():
                             receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
                         
                         with st.chat_message("assistant"):
-                            st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str}")
-                            st.write(text)
+                            st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str}"/ **{status_icon}**)
+                            formatted_text = text.replace('\n', '  \n')
+                            st.write(formatted_text)

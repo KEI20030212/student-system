@@ -4,7 +4,8 @@ from utils.g_sheets import (
     load_board_message,
     save_board_message,
     get_my_messages,
-    get_all_accounts
+    get_all_accounts,
+    mark_messages_as_read
 )
 
 def render_home_page():
@@ -22,6 +23,7 @@ def render_home_page():
         if not messages:
             st.info("現在、新しいメッセージはありません。")
         else:
+            mark_messages_as_read(my_user_id)
             raw_accounts = get_all_accounts()
             safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
             
