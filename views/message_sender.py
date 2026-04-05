@@ -24,7 +24,7 @@ def render_message_sender_page():
                 suffix = "教室長"
             elif role == "owner":
                 suffix = "社長"
-            elif role == "head_teacher": # 🌟 ここに追加しました！
+            elif role == "head_teacher":
                 suffix = "主任講師"
             else:
                 suffix = "先生"
@@ -68,9 +68,13 @@ def render_message_sender_page():
                         raw_receiver_id = msg.get("受信者ID", "")
                         text = msg.get("メッセージ内容", "")
                         
+                        # 🌟 スプレッドシートから状態（既読/未読）を取得
                         read_status = msg.get("状態", "未読")
-                        status_icon = "✅ 既読" if read_status == "既読" else "📩 未読"
-
+                        if read_status == "既読":
+                            status_icon = "✅ 既読"
+                        else:
+                            status_icon = "📩 未読"
+                        
                         receiver_id = str(raw_receiver_id).strip().lower()
                         account_info = safe_accounts.get(receiver_id, {})
                         base_name = account_info.get("講師名")
@@ -87,7 +91,7 @@ def render_message_sender_page():
                                 receiver_name = f"{base_name} 教室長"
                             elif role == "owner":
                                 receiver_name = f"{base_name} 社長"
-                            elif role == "head_teacher": # 🌟 ここに追加しました！
+                            elif role == "head_teacher":
                                 receiver_name = f"{base_name} 主任講師"
                             else:
                                 receiver_name = f"{base_name} 先生"
@@ -95,6 +99,6 @@ def render_message_sender_page():
                             receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
                         
                         with st.chat_message("assistant"):
-                            st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str}"/ **{status_icon}**)
+                            st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str} / **{status_icon}**")
                             formatted_text = text.replace('\n', '  \n')
                             st.write(formatted_text)
