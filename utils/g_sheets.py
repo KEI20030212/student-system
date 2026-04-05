@@ -1,9 +1,9 @@
 import streamlit as st
+from datetime import datetime, timedelta, timezone
 import json
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-import datetime
 import re
 import math
 import time
@@ -11,6 +11,11 @@ import streamlit.components.v1 as components
 import base64
 import altair as alt # 座標グラフを描くための魔法の絵の具
 
+def get_jst_now():
+    """現在時刻を日本時間(JST)で取得する"""
+    # UTCから9時間進めた時間を日本時間とする
+    jst = timezone(timedelta(hours=+9), 'JST')
+    return datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S')
 # --------------------------------------------------
 # ⚙️ 設定（デザインとファイル連携）
 # --------------------------------------------------
@@ -828,12 +833,11 @@ def save_message(sender_id, receiver_id, message):
         sh = gc.open_by_key(SPREADSHEET_ID) # ※SPREADSHEET_KEYの部分は、先生の環境に合わせてください
         ws = sh.worksheet("連絡_メッセージ")
         
-        # 現在の日時を取得（例: 2026-04-05 14:30:00）
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = get_jst_now()
         
         # スプレッドシートの A列〜E列 に合わせて保存
         # E列の「既読」は、送った瞬間は未読なので "False" にしておきます
-        ws.append_row([now, sender_id, receiver_id, message, "未読"])
+        ws.append_row([timestamp, sender_id, receiver_id, message, "未読"])
         return True
         
     except Exception as e:
