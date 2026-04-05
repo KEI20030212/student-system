@@ -35,7 +35,7 @@ def render_home_page():
                     text = msg.get("メッセージ内容", "")
                 
                     # 送信者IDから名前を引っ張ってくる（見つからなければIDをそのまま表示）
-                    sender_name = accounts.get(sender_id, {}).get("講師名", sender_id)
+                    sender_name = safe_accounts.get(sender_id, {}).get("講師名", sender_id)
                 
                     # チャット風のUIで綺麗に表示！
                     with st.chat_message("user"):
