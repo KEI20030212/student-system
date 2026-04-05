@@ -62,12 +62,11 @@ def render_message_sender_page():
             if not sent_msgs:
                 st.info("まだ送信したメッセージはありません。")
             else:
-                # 🌟 未読（相手がまだ読んでいない）と既読（相手が読んだ）に振り分け！
                 unread_msgs = [m for m in sent_msgs if m.get("状態", "未読") in ["未読", "False"]]
                 read_msgs = [m for m in sent_msgs if m not in unread_msgs]
 
                 # ----------------------------------------
-                # 📩 相手が未読のメッセージ枠（そのまま表示）
+                # 📩 相手が未読のメッセージ枠
                 # ----------------------------------------
                 if unread_msgs:
                     st.markdown("##### 📩 相手がまだ読んでいないメッセージ (未読)")
@@ -91,20 +90,25 @@ def render_message_sender_page():
                             else: receiver_name = f"{base_name} 先生"
                         else: receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
                         
-                        with st.chat_message("assistant"): # 未読は目立たせる
+                        with st.chat_message("assistant"):
                             st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str} / **📩 未読**")
                             formatted_text = text.replace('\n', '  \n')
                             st.write(formatted_text)
 
                 # ----------------------------------------
-                # ✅ 相手が確認済みのメッセージ枠（折りたたみ）
+                # ✅ 相手が確認済みのメッセージ枠（検索機能つき！）
                 # ----------------------------------------
                 if read_msgs:
-                    # 未読がなければ最初から開いておく
                     is_expanded = len(unread_msgs) == 0
                     
                     with st.expander("✅ 相手が確認済みのメッセージ (既読) を見る", expanded=is_expanded):
+                        
+                        # 🌟 検索ボックスを追加
+                        search_query = st.text_input("🔍 メッセージを検索", placeholder="宛先の名前や、メッセージのキーワードを入力...")
+                        
                         with st.container(height=300):
+                            found_count = 0 # 検索にヒットした件数をカウント
+                            
                             for msg in read_msgs:
                                 date_str = msg.get("送信日時", "")
                                 raw_receiver_id = msg.get("受信者ID", "")
@@ -125,7 +129,19 @@ def render_message_sender_page():
                                     else: receiver_name = f"{base_name} 先生"
                                 else: receiver_name = f"ID:{raw_receiver_id} (名前未設定)"
                                 
-                                with st.chat_message("user"): # 既読は控えめなアイコンに
+                                # 🌟 検索キーワードでの絞り込み処理
+                                if search_query:
+                                    # 宛先名かメッセージ内容のどちらかにキーワードが含まれていれば表示（大文字小文字を区別しない）
+                                    if search_query.lower() not in text.lower() and search_query.lower() not in receiver_name.lower():
+                                        continue # 一致しない場合はスキップして次のメッセージへ
+                                
+                                found_count += 1
+                                
+                                with st.chat_message("user"):
                                     st.markdown(f"**{receiver_name} 宛て** 🕒 {date_str} / **✅ 既読**")
                                     formatted_text = text.replace('\n', '  \n')
                                     st.write(formatted_text)
+                            
+                            # 検索した結果、1件も見つからなかった場合の表示
+                            if search_query and found_count == 0:
+                                st.info(f"「{search_query}」を含むメッセージは見つかりませんでした。")
