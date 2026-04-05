@@ -41,9 +41,28 @@ def render_home_page():
                     # 講師名を取得
                     account_info = safe_accounts.get(sender_id_clean, {})
                     sender_name = account_info.get("講師名")
-                    
-                    if not sender_name:
+                    role = account_info.get("権限", "")
+
+                    if sender_id_clean == "admin":
+                        sender_name = "教室長"
+                    elif sender_id_clean == "owner":
+                        sender_name = "社長"
+                    elif sender_id_clean == "head_teacher":
+                        sender_name = "主任講師"
+                    elif base_name:
+                        # 権限に応じて後ろにつける敬称を変える
+                        if role == "admin":
+                            sender_name = f"{base_name} 教室長"
+                        elif role == "owner":
+                            sender_name = f"{base_name} 社長"
+                        elif role == "head_teacher":
+                            sender_name = f"{base_name} 主任"
+                        else:
+                            sender_name = f"{base_name} 先生"
+                    else:
                         sender_name = f"ID:{raw_sender_id} (名前未設定)"
+
+                    
                     
                     with st.chat_message("user"):
                         st.markdown(f"**{sender_name}** 🕒 {date_str}")
