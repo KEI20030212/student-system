@@ -6,7 +6,7 @@ import re
 # 🌟 追加：get_all_teacher_names を呼び出す！
 from utils.g_sheets import (
     get_all_student_names, 
-    get_all_teacher_names,   # 👈 これを追加
+    get_all_teacher_names,
     save_to_spreadsheet, 
     get_last_page_from_sheet, 
     update_student_homework_rate,
@@ -210,12 +210,44 @@ def render_multi_input_page(textbook_master):
                 if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
                     with st.status("データを保存中...", expanded=True) as status:
                         for data in input_data_list:
-                            # (中略: save_to_spreadsheet などの保存処理)
-                            pass
+                    
+                            save_to_spreadsheet(
+                                name=data["name"],
+                                subject=data["subject"],
+                                text_name=data["text_name"],
+                                advanced_p=data["advanced_p"],
+                                quiz_records=data["quiz_records"],
+                                date=date,  # カレンダーで選んだ日付をそのまま渡す
+                                teacher_name=teacher_name,
+                                class_type=class_type,
+                                attendance=data["attendance"],
+                                class_slot=class_slot,
+                                advice=data["advice"],
+                                parent_msg=data["parent_msg"],
+                                next_handover=data["next_handover"],
+                                assigned_p=data["assigned_p"],
+                                completed_p=data["completed_p"],
+                                motivation_rank=data["motivation_rank"],
+                                next_hw_text=data["next_hw_text"],
+                                next_hw_pages=data["next_hw_pages"]
+                            )
+                            
+                            # 宿題実施率の更新関数がある場合はこれも実行（欠席以外）
+                            if data["attendance"] != "欠席（振替なし）" and "欠席" not in data["attendance"]:
+                                try:
+                                    update_student_homework_rate(
+                                        data["name"], 
+                                        data["subject"], 
+                                        data["assigned_p"], 
+                                        data["completed_p"]
+                                    )
+                                except Exception as e:
+                                    pass # 関数がない場合のエラー回避
                         status.update(label="保存完了！", state="complete", expanded=False)
 
                     st.success(f"✅ {num_students}名全員の記録を保存しました！")
                     
+                    st.cache_data.clear()
                     # 🌟 修正ポイント③: 2秒待ってから「コマ」と「生徒情報」だけをリセットする
                     time.sleep(2)
 
