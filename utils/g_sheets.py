@@ -865,3 +865,24 @@ def get_my_messages(user_id):
         import streamlit as st
         st.error(f"メッセージの読み込みに失敗しました: {e}")
         return []
+def get_sent_messages(user_id):
+    """自分が送信したメッセージの履歴を取得する関数"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("連絡_メッセージ")
+        records = ws.get_all_records(numericise_ignore=["all"])
+        
+        sent_messages = []
+        for row in records:
+            # 送信者IDが自分のIDと一致するものだけを集める
+            if str(row.get("送信者ID", "")) == str(user_id):
+                sent_messages.append(row)
+        
+        sent_messages.reverse() # 最新のものを一番上にする
+        return sent_messages
+        
+    except Exception as e:
+        import streamlit as st
+        st.error(f"送信履歴の読み込みに失敗しました: {e}")
+        return []
