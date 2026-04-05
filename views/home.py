@@ -23,47 +23,82 @@ def render_home_page():
         if not messages:
             st.info("現在、新しいメッセージはありません。")
         else:
+            # 🌟 ポイント：スプレッドシートを「既読」にする【前】に、未読と既読を振り分ける！
+            unread_msgs = [m for m in messages if m.get("状態", "未読") in ["未読", "False"]]
+            read_msgs = [m for m in messages if m not in unread_msgs]
+            
+            # 振り分けが終わったので、スプレッドシートのデータを「既読」に更新する
             mark_messages_as_read(my_user_id)
+            
             raw_accounts = get_all_accounts()
             safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
             
             with st.container(height=350):
-                for msg in messages:
-                    date_str = msg.get("送信日時", "")
-                    raw_sender_id = msg.get("送信者ID", "")
-                    text = msg.get("メッセージ内容", "")
-                    
-                    sender_id_clean = str(raw_sender_id).strip().lower()
-                    
-                    # アカウント情報と名前・権限を取得
-                    account_info = safe_accounts.get(sender_id_clean, {})
-                    base_name = account_info.get("講師名")
-                    role = str(account_info.get("権限", "")).strip().lower()
-                    
-                    # 役職ごとの名前決定ルール
-                    if sender_id_clean == "admin":
-                        sender_name = "教室長"
-                    elif sender_id_clean == "owner":
-                        sender_name = "社長"
-                    elif sender_id_clean == "head_teacher":
-                        sender_name = "主任講師"
-                    elif base_name:
-                        if role == "admin":
-                            sender_name = f"{base_name} 教室長"
-                        elif role == "owner":
-                            sender_name = f"{base_name} 社長"
-                        elif role == "head_teacher":
-                            sender_name = f"{base_name} 主任講師"
-                        else:
-                            sender_name = f"{base_name} 先生"
-                    else:
-                        sender_name = f"ID:{raw_sender_id} (名前未設定)"
-                    
-                    with st.chat_message("user"):
-                        st.markdown(f"**{sender_name}** からのメッセージ 🕒 {date_str}")
-                        # 🌟 個別メッセージも改行ルールに対応！
-                        formatted_text = text.replace('\n', '  \n')
-                        st.write(formatted_text)
+                # ----------------------------------------
+                # 📩 未読メッセージの表示（一番上！）
+                # ----------------------------------------
+                if unread_msgs:
+                    st.markdown("##### 📩 新着メッセージ (未読)")
+                    for msg in unread_msgs:
+                        date_str = msg.get("送信日時", "")
+                        raw_sender_id = msg.get("送信者ID", "")
+                        text = msg.get("メッセージ内容", "")
+                        sender_id_clean = str(raw_sender_id).strip().lower()
+                        
+                        account_info = safe_accounts.get(sender_id_clean, {})
+                        base_name = account_info.get("講師名")
+                        role = str(account_info.get("権限", "")).strip().lower()
+                        
+                        if sender_id_clean == "admin": sender_name = "教室長"
+                        elif sender_id_clean == "owner": sender_name = "社長"
+                        elif sender_id_clean == "head_teacher": sender_name = "主任講師"
+                        elif base_name:
+                            if role == "admin": sender_name = f"{base_name} 教室長"
+                            elif role == "owner": sender_name = f"{base_name} 社長"
+                            elif role == "head_teacher": sender_name = f"{base_name} 主任講師"
+                            else: sender_name = f"{base_name} 先生"
+                        else: sender_name = f"ID:{raw_sender_id} (名前未設定)"
+                        
+                        # 未読は assistant アイコンにして目立たせる
+                        with st.chat_message("assistant"):
+                            st.markdown(f"**{sender_name}** からのメッセージ 🕒 {date_str} 🔴 **New!**")
+                            formatted_text = text.replace('\n', '  \n')
+                            st.write(formatted_text)
+                            
+                    # 未読と既読の両方がある場合は、間に区切り線を引く
+                    if read_msgs:
+                        st.divider()
+
+                # ----------------------------------------
+                # ✅ 既読メッセージの表示（過去の履歴として下部に表示）
+                # ----------------------------------------
+                if read_msgs:
+                    st.markdown("##### ✅ 過去のメッセージ (既読)")
+                    for msg in read_msgs:
+                        date_str = msg.get("送信日時", "")
+                        raw_sender_id = msg.get("送信者ID", "")
+                        text = msg.get("メッセージ内容", "")
+                        sender_id_clean = str(raw_sender_id).strip().lower()
+                        
+                        account_info = safe_accounts.get(sender_id_clean, {})
+                        base_name = account_info.get("講師名")
+                        role = str(account_info.get("権限", "")).strip().lower()
+                        
+                        if sender_id_clean == "admin": sender_name = "教室長"
+                        elif sender_id_clean == "owner": sender_name = "社長"
+                        elif sender_id_clean == "head_teacher": sender_name = "主任講師"
+                        elif base_name:
+                            if role == "admin": sender_name = f"{base_name} 教室長"
+                            elif role == "owner": sender_name = f"{base_name} 社長"
+                            elif role == "head_teacher": sender_name = f"{base_name} 主任講師"
+                            else: sender_name = f"{base_name} 先生"
+                        else: sender_name = f"ID:{raw_sender_id} (名前未設定)"
+                        
+                        # 既読は通常の user アイコンにする
+                        with st.chat_message("user"):
+                            st.markdown(f"**{sender_name}** からのメッセージ 🕒 {date_str}")
+                            formatted_text = text.replace('\n', '  \n')
+                            st.write(formatted_text)
     else:
         st.warning("⚠️ ユーザー情報が取得できません。一度ログアウトして入り直してください。")
         
@@ -75,7 +110,6 @@ def render_home_page():
     st.subheader("📌 講師向け 連絡事項・掲示板")
     current_message = load_board_message()
     
-    # 🌟 ここが今回のメイン修正！改行ルールに対応する魔法です
     formatted_message = current_message.replace('\n', '  \n')
     st.info(formatted_message)
     
