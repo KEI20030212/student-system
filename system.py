@@ -20,11 +20,11 @@ from views.analytics_dashboard import render_analytics_dashboard_page
 # from views.tuition import render_tuition_dashboard_page
 from views.my_salary import render_my_salary_page
 from views.account_manager import render_account_manager_page
-# 👇 これを app.py の上の方（インポート部分）に追加！
-from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
+from views.message_sender import render_message_sender_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
+from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
 from utils.g_sheets import load_textbook_master, get_textbook_master, add_new_textbook, get_last_homework_info
 from utils.g_sheets import get_all_accounts
 
@@ -51,10 +51,10 @@ def login_screen():
             submit = st.form_submit_button("ログイン 🚀", use_container_width=True)
             if submit:
                 if username == ADMIN_USER and password == ADMIN_PASS:
-                    st.session_state.update({'logged_in': True, 'role': 'admin', 'username': '教室長'})
+                    st.session_state.update({'logged_in': True, 'role': 'admin', 'username': '教室長', 'user_id': 'admin'})
                     st.rerun()
                 elif username == TEACHER_USER and password == TEACHER_PASS:
-                    st.session_state.update({'logged_in': True, 'role': 'teacher', 'username': '先生'})
+                    st.session_state.update({'logged_in': True, 'role': 'teacher', 'username': '先生', 'user_id': 'teacher'})
                     st.rerun()
                 else:
                     accounts = get_all_accounts()
@@ -64,7 +64,8 @@ def login_screen():
                         st.session_state.update({
                             'logged_in': True, 
                             'role': accounts[username].get('権限', 'teacher'),
-                            'username': accounts[username].get('講師名', '先生')
+                            'username': accounts[username].get('講師名', '先生'),
+                            'user_id': username
                         })
                         st.rerun()
                     else:
@@ -98,7 +99,8 @@ def main():
         "📊 個別分析・履歴・振替管理",
         "📝 小テスト進捗マップ",
         "📊 自習時間ランキング",
-        "💴 自分の給与確認"
+        "💴 自分の給与確認",
+        "💌 メッセージ送信"
     ]
     
     if st.session_state['role'] in ['admin', 'owner']:
@@ -141,6 +143,7 @@ def main():
     elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page(),
     # elif page == "💴 月謝（請求額）管理ダッシュボード": render_tuition_dashboard_page()
     elif page == "💴 自分の給与確認": render_my_salary_page()
+    elif page == "💌 メッセージ送信": render_message_sender_page()
     elif page == "⚙️ アカウント・システム設定": render_account_manager_page()
 
 if __name__ == "__main__":
