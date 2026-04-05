@@ -25,8 +25,8 @@ def render_home_page():
         else:
             raw_accounts = get_all_accounts()
             # すべてのIDを「完全な文字」にして、前後のスペースも消した辞書を作ります
-            safe_accounts = {str(k).strip(): v for k, v in raw_accounts.items()}
-            
+            safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
+
             with st.container(height=350):
             # メッセージを1つずつ表示
                 for msg in messages:
@@ -34,8 +34,15 @@ def render_home_page():
                     sender_id = str(msg.get("送信者ID", ""))
                     text = msg.get("メッセージ内容", "")
                 
-                    # 送信者IDから名前を引っ張ってくる（見つからなければIDをそのまま表示）
-                    sender_name = safe_accounts.get(sender_id, {}).get("講師名", sender_id)
+                    sender_id_clean = str(raw_sender_id).strip().lower()
+                    
+                    # 講師名を取得。見つからなければ「ID（不明）」と表示してデバッグしやすくします
+                    account_info = safe_accounts.get(sender_id_clean, {})
+                    sender_name = account_info.get("講師名")
+                    
+                    # 名前が見つからない場合のバックアップ表示
+                    if not sender_name:
+                        sender_name = f"ID:{raw_sender_id} (名前未設定)"
                 
                     # チャット風のUIで綺麗に表示！
                     with st.chat_message("user"):
