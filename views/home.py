@@ -50,7 +50,7 @@ def render_home_page():
                             sender_name = f"{base_name} 教室長"
                         elif role == "owner":
                             sender_name = f"{base_name} 社長"
-                        elif role == "head_teacher":  # 🌟 ここに追加しました！
+                        elif role == "head_teacher":
                             sender_name = f"{base_name} 主任講師"
                         else:
                             sender_name = f"{base_name} 先生"
@@ -59,7 +59,9 @@ def render_home_page():
                     
                     with st.chat_message("user"):
                         st.markdown(f"**{sender_name}** からのメッセージ 🕒 {date_str}")
-                        st.write(text)
+                        # 🌟 個別メッセージも改行ルールに対応！
+                        formatted_text = text.replace('\n', '  \n')
+                        st.write(formatted_text)
     else:
         st.warning("⚠️ ユーザー情報が取得できません。一度ログアウトして入り直してください。")
         
@@ -70,9 +72,12 @@ def render_home_page():
     # ==========================================
     st.subheader("📌 講師向け 連絡事項・掲示板")
     current_message = load_board_message()
-    st.info(current_message)
     
-    if st.session_state.get('role') in ['admin', 'owner', 'head_teacher']: # 🌟 主任講師も掲示板を編集できるようにしました！
+    # 🌟 ここが今回のメイン修正！改行ルールに対応する魔法です
+    formatted_message = current_message.replace('\n', '  \n')
+    st.info(formatted_message)
+    
+    if st.session_state.get('role') in ['admin', 'owner', 'head_teacher']:
         with st.expander("✏️ 掲示板を編集する"):
             new_msg = st.text_area("先生たちへのメッセージを入力", value=current_message, height=150)
             if st.button("💾 掲示板を更新", type="primary"):
