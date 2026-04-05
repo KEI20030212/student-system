@@ -833,13 +833,46 @@ def save_message(sender_id, receiver_id, message):
         
         # スプレッドシートの A列〜E列 に合わせて保存
         # E列の「既読」は、送った瞬間は未読なので "False" にしておきます
-        ws.append_row([now, sender_id, receiver_id, message, "False"])
+        ws.append_row([now, sender_id, receiver_id, message, "未読"])
         return True
         
     except Exception as e:
         import streamlit as st
         st.error(f"メッセージの保存に失敗しました: {e}")
         return False
+
+def mark_messages_as_read(receiver_id):
+    """自分が受信者のメッセージを「既読」に書き換える関数"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("連絡_メッセージ")
+        
+        # シートの全データを一括で取得（高速化のため）
+        all_values = ws.get_all_values()
+        target_receiver = str(receiver_id).strip().lower()
+        
+        # 2行目から順番にチェック（1行目はヘッダーなので飛ばす）
+        for i, row in enumerate(all_values):
+            if i == 0:
+                continue
+            
+            # 列の数が足りない場合（空行など）のエラーを防止
+            if len(row) < 3:
+                continue
+                
+            # C列(インデックス2)が受信者ID、E列(インデックス4)が状態
+            sheet_receiver = str(row[2]).strip().lower()
+            status = str(row[4]).strip() if len(row) >= 5 else ""
+            
+            # 「自分宛て」かつ「既読以外（未読やFalseなど）」の場合
+            if sheet_receiver == target_receiver and status != "既読":
+                # i は0始まり、スプレッドシートの行は1始まりなので「i + 1」
+                # E列は5番目の列なので「5」を指定して「既読」に上書き
+                ws.update_cell(i + 1, 5, "既読")
+                
+    except Exception as e:
+        print(f"既読処理に失敗しました: {e}")
 
 def get_my_messages(user_id):
     """自分宛てのメッセージを取得する関数"""
