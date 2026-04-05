@@ -820,3 +820,22 @@ def add_new_account(user_id, password, teacher_name, role):
         import streamlit as st
         st.error(f"🚨 アカウントの保存に失敗しました: {e}")
         return False
+
+def save_message(sender_id, receiver_id, message):
+    """メッセージを「連絡_メッセージ」シートに保存する関数"""
+    try:
+        sh = gc.open_by_key(SPREADSHEET_ID) # ※SPREADSHEET_KEYの部分は、先生の環境に合わせてください
+        ws = sh.worksheet("連絡_メッセージ")
+        
+        # 現在の日時を取得（例: 2026-04-05 14:30:00）
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # スプレッドシートの A列〜E列 に合わせて保存
+        # E列の「既読」は、送った瞬間は未読なので "False" にしておきます
+        ws.append_row([now, sender_id, receiver_id, message, "False"])
+        return True
+        
+    except Exception as e:
+        import streamlit as st
+        st.error(f"メッセージの保存に失敗しました: {e}")
+        return False
