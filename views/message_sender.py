@@ -4,12 +4,10 @@ from utils.g_sheets import get_all_accounts, save_message, get_sent_messages
 def render_message_sender_page():
     st.header("💌 メッセージ送信")
 
-    # 🌟 タブを作成
     tab1, tab2 = st.tabs(["✏️ メッセージを送る", "🕰️ 送信履歴を見る"])
 
-    # IDのズレをなくす最強の辞書を準備
     raw_accounts = get_all_accounts()
-    safe_accounts = {str(k).strip(): v for k, v in raw_accounts.items()}
+    safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
 
     # ==========================================
     # タブ1：送信フォーム
@@ -20,18 +18,17 @@ def render_message_sender_page():
         user_options = {}
         for target_id, info in safe_accounts.items():
             name = info.get("講師名", "不明")
-            role = info.get("権限", "")
+            role = str(info.get("権限", "")).strip().lower()
             
-            # 権限によって敬称を使い分ける
             if role == "admin":
                 suffix = "教室長"
             elif role == "owner":
                 suffix = "社長"
-            elif role == "head_teacher":
-                suffix = "主任"
+            elif role == "head_teacher": # 🌟 ここに追加しました！
+                suffix = "主任講師"
             else:
                 suffix = "先生"
-
+            
             user_options[f"{name} {suffix} (ID: {target_id})"] = target_id
 
         with st.container(border=True):
@@ -45,7 +42,6 @@ def render_message_sender_page():
                         st.error("⚠️ メッセージを入力してください。")
                     else:
                         receiver_id = user_options[selected_label]
-                        # 自分のIDも空白を消して綺麗にします
                         sender_id = str(st.session_state.get('user_id', 'unknown')).strip()
                         
                         with st.spinner("送信中..."):
@@ -59,14 +55,13 @@ def render_message_sender_page():
     with tab2:
         st.markdown("あなたがこれまでに送信したメッセージの履歴です。")
         
-        my_user_id = str(st.session_state.get('user_id', '')).strip()
+        my_user_id = str(st.session_state.get('user_id', '')).strip().lower()
         if my_user_id:
             sent_msgs = get_sent_messages(my_user_id)
             
             if not sent_msgs:
                 st.info("まだ送信したメッセージはありません。")
             else:
-                # 👇 スクロールできるコンテナ
                 with st.container(height=500):
                     for msg in sent_msgs:
                         date_str = msg.get("送信日時", "")
@@ -76,9 +71,8 @@ def render_message_sender_page():
                         receiver_id = str(raw_receiver_id).strip().lower()
                         account_info = safe_accounts.get(receiver_id, {})
                         base_name = account_info.get("講師名")
-                        role = account_info.get("権限", "")
+                        role = str(account_info.get("権限", "")).strip().lower()
 
-                        # 受信者の名前と役職を決定
                         if receiver_id == "admin":
                             receiver_name = "教室長"
                         elif receiver_id == "owner":
@@ -90,8 +84,8 @@ def render_message_sender_page():
                                 receiver_name = f"{base_name} 教室長"
                             elif role == "owner":
                                 receiver_name = f"{base_name} 社長"
-                            elif role == "head_teacher":
-                                receiver_name = f"{base_name} 主任"
+                            elif role == "head_teacher": # 🌟 ここに追加しました！
+                                receiver_name = f"{base_name} 主任講師"
                             else:
                                 receiver_name = f"{base_name} 先生"
                         else:

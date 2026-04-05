@@ -1,12 +1,10 @@
 import streamlit as st
-
-# 裏方部隊（utils/g_sheets.py）から必要な関数を呼び出します
 from utils.g_sheets import (
     load_seating_data,
     load_board_message,
     save_board_message,
-    get_my_messages,   # 追加
-    get_all_accounts   # 追加
+    get_my_messages,
+    get_all_accounts
 )
 
 def render_home_page():
@@ -25,24 +23,22 @@ def render_home_page():
             st.info("現在、新しいメッセージはありません。")
         else:
             raw_accounts = get_all_accounts()
-            # IDを小文字に統一し、余計な空白を消す
             safe_accounts = {str(k).strip().lower(): v for k, v in raw_accounts.items()}
             
             with st.container(height=350):
                 for msg in messages:
                     date_str = msg.get("送信日時", "")
-                    
-                    # 👇 おそらくこの行が消えてしまっていました！
-                    raw_sender_id = msg.get("送信者ID", "") 
+                    raw_sender_id = msg.get("送信者ID", "")
                     text = msg.get("メッセージ内容", "")
                     
                     sender_id_clean = str(raw_sender_id).strip().lower()
                     
-                    # 講師名を取得
+                    # アカウント情報と名前・権限を取得
                     account_info = safe_accounts.get(sender_id_clean, {})
-                    sender_name = account_info.get("講師名")
-                    role = account_info.get("権限", "")
-
+                    base_name = account_info.get("講師名")
+                    role = str(account_info.get("権限", "")).strip().lower()
+                    
+                    # 役職ごとの名前決定ルール
                     if sender_id_clean == "admin":
                         sender_name = "教室長"
                     elif sender_id_clean == "owner":
@@ -50,22 +46,19 @@ def render_home_page():
                     elif sender_id_clean == "head_teacher":
                         sender_name = "主任講師"
                     elif base_name:
-                        # 権限に応じて後ろにつける敬称を変える
                         if role == "admin":
                             sender_name = f"{base_name} 教室長"
                         elif role == "owner":
                             sender_name = f"{base_name} 社長"
-                        elif role == "head_teacher":
-                            sender_name = f"{base_name} 主任"
+                        elif role == "head_teacher":  # 🌟 ここに追加しました！
+                            sender_name = f"{base_name} 主任講師"
                         else:
                             sender_name = f"{base_name} 先生"
                     else:
                         sender_name = f"ID:{raw_sender_id} (名前未設定)"
-
-                    
                     
                     with st.chat_message("user"):
-                        st.markdown(f"**{sender_name}** 🕒 {date_str}")
+                        st.markdown(f"**{sender_name}** からのメッセージ 🕒 {date_str}")
                         st.write(text)
     else:
         st.warning("⚠️ ユーザー情報が取得できません。一度ログアウトして入り直してください。")
@@ -79,8 +72,8 @@ def render_home_page():
     current_message = load_board_message()
     st.info(current_message)
     
-    if st.session_state.get('role') == 'admin':
-        with st.expander("✏️ 掲示板を編集する (教室長のみ)"):
+    if st.session_state.get('role') in ['admin', 'owner', 'head_teacher']: # 🌟 主任講師も掲示板を編集できるようにしました！
+        with st.expander("✏️ 掲示板を編集する"):
             new_msg = st.text_area("先生たちへのメッセージを入力", value=current_message, height=150)
             if st.button("💾 掲示板を更新", type="primary"):
                 save_board_message(new_msg)
