@@ -840,3 +840,28 @@ def save_message(sender_id, receiver_id, message):
         import streamlit as st
         st.error(f"メッセージの保存に失敗しました: {e}")
         return False
+
+def get_my_messages(user_id):
+    """自分宛てのメッセージを取得する関数"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("連絡_メッセージ")
+        
+        # numericise_ignore=["all"] をつけて、IDのゼロ消えなどを防ぎます
+        records = ws.get_all_records(numericise_ignore=["all"])
+        
+        my_messages = []
+        for row in records:
+            # 受信者IDが、今ログインしている人のIDと一致するかチェック
+            if str(row.get("受信者ID", "")) == str(user_id):
+                my_messages.append(row)
+        
+        # 新しいメッセージが一番上に来るように、リストの順番をひっくり返す
+        my_messages.reverse()
+        return my_messages
+        
+    except Exception as e:
+        import streamlit as st
+        st.error(f"メッセージの読み込みに失敗しました: {e}")
+        return []
