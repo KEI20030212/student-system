@@ -833,11 +833,11 @@ def save_message(sender_id, receiver_id, message):
         sh = gc.open_by_key(SPREADSHEET_ID) # ※SPREADSHEET_KEYの部分は、先生の環境に合わせてください
         ws = sh.worksheet("連絡_メッセージ")
         
-        timestamp = get_jst_now()
+        now = get_jst_now()
         
         # スプレッドシートの A列〜E列 に合わせて保存
         # E列の「既読」は、送った瞬間は未読なので "False" にしておきます
-        ws.append_row([timestamp, sender_id, receiver_id, message, "未読"])
+        ws.append_row([now, sender_id, receiver_id, message, "未読"])
         return True
         
     except Exception as e:
