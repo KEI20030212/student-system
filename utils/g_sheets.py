@@ -936,10 +936,7 @@ def save_quiz_to_dedicated_sheet(date_str, student_name, text_name, chapter, sco
     """
     try:
         gc = get_gc_client()
-        sheet_id = st.secrets["lesson_record_sheet_id"]
-        sh = gc.open_by_key(sheet_id)
-        
-        # 「小テスト記録」という名前のシートを開く
+        sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("小テスト記録")
         
         row_data = [
@@ -964,8 +961,7 @@ def load_quiz_data_from_dedicated_sheet(student_name):
     """
     try:
         gc = get_gc_client()
-        sheet_id = st.secrets["lesson_record_sheet_id"]
-        sh = gc.open_by_key(sheet_id)
+        sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("小テスト記録")
         
         data = ws.get_all_records()
