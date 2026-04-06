@@ -15,7 +15,7 @@ from utils.g_sheets import (
     get_last_homework_info,  
     add_new_textbook,        
     get_textbook_master,
-    save_quiz_to_dedicated_sheet  # 👈 新しく追加した関数！
+    save_quiz_to_dedicated_sheet
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -54,7 +54,7 @@ def render_multi_input_page(textbook_master):
             
             time_slots = [
                 "-- 選択 --", "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
-                "0コマ目 (13:10~14:40)", "1コマ目 (15:00~16:30)",
+                "0コマ目 (13:10~14:40)", "1コマ目 (14:50~16:20)",
                 "2コマ目 (16:40~18:10)", "3コマ目 (18:20~19:50)", "4コマ目 (20:00~21:30)"
             ]
             
