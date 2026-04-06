@@ -929,3 +929,52 @@ def get_sent_messages(sender_id):
         return sorted(sent_msgs, key=lambda x: x['送信日時'], reverse=True)
     except Exception as e:
         return []
+def save_quiz_to_dedicated_sheet(date_str, student_name, text_name, chapter, score, w_nums, mode):
+    """
+    小テスト専用シートに記録を保存する
+    mode: "授業内" または "自習"
+    """
+    try:
+        gc = get_gc_client()
+        sheet_id = st.secrets["lesson_record_sheet_id"]
+        sh = gc.open_by_key(sheet_id)
+        
+        # 「小テスト記録」という名前のシートを開く
+        ws = sh.worksheet("小テスト記録")
+        
+        row_data = [
+            date_str,      # 日時
+            student_name,  # 名前
+            text_name,     # テキスト
+            chapter,       # 単元
+            score,         # 点数
+            w_nums,        # ミス問題番号
+            mode           # 実施形態（授業内/自習）
+        ]
+        
+        ws.append_row(row_data)
+        return True
+    except Exception as e:
+        st.error(f"小テスト保存エラー: {e}")
+        return False
+
+def load_quiz_data_from_dedicated_sheet(student_name):
+    """
+    小テスト専用シートから特定の生徒のデータだけを読み込む
+    """
+    try:
+        gc = get_gc_client()
+        sheet_id = st.secrets["lesson_record_sheet_id"]
+        sh = gc.open_by_key(sheet_id)
+        ws = sh.worksheet("小テスト記録")
+        
+        data = ws.get_all_records()
+        df = pd.DataFrame(data)
+        
+        if df.empty:
+            return pd.DataFrame()
+            
+        # その生徒のデータだけに絞り込む
+        return df[df['名前'] == student_name]
+    except Exception as e:
+        return pd.DataFrame()
