@@ -309,3 +309,31 @@ def render_home_page():
                                             else: status_html = "<span style='color:#dc3545; font-weight:bold;'>🔴 欠席</span>"
                                             st.markdown(f"<div style='text-align:center; padding:5px; font-weight:bold; font-size:1.2em; color:#1E90FF;'>{student}</div>", unsafe_allow_html=True)
                                             st.markdown(f"<div style='text-align:center; font-size:0.9em; padding-bottom:5px;'>{status_html}</div>", unsafe_allow_html=True)
+
+    # ==========================================
+    # 🚀 一括保存ボタン（タブの外側＝一番下に配置）
+    # ==========================================
+    if can_edit_seat:
+        st.divider()
+        if st.button("💾 全コマの座席表をまとめて確定・共有する", type="primary", use_container_width=True):
+            with st.spinner("全コマの座席データを保存中..."):
+                
+                # すべてのタブのセッションステート（入力状態）を回収してデータを作成
+                for slot_idx, slot_name in enumerate(time_slots):
+                    for booth_idx in range(st.session_state['num_booths']):
+                        booth_name = f"ブース{booth_idx+1}"
+                        
+                        # 画面上の選択肢を取得（まだ表示されていない場合はデフォルト値）
+                        seat_val = st.session_state.get(f"seat_{slot_idx}_{booth_idx}", "-- 空席 --")
+                        status_val = st.session_state.get(f"status_{slot_idx}_{booth_idx}", "出席")
+                        
+                        if seat_val == "-- 空席 --":
+                            status_val = "出席"
+                            
+                        # "コマ名||ブース名" の形式で保存
+                        all_seating_data[f"{slot_name}||{booth_name}"] = {"生徒名": seat_val, "状態": status_val}
+                
+                # スプレッドシートに一括保存
+                save_seating_data(all_seating_data)
+                st.success("✨ 全コマの座席表をクラウドにまとめて保存しました！")
+                st.rerun()
