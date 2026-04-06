@@ -3,7 +3,7 @@ import datetime
 import time
 import re
 
-# 🌟 追加：get_all_teacher_names を呼び出す！
+# 🌟 追加：save_quiz_to_dedicated_sheet を新しく呼び出す！
 from utils.g_sheets import (
     get_all_student_names, 
     get_all_teacher_names,
@@ -14,7 +14,8 @@ from utils.g_sheets import (
     get_last_handover,
     get_last_homework_info,  
     add_new_textbook,        
-    get_textbook_master
+    get_textbook_master,
+    save_quiz_to_dedicated_sheet  # 👈 新しく追加した関数！
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -88,7 +89,7 @@ def render_multi_input_page(textbook_master):
                                 st.warning("欠席のため、進捗・テスト入力はスキップされます。")
                                 input_data_list.append({
                                     "name": name, "subject": "-", "text_name": "-", "advanced_p": "-", 
-                                    "quiz_records": [], "attendance": attendance,
+                                    "quiz_records": [], "w_nums_for_sheet": "", "attendance": attendance,
                                     "advice": "-", "parent_msg": "-", "next_handover": "-",
                                     "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
                                     "next_hw_text": "-", "next_hw_pages": "-"
@@ -155,11 +156,13 @@ def render_multi_input_page(textbook_master):
                                 
                                 quiz_done = st.checkbox("💯 小テストを実施した", key=f"q_done_{i}")
                                 quiz_records = []
+                                w_nums_for_sheet = ""  # 👈 専用シート用にミス問題番号を保持する変数
                                 current_quiz_pts = 0 
                                 
                                 if quiz_done:
                                     target_chap = st.number_input("実施した章", min_value=1, value=1, step=1, key=f"q_chap_{i}")
                                     w_nums = st.text_input("ミス問題番号", key=f"w_{i}")
+                                    w_nums_for_sheet = w_nums  # 保存用に記録
                                     score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
                                     quiz_records.append({"unit": target_chap, "score": score})
                                     current_quiz_pts += calculate_quiz_points(score)
@@ -197,6 +200,7 @@ def render_multi_input_page(textbook_master):
                                 input_data_list.append({
                                     "name": name, "subject": subject, "text_name": text_name,
                                     "advanced_p": advanced_p, "quiz_records": quiz_records, 
+                                    "w_nums_for_sheet": w_nums_for_sheet,  # 👈 リストに保持しておく
                                     "attendance": attendance,
                                     "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover,
                                     "assigned_p": assigned_p, "completed_p": completed_p,
@@ -210,7 +214,8 @@ def render_multi_input_page(textbook_master):
                 if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
                     with st.status("データを保存中...", expanded=True) as status:
                         for data in input_data_list:
-                    
+                            
+                            # 1. いつも通りの授業記録を保存
                             save_to_spreadsheet(
                                 name=data["name"],
                                 subject=data["subject"],
@@ -231,6 +236,19 @@ def render_multi_input_page(textbook_master):
                                 next_hw_text=data["next_hw_text"],
                                 next_hw_pages=data["next_hw_pages"]
                             )
+
+                            # 🌟 2. 【追加】小テストを受けた場合は「専用シート」にも保存する
+                            if data.get("quiz_records") and len(data["quiz_records"]) > 0:
+                                for q in data["quiz_records"]:
+                                    save_quiz_to_dedicated_sheet(
+                                        date_str=date.strftime("%Y/%m/%d"),
+                                        student_name=data["name"],
+                                        text_name=data["text_name"],
+                                        chapter=q["unit"],
+                                        score=q["score"],
+                                        w_nums=data["w_nums_for_sheet"],
+                                        mode="授業内" # 実施形態を授業内に設定
+                                    )
                             
                             # 宿題実施率の更新関数がある場合はこれも実行（欠席以外）
                             if data["attendance"] != "欠席（振替なし）" and "欠席" not in data["attendance"]:
@@ -243,6 +261,7 @@ def render_multi_input_page(textbook_master):
                                     )
                                 except Exception as e:
                                     pass # 関数がない場合のエラー回避
+                        
                         status.update(label="保存完了！", state="complete", expanded=False)
 
                     st.success(f"✅ {num_students}名全員の記録を保存しました！")
