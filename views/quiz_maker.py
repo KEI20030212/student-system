@@ -11,6 +11,7 @@ from utils.g_sheets import (
     delete_quiz_maker_sheet,
     get_gc_client  # ← これを追加！
 )
+
 def render_quiz_maker_page():
     st.header("🖨️ 小テスト作成・印刷")
     st.write("設定したスプレッドシートと連動して、自動で問題を抽出し、印刷用データを作成します。")
@@ -28,6 +29,7 @@ def render_quiz_maker_page():
                 if new_name and new_id:
                     add_quiz_maker_sheet(new_name, new_id)
                     st.success(f"「{new_name}」をリストに登録しました！")
+                    time.sleep(1) # 少し待ってからリロードすると安心です
                     st.rerun()
                 else:
                     st.warning("⚠️ 名前とIDの両方を入力してください。")
@@ -38,17 +40,32 @@ def render_quiz_maker_page():
         st.warning("小テストが登録されていません。上のメニューから登録してください。")
         return
 
+    # ==========================================
+    # 🌟 修正ポイント1: リストを名前順に整列（ソート）する
+    # ==========================================
+    # quiz_dict のキー（小テストの名前）を取り出して、順番に並び替えます
+    sorted_quiz_names = sorted(quiz_dict.keys())
+
     c_sel, c_del = st.columns([4, 1])
     with c_sel:
-        quiz_name = st.selectbox("📚 使用する小テストのファイルを選択", list(quiz_dict.keys()))
+        # 並び替えたリスト（sorted_quiz_names）を選択肢にセットします
+        quiz_name = st.selectbox("📚 使用する小テストのファイルを選択", sorted_quiz_names)
+    
     with c_del:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        if st.button("🗑️ リストから削除", use_container_width=True):
-            delete_quiz_maker_sheet(quiz_name)
-            st.toast(f"🗑️ 「{quiz_name}」を削除しました！")
-            time.sleep(1)
-            st.rerun()
+        # ==========================================
+        # 🌟 修正ポイント2: 削除ボタンを確認制（ポップオーバー）にする
+        # ==========================================
+        with st.popover("🗑️ 削除", use_container_width=True):
+            st.warning(f"本当に「{quiz_name}」をリストから削除しますか？")
+            # 確定ボタンが押された時だけ削除処理を実行します
+            if st.button("はい、削除します", type="primary", use_container_width=True):
+                delete_quiz_maker_sheet(quiz_name)
+                st.toast(f"🗑️ 「{quiz_name}」を削除しました！")
+                time.sleep(1)
+                st.rerun()
 
+    # 選ばれた小テストのIDを取得
     sheet_id = quiz_dict[quiz_name]
 
     with st.container(border=True):
@@ -103,10 +120,8 @@ def render_quiz_maker_page():
         tab_q, tab_a = st.tabs(["📝 問題 (A〜I列)", "💡 解答 (J〜R列)"])
 
         def display_pdf(pdf_bytes, filename):
-            # 🌟 修正ポイント：PDFデータを文字(Base64)に変換する
             b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
             
-            # 🌟 修正ポイント：HTMLで「別タブ(target="_blank")」で開くボタンを作る
             html_button = f'''
             <a href="data:application/pdf;base64,{b64_pdf}" download="{filename}" target="_blank" 
                style="display: block; text-align: center; padding: 12px; background-color: #FF4B4B; 
@@ -115,7 +130,6 @@ def render_quiz_maker_page():
                 📥 【 {filename} 】を開く / 印刷する
             </a>
             '''
-            # 作ったHTMLボタンを画面に表示する
             st.markdown(html_button, unsafe_allow_html=True)
 
         with tab_q: display_pdf(st.session_state['pdf_q'], "確認テスト_問題.pdf")
