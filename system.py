@@ -105,7 +105,7 @@ def main():
     
     if st.session_state['role'] in ['admin', 'owner']:
         menu_options.extend([
-            "✅ 本日の出欠・座席表",
+            #"✅ 本日の出欠・座席表",#home.pyに統合
             "🔍 全生徒の過去ログ検索",
             "💰 給与・交通費ダッシュボード",
             "📈 講師分析ダッシュボード",
@@ -128,7 +128,7 @@ def main():
     # 🎯 選ばれたメニューに応じて、該当する画面関数を呼び出すだけ！
     # ==========================================
     if page == "📢 ホーム・連絡掲示板": render_home_page()
-    elif page == "✅ 本日の出欠・座席表": render_attendance_seat_page()
+    #elif page == "✅ 本日の出欠・座席表": render_attendance_seat_page()　　#home.pyに統合
     elif page == "📝 授業・自習記録の入力 (出欠対応)": render_multi_input_page(textbook_master)
     elif page == "🖨️ 小テスト作成・印刷": render_quiz_maker_page()
     elif page == "👤 生徒詳細 ＆ テスト成績": render_student_details_page()
