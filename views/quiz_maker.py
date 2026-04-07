@@ -110,7 +110,11 @@ def render_quiz_maker_page():
                     try:
                         target_ws = sh.worksheet(target_sheet_name)
                     except Exception:
-                        st.error(f"❌ 「{target_sheet_name}」という名前のシートが見つかりません！スプレッドシートにその章のシートがあるか確認してください。")
+                        # 💡 ここを改良！スプレッドシートに実在するシート名一覧を取得して表示します
+                        existing_sheets = [ws.title for ws in sh.worksheets()]
+                        st.error(f"❌ 「{target_sheet_name}」という名前のシートが見つかりません！")
+                        st.info(f"🔍 【プログラムが見つけた実際のシート名一覧】\n" + " ／ ".join(existing_sheets))
+                        st.write("💡 アドバイス: カッコの全角・半角（ `()` と `（）` ）の違いや、数字の前後に見えないスペースが入っていないか、上のリストと見比べてみてください！")
                         st.stop() # シートがない場合はここで処理をストップ
                         
                     gid = target_ws.id
