@@ -107,15 +107,21 @@ def render_quiz_maker_page():
                         time.sleep(3) # 反映を待つ
                     
                     # ターゲットとなるシート（確認テスト or 良問テスト〇）を探す
-                    try:
-                        target_ws = sh.worksheet(target_sheet_name)
-                    except Exception:
-                        # 💡 ここを改良！スプレッドシートに実在するシート名一覧を取得して表示します
+                    target_ws = None
+                    for ws in sh.worksheets():
+                        clean_ws_title = ws.title.replace(" ", "").replace("　", "")
+                        clean_target = target_sheet_name.replace(" ", "").replace("　", "")
+                        
+                        if clean_ws_title == clean_target:
+                            target_ws = ws
+                            break
+                            
+                    if target_ws is None:
                         existing_sheets = [ws.title for ws in sh.worksheets()]
                         st.error(f"❌ 「{target_sheet_name}」という名前のシートが見つかりません！")
                         st.info(f"🔍 【プログラムが見つけた実際のシート名一覧】\n" + " ／ ".join(existing_sheets))
-                        st.write("💡 アドバイス: カッコの全角・半角（ `()` と `（）` ）の違いや、数字の前後に見えないスペースが入っていないか、上のリストと見比べてみてください！")
-                        st.stop() # シートがない場合はここで処理をストップ
+                        st.write("💡 アドバイス: カッコの全角・半角（ `()` と `（）` ）がスプレッドシートと合っているか確認してください！")
+                        st.stop()
                         
                     gid = target_ws.id
                     
