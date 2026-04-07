@@ -1,17 +1,17 @@
 import streamlit as st
 import json
 import streamlit.components.v1 as components
-import time     # ← 追加！
-import base64   # ← 追加！
-import io       # ← 新規追加！（データをメモリ上で扱うため）
-from pypdf import PdfWriter  # ← 新規追加！（PDFを結合するため）
+import time
+import base64
+import io
+from pypdf import PdfWriter
 
 # 裏方部隊から、スプレッドシートのURL（ID）を管理する関数などを呼び出します
 from utils.g_sheets import (
     get_quiz_maker_sheets,
     add_quiz_maker_sheet,
     delete_quiz_maker_sheet,
-    get_gc_client  # ← 追加！
+    get_gc_client
 )
 
 def render_quiz_maker_page():
@@ -31,7 +31,7 @@ def render_quiz_maker_page():
                 if new_name and new_id:
                     add_quiz_maker_sheet(new_name, new_id)
                     st.success(f"「{new_name}」をリストに登録しました！")
-                    time.sleep(1) # 少し待ってからリロードすると安心です
+                    time.sleep(1)
                     st.rerun()
                 else:
                     st.warning("⚠️ 名前とIDの両方を入力してください。")
@@ -42,20 +42,17 @@ def render_quiz_maker_page():
         st.warning("小テストが登録されていません。上のメニューから登録してください。")
         return
 
-    # リストを名前順に整列（ソート）する
+    # リストを名前順に整列
     sorted_quiz_names = sorted(quiz_dict.keys())
 
     c_sel, c_del = st.columns([4, 1])
     with c_sel:
-        # 並び替えたリストを選択肢にセットします
         quiz_name = st.selectbox("📚 使用する小テストのファイルを選択", sorted_quiz_names)
     
     with c_del:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        # 削除ボタンを確認制（ポップオーバー）にする
         with st.popover("🗑️ 削除", use_container_width=True):
             st.warning(f"本当に「{quiz_name}」をリストから削除しますか？")
-            # 確定ボタンが押された時だけ削除処理を実行します
             if st.button("はい、削除します", type="primary", use_container_width=True):
                 delete_quiz_maker_sheet(quiz_name)
                 st.toast(f"🗑️ 「{quiz_name}」を削除しました！")
@@ -66,28 +63,60 @@ def render_quiz_maker_page():
     sheet_id = quiz_dict[quiz_name]
 
     with st.container(border=True):
-        c1, c2, c3 = st.columns(3)
-        start_num = c1.number_input("はじめの番号 (B2セル)", min_value=1, value=1)
-        end_num = c2.number_input("終わりの番号 (B3セル)", min_value=1, value=20)
-        shuffle = c3.checkbox("🔀 問題をシャッフルする (D3セル)", value=False)
+        st.markdown("#### ⚙️ 印刷設定")
+        
+        # ==========================================
+        # 🌟 修正ポイント1: テストの種類を選ぶラジオボタン
+        # ==========================================
+        test_type = st.radio(
+            "📝 テストの種類を選択", 
+            ["確認テスト", "良問テスト(簡)", "良問テスト(難)"], 
+            horizontal=True
+        )
+        
+        # 選んだテストの種類によって、入力項目とターゲットシートを切り替えます
+        if test_type == "確認テスト":
+            target_sheet_name = "確認テスト"
+            st.write("▼ 範囲を指定して問題を作成します")
+            c1, c2, c3 = st.columns(3)
+            start_num = c1.number_input("はじめの番号 (B2セル)", min_value=1, value=1)
+            end_num = c2.number_input("終わりの番号 (B3セル)", min_value=1, value=20)
+            shuffle = c3.checkbox("🔀 問題をシャッフルする (D3セル)", value=False)
+        else:
+            # 良問テストの場合は「章番号」を入力させる
+            c_chap, _ = st.columns([1, 2])
+            chapter_num = c_chap.number_input("🔢 章番号 (〇に入る数字)", min_value=1, value=1, step=1)
+            target_sheet_name = f"{test_type}{chapter_num}"
+            st.info(f"💡 スプレッドシートの「{target_sheet_name}」シートをそのままPDF化します。")
 
-        if st.button("✨ 問題を作成する", type="primary", use_container_width=True):
-            with st.spinner("魔法の小テストジェネレーターを起動中... (約5秒かかります)"):
+        # ボタンの文字も動的に変わるようにしました
+        if st.button(f"✨ {target_sheet_name} を作成する", type="primary", use_container_width=True):
+            with st.spinner(f"魔法の小テストジェネレーターを起動中... [{target_sheet_name}]"):
                 try:
                     gc = get_gc_client()
                     sh = gc.open_by_key(sheet_id)
                     
-                    setting_ws = sh.worksheet("テスト範囲指定")
-                    setting_ws.update_acell('B2', start_num)
-                    setting_ws.update_acell('B3', end_num)
-                    setting_ws.update_acell('D3', shuffle) 
+                    # ==========================================
+                    # 🌟 修正ポイント2: 確認テストの時だけ範囲指定シートを操作
+                    # ==========================================
+                    if test_type == "確認テスト":
+                        setting_ws = sh.worksheet("テスト範囲指定")
+                        setting_ws.update_acell('B2', start_num)
+                        setting_ws.update_acell('B3', end_num)
+                        setting_ws.update_acell('D3', shuffle) 
+                        time.sleep(3) # 反映を待つ
                     
-                    time.sleep(3)
-                    
-                    test_ws = sh.worksheet("確認テスト")
-                    gid = test_ws.id
+                    # ターゲットとなるシート（確認テスト or 良問テスト〇）を探す
+                    try:
+                        target_ws = sh.worksheet(target_sheet_name)
+                    except Exception:
+                        st.error(f"❌ 「{target_sheet_name}」という名前のシートが見つかりません！スプレッドシートにその章のシートがあるか確認してください。")
+                        st.stop() # シートがない場合はここで処理をストップ
+                        
+                    gid = target_ws.id
                     
                     base_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=pdf&gid={gid}&portrait=true&size=A4&gridlines=false&fitw=true"
+                    # 良問テストも「A1:I28が問題、J1:R28が解答」の形式と想定しています
                     url_q = f"{base_url}&range=A1:I28"
                     url_a = f"{base_url}&range=J1:R28"
                     
@@ -108,29 +137,29 @@ def render_quiz_maker_page():
                     
                     # 2. PDFの結合処理（ガッチャンコ！）
                     merger = PdfWriter()
-                    merger.append(io.BytesIO(res_q.content)) # 1ページ目に問題をセット
-                    merger.append(io.BytesIO(res_a.content)) # 2ページ目に解答をセット
+                    merger.append(io.BytesIO(res_q.content))
+                    merger.append(io.BytesIO(res_a.content))
                     
                     merged_pdf_stream = io.BytesIO()
                     merger.write(merged_pdf_stream)
                     
-                    # 3. 画面に渡すためにセッションに保存
+                    # 3. 画面に渡すためにセッションに保存（どのテストを作ったかの名前も保存！）
                     st.session_state['pdf_q'] = res_q.content
                     st.session_state['pdf_a'] = res_a.content
-                    st.session_state['pdf_merged'] = merged_pdf_stream.getvalue() # 結合済みPDF！
+                    st.session_state['pdf_merged'] = merged_pdf_stream.getvalue()
+                    st.session_state['generated_test_name'] = target_sheet_name # ← 追加！
                     
-                    st.success("✅ 問題と解答のセットPDF生成が完了しました！")
+                    st.success(f"✅ 【{target_sheet_name}】のセットPDF生成が完了しました！")
                 except Exception as e:
-                    st.error(f"❌ エラーが発生しました。IDが間違っているか、権限がありません。詳細: {e}")
+                    st.error(f"❌ エラーが発生しました。詳細: {e}")
 
     # ==========================================
-    # 🌟 結合したPDFをダウンロードできるUIに変更
+    # ダウンロードUI
     # ==========================================
     if 'pdf_merged' in st.session_state:
         st.divider()
         st.subheader("👀 ダウンロード ＆ 印刷 (PDF)")
 
-        # ボタンの見た目を作る関数（引数で色を変えられるように改造しました）
         def display_pdf(pdf_bytes, filename, color="#FF4B4B"):
             b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
             html_button = f'''
@@ -143,13 +172,14 @@ def render_quiz_maker_page():
             '''
             st.markdown(html_button, unsafe_allow_html=True)
 
-        # 🌟 ここがメイン！「問題と解答」が1つになったPDFのボタン
+        # 実際に作成したテストの名前をファイル名に組み込む
+        gen_name = st.session_state.get('generated_test_name', 'テスト')
+
         st.markdown("#### 📚 セット印刷（おすすめ！）")
         st.info("💡 1ページ目が問題、2ページ目が解答になっています。これ1つを両面印刷または2ページ印刷すれば完了です！")
-        display_pdf(st.session_state['pdf_merged'], f"{quiz_name}_問題解答セット.pdf", color="#28a745") # 目立つように緑色に！
+        display_pdf(st.session_state['pdf_merged'], f"{quiz_name}_{gen_name}_問題解答セット.pdf", color="#28a745") 
 
-        # （おまけ）今まで通り別々にもダウンロードできるようにしておきます
         st.markdown("<br>#### 📄 個別データ（必要な場合のみ）", unsafe_allow_html=True)
         tab_q, tab_a = st.tabs(["📝 問題のみ", "💡 解答のみ"])
-        with tab_q: display_pdf(st.session_state['pdf_q'], f"{quiz_name}_問題のみ.pdf")
-        with tab_a: display_pdf(st.session_state['pdf_a'], f"{quiz_name}_解答のみ.pdf")
+        with tab_q: display_pdf(st.session_state['pdf_q'], f"{quiz_name}_{gen_name}_問題のみ.pdf")
+        with tab_a: display_pdf(st.session_state['pdf_a'], f"{quiz_name}_{gen_name}_解答のみ.pdf")
