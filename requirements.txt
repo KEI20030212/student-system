@@ -4,3 +4,4 @@ altair
 gspread
 oauth2client
 reportlab
+pypdf
