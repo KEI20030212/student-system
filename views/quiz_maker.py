@@ -1,15 +1,17 @@
 import streamlit as st
 import json
 import streamlit.components.v1 as components
-import time     # ← これを追加！
-import base64   # ← これを追加！
+import time     # ← 追加！
+import base64   # ← 追加！
+import io       # ← 新規追加！（データをメモリ上で扱うため）
+from pypdf import PdfWriter  # ← 新規追加！（PDFを結合するため）
 
 # 裏方部隊から、スプレッドシートのURL（ID）を管理する関数などを呼び出します
 from utils.g_sheets import (
     get_quiz_maker_sheets,
     add_quiz_maker_sheet,
     delete_quiz_maker_sheet,
-    get_gc_client  # ← これを追加！
+    get_gc_client  # ← 追加！
 )
 
 def render_quiz_maker_page():
@@ -40,22 +42,17 @@ def render_quiz_maker_page():
         st.warning("小テストが登録されていません。上のメニューから登録してください。")
         return
 
-    # ==========================================
-    # 🌟 修正ポイント1: リストを名前順に整列（ソート）する
-    # ==========================================
-    # quiz_dict のキー（小テストの名前）を取り出して、順番に並び替えます
+    # リストを名前順に整列（ソート）する
     sorted_quiz_names = sorted(quiz_dict.keys())
 
     c_sel, c_del = st.columns([4, 1])
     with c_sel:
-        # 並び替えたリスト（sorted_quiz_names）を選択肢にセットします
+        # 並び替えたリストを選択肢にセットします
         quiz_name = st.selectbox("📚 使用する小テストのファイルを選択", sorted_quiz_names)
     
     with c_del:
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        # ==========================================
-        # 🌟 修正ポイント2: 削除ボタンを確認制（ポップオーバー）にする
-        # ==========================================
+        # 削除ボタンを確認制（ポップオーバー）にする
         with st.popover("🗑️ 削除", use_container_width=True):
             st.warning(f"本当に「{quiz_name}」をリストから削除しますか？")
             # 確定ボタンが押された時だけ削除処理を実行します
@@ -105,26 +102,40 @@ def render_quiz_maker_page():
                     creds.refresh(req)
                     headers = {"Authorization": f"Bearer {creds.token}"}
                     
+                    # 1. 問題と解答をそれぞれダウンロード
                     res_q = requests.get(url_q, headers=headers)
                     res_a = requests.get(url_a, headers=headers)
                     
+                    # 2. PDFの結合処理（ガッチャンコ！）
+                    merger = PdfWriter()
+                    merger.append(io.BytesIO(res_q.content)) # 1ページ目に問題をセット
+                    merger.append(io.BytesIO(res_a.content)) # 2ページ目に解答をセット
+                    
+                    merged_pdf_stream = io.BytesIO()
+                    merger.write(merged_pdf_stream)
+                    
+                    # 3. 画面に渡すためにセッションに保存
                     st.session_state['pdf_q'] = res_q.content
                     st.session_state['pdf_a'] = res_a.content
-                    st.success("✅ スプレッドシートそのままのPDF生成が完了しました！")
+                    st.session_state['pdf_merged'] = merged_pdf_stream.getvalue() # 結合済みPDF！
+                    
+                    st.success("✅ 問題と解答のセットPDF生成が完了しました！")
                 except Exception as e:
                     st.error(f"❌ エラーが発生しました。IDが間違っているか、権限がありません。詳細: {e}")
 
-    if 'pdf_q' in st.session_state and 'pdf_a' in st.session_state:
+    # ==========================================
+    # 🌟 結合したPDFをダウンロードできるUIに変更
+    # ==========================================
+    if 'pdf_merged' in st.session_state:
         st.divider()
         st.subheader("👀 ダウンロード ＆ 印刷 (PDF)")
-        tab_q, tab_a = st.tabs(["📝 問題 (A〜I列)", "💡 解答 (J〜R列)"])
 
-        def display_pdf(pdf_bytes, filename):
+        # ボタンの見た目を作る関数（引数で色を変えられるように改造しました）
+        def display_pdf(pdf_bytes, filename, color="#FF4B4B"):
             b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-            
             html_button = f'''
             <a href="data:application/pdf;base64,{b64_pdf}" download="{filename}" target="_blank" 
-               style="display: block; text-align: center; padding: 12px; background-color: #FF4B4B; 
+               style="display: block; text-align: center; padding: 12px; background-color: {color}; 
                       color: white; text-decoration: none; border-radius: 8px; font-weight: bold; 
                       margin-bottom: 10px; transition: 0.3s;">
                 📥 【 {filename} 】を開く / 印刷する
@@ -132,5 +143,13 @@ def render_quiz_maker_page():
             '''
             st.markdown(html_button, unsafe_allow_html=True)
 
-        with tab_q: display_pdf(st.session_state['pdf_q'], "確認テスト_問題.pdf")
-        with tab_a: display_pdf(st.session_state['pdf_a'], "確認テスト_解答.pdf")
+        # 🌟 ここがメイン！「問題と解答」が1つになったPDFのボタン
+        st.markdown("#### 📚 セット印刷（おすすめ！）")
+        st.info("💡 1ページ目が問題、2ページ目が解答になっています。これ1つを両面印刷または2ページ印刷すれば完了です！")
+        display_pdf(st.session_state['pdf_merged'], f"{quiz_name}_問題解答セット.pdf", color="#28a745") # 目立つように緑色に！
+
+        # （おまけ）今まで通り別々にもダウンロードできるようにしておきます
+        st.markdown("<br>#### 📄 個別データ（必要な場合のみ）", unsafe_allow_html=True)
+        tab_q, tab_a = st.tabs(["📝 問題のみ", "💡 解答のみ"])
+        with tab_q: display_pdf(st.session_state['pdf_q'], f"{quiz_name}_問題のみ.pdf")
+        with tab_a: display_pdf(st.session_state['pdf_a'], f"{quiz_name}_解答のみ.pdf")
