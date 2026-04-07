@@ -129,7 +129,7 @@ def render_multi_input_page(textbook_master):
                                     st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
 
                                     # 💡 改善: 複数テキスト対応（multiselect）
-                                    selected_texts = st.multiselect("📚 使用テキスト (複数可)", list(textbook_master.keys()), key=f"texts_{i}")
+                                    selected_texts = st.multiselect("📚 使用テキスト (複数可)", list(get_textbook_master().keys()), key=f"texts_{i}")
                                     text_name_str = "、".join(selected_texts) if selected_texts else "-"
                                     st.divider()
 
