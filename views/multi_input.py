@@ -129,74 +129,92 @@ def render_multi_input_page(textbook_master):
                                     st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
 
                                     # 💡 改善: 複数テキスト対応（multiselect）
-                                    selected_texts = st.multiselect("📚 使用テキスト (複数可)", list(get_textbook_master().keys()), key=f"texts_{i}")
-                                    text_name_str = "、".join(selected_texts) if selected_texts else "-"
-                                    st.divider()
-
-                                    assigned_p = 0
-                                    hw_str = str(last_hw_pages)
-                                    if "〜" in hw_str or "~" in hw_str: 
-                                        nums = [int(n) for n in re.findall(r'\d+', hw_str)]
-                                        if len(nums) >= 2:
-                                            assigned_p = nums[1] - nums[0] + 1
-                                    elif hw_str.isdigit():
-                                        assigned_p = int(hw_str)
-
-                                    st.markdown(f"🚩 **前回の宿題:** {last_hw_text} (範囲: {last_hw_pages} / 計 {assigned_p} P分)")
-
-                                    st.write("✅ **実施状況（やってきた範囲）**")
-                                    col_hw1, col_hw2 = st.columns(2)
-                                    with col_hw1:
-                                        done_start = st.number_input("やってきた 開始P", min_value=0, value=0, key=f"done_start_{i}")
-                                    with col_hw2:
-                                        done_end = st.number_input("やってきた 終了P", min_value=0, value=0, key=f"done_end_{i}")
+                                    # 🌟 さらに改善: 複数テキスト対応＆個別の進捗入力
+                                    st.write("📚 **使用テキストと進捗**")
+                                    # textbook_master から最新のリストを取得
+                                    text_options = list(get_textbook_master().keys())
+                                    selected_texts = st.multiselect("使用テキスト (複数可)", text_options, key=f"texts_{i}")
                                     
-                                    completed_p = (done_end - done_start + 1) if done_end >= done_start and done_end > 0 else 0
+                                    advanced_p_list = []
+                                    if selected_texts:
+                                        text_name_str = "、".join(selected_texts)
+                                        for t_idx, text_name in enumerate(selected_texts):
+                                            st.caption(f"📘 {text_name} の進捗")
+                                            col_adv1, col_adv2 = st.columns(2)
+                                            with col_adv1:
+                                                adv_start = st.number_input(f"開始P", min_value=0, value=last_page_num, key=f"adv_start_{i}_{t_idx}")
+                                            with col_adv2:
+                                                adv_end = st.number_input(f"終了P", min_value=0, value=last_page_num, key=f"adv_end_{i}_{t_idx}")
+                                            
+                                            if adv_end >= adv_start and adv_end > 0:
+                                                advanced_p_list.append(f"{text_name}: P.{adv_start}〜{adv_end}")
+                                            else:
+                                                advanced_p_list.append(f"{text_name}: -")
                                         
-                                    st.caption(f"やってきたページ数: 計 {completed_p} P分")
-
-                                    current_hw_rate = calculate_hw_rate(assigned_p, completed_p) if assigned_p > 0 else 0.0
-                                    if current_hw_rate > 100.0: current_hw_rate = 100.0
-                                        
-                                    if assigned_p > 0:
-                                        st.caption(f"📊 宿題履行率: {current_hw_rate:.1f}%")
+                                        advanced_p_str = "\n".join(advanced_p_list)
                                     else:
-                                        st.caption("📊 宿題履行率: - % (宿題なし)")
-                                    
-                                    st.divider()
-
-                                    # 💡 改善: 授業進捗の入力を2つのnumber_inputに分割！
-                                    st.write("📖 **授業でどこまで進んだか**")
-                                    col_adv1, col_adv2 = st.columns(2)
-                                    with col_adv1:
-                                        adv_start = st.number_input("授業 開始P", min_value=0, value=last_page_num, key=f"adv_start_{i}")
-                                    with col_adv2:
-                                        adv_end = st.number_input("授業 終了P", min_value=0, value=last_page_num, key=f"adv_end_{i}")
-                                    advanced_p_str = f"P.{adv_start}〜{adv_end}"
+                                        text_name_str = "-"
+                                        advanced_p_str = "-"
+                                        st.info("👆 テキストを選択すると進捗入力欄が表示されます")
                                     
                                     st.divider()
                                     
-                                    # 💡 改善: 小テストを複数回対応（実施回数を選ばせる）
+                                    # 🌟 さらに改善: 小テストを複数回＆それぞれテキスト選択
                                     num_quizzes = st.number_input("💯 小テスト実施回数", min_value=0, max_value=5, value=0, step=1, key=f"num_q_{i}")
                                     quiz_records = []
                                     w_nums_for_sheet_list = []
                                     current_quiz_pts = 0 
                                     
-                                    for q_idx in range(num_quizzes):
-                                        st.write(f"**【小テスト {q_idx + 1}】**")
-                                        target_chap = st.number_input(f"実施した章 ({q_idx+1})", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
-                                        w_nums = st.text_input(f"ミス問題番号 ({q_idx+1})", key=f"w_{i}_{q_idx}")
-                                        score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
-                                        quiz_records.append({"unit": target_chap, "score": score})
-                                        if w_nums:
-                                            w_nums_for_sheet_list.append(w_nums)
-                                        current_quiz_pts += calculate_quiz_points(score)
+                                    if num_quizzes > 0:
+                                        for q_idx in range(num_quizzes):
+                                            with st.container(border=True):
+                                                st.write(f"**【小テスト {q_idx + 1}】**")
+                                                q_name = st.selectbox(f"テストの種類", text_options, index=None, placeholder="テキストを選択", key=f"q_name_{i}_{q_idx}")
+                                                target_chap = st.number_input(f"実施した章/範囲", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
+                                                w_nums = st.text_input(f"ミス問題番号", key=f"w_{i}_{q_idx}")
+                                                
+                                                score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
+                                                quiz_records.append({
+                                                    "quiz_name": q_name or "不明",  # 👈 選んだテキスト名を記録！
+                                                    "unit": target_chap, 
+                                                    "score": score
+                                                })
+                                                if w_nums:
+                                                    w_nums_for_sheet_list.append(w_nums)
+                                                current_quiz_pts += calculate_quiz_points(score)
                                     
                                     w_nums_for_sheet = ",".join(w_nums_for_sheet_list)
                                     motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
 
                                     st.divider()
+                                    
+                                    num_quizzes = st.number_input("💯 小テスト実施回数", min_value=0, max_value=5, value=0, step=1, key=f"num_q_{i}")
+                                    quiz_records = []
+                                    w_nums_for_sheet_list = []
+                                    current_quiz_pts = 0 
+                                    
+                                    if num_quizzes > 0:
+                                        for q_idx in range(num_quizzes):
+                                            with st.container(border=True):
+                                                st.write(f"**【小テスト {q_idx + 1}】**")
+                                                q_name = st.selectbox(f"テストの種類", text_options, index=None, placeholder="テキストを選択", key=f"q_name_{i}_{q_idx}")
+                                                target_chap = st.number_input(f"実施した章/範囲", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
+                                                w_nums = st.text_input(f"ミス問題番号", key=f"w_{i}_{q_idx}")
+                                                
+                                                score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
+                                                quiz_records.append({
+                                                    "quiz_name": q_name or "不明",  # 👈 選んだテキスト名を記録！
+                                                    "unit": target_chap, 
+                                                    "score": score
+                                                })
+                                                if w_nums:
+                                                    w_nums_for_sheet_list.append(w_nums)
+                                                current_quiz_pts += calculate_quiz_points(score)
+                                    
+                                    w_nums_for_sheet = ",".join(w_nums_for_sheet_list)
+                                    motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
 
+                                    st.divider()
                                     # 💡 改善: 集中力とミスへの反応の評価を追加！
                                     st.write("🧠 **授業中の様子・評価**")
                                     col_eval1, col_eval2 = st.columns(2)
@@ -283,7 +301,7 @@ def render_multi_input_page(textbook_master):
                                     save_quiz_to_dedicated_sheet(
                                         date_str=date.strftime("%Y/%m/%d"),
                                         student_name=data["name"],
-                                        text_name=data["text_name"],
+                                        text_name=q["quiz_name"],
                                         chapter=q["unit"],
                                         score=q["score"],
                                         w_nums=data["w_nums_for_sheet"],
