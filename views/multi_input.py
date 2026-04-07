@@ -3,7 +3,6 @@ import datetime
 import time
 import re
 
-# 🌟 追加：save_quiz_to_dedicated_sheet を新しく呼び出す！
 from utils.g_sheets import (
     get_all_student_names, 
     get_all_teacher_names,
@@ -26,10 +25,6 @@ from utils.calc_logic import (
 def render_multi_input_page(textbook_master):
     st.header("📝 授業・自習記録の入力")
 
-    # --- 状態管理のための初期化 ---
-    if "class_slot_val" not in st.session_state:
-        st.session_state["class_slot_val"] = "-- 選択 --"
-
     record_type = st.radio("✍️ 記録の種類を選択してください", ["📖 授業", "📝 自習"], horizontal=True)
     st.divider()
 
@@ -46,32 +41,38 @@ def render_multi_input_page(textbook_master):
             c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.5, 2])
             date = c1.date_input("授業日", datetime.date.today())
             
-            # 講師名はセッション状態で管理せず、通常の挙動（保持）に任せる
-            teacher_options = ["-- 選択 --"] + teacher_names
-            teacher_name = c2.selectbox("👨‍🏫 担当講師", teacher_options, key="sb_teacher")
+            # 💡 改善: 「--選択--」を排除！ index=None と placeholder を使って美しく！
+            teacher_name = c2.selectbox(
+                "👨‍🏫 担当講師", 
+                teacher_names, 
+                index=None, 
+                placeholder="講師を選択",
+                key="sb_teacher"
+            )
             
             class_type = c3.radio("👥 授業形態", ["1:1", "1:2", "1:3"], horizontal=True)
             
             time_slots = [
-                "-- 選択 --", "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
+                "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
                 "0コマ目 (13:10~14:40)", "1コマ目 (14:50~16:20)",
                 "2コマ目 (16:40~18:10)", "3コマ目 (18:20~19:50)", "4コマ目 (20:00~21:30)"
             ]
             
-            # 🌟 修正ポイント①: keyを指定して、プログラムから値を操作できるようにする
+            # 💡 改善: ここも「--選択--」を排除！
             class_slot = c4.selectbox(
                 "⏰ 授業コマ", 
                 time_slots, 
+                index=None,
+                placeholder="コマを選択",
                 key="sb_class_slot"
             )
 
         # 講師かコマが未選択なら、入力をブロック
-        if teacher_name == "-- 選択 --" or class_slot == "-- 選択 --":
+        if not teacher_name or not class_slot:
             st.info("👆 まずは「担当講師」と「授業コマ」を選択してください。")
         else:
-            # --- ここから生徒入力欄 ---
             num_students = int(class_type.split(":")[1])
-            options = ["-- 選択 --", "🆕 新規登録"] + student_names
+            options = ["🆕 新規登録"] + student_names
             st.divider()
             cols = st.columns(num_students)
             input_data_list = []
@@ -79,135 +80,171 @@ def render_multi_input_page(textbook_master):
             for i in range(num_students):
                 with cols[i]:
                     with st.container(border=True):
-                        # 🌟 修正ポイント②: 各入力項目にkeyを設定しておく（後で一括削除するため）
-                        name = st.selectbox("生徒名", options, key=f"name_{i}")
-                        if name == "🆕 新規登録": name = st.text_input("新しい生徒の名前", key=f"new_name_{i}")
+                        # 💡 改善: 生徒名も「--選択--」を排除！
+                        name = st.selectbox("生徒名", options, index=None, placeholder="生徒を選択", key=f"name_{i}")
+                        if name == "🆕 新規登録": 
+                            name = st.text_input("新しい生徒の名前", key=f"new_name_{i}")
 
-                        if name and name != "-- 選択 --":
+                        if name:
                             attendance = st.selectbox("📅 出欠状況", ["出席（通常）", "出席（振替授業を消化）", "欠席（後日振替あり）", "欠席（振替なし）"], key=f"att_{i}")
+                            
+                            # 💡 改善: 遅刻時間の入力欄を追加
+                            late_time = st.number_input("⏰ 遅刻時間 (分)", min_value=0, value=0, step=5, key=f"late_{i}")
+
                             if "欠席" in attendance:
                                 st.warning("欠席のため、進捗・テスト入力はスキップされます。")
                                 input_data_list.append({
                                     "name": name, "subject": "-", "text_name": "-", "advanced_p": "-", 
                                     "quiz_records": [], "w_nums_for_sheet": "", "attendance": attendance,
+                                    "late_time": late_time, "concentration": "-", "reaction": "-",
                                     "advice": "-", "parent_msg": "-", "next_handover": "-",
                                     "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
                                     "next_hw_text": "-", "next_hw_pages": "-"
                                 })
                             else:
-                                subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], key=f"sub_{i}")
+                                # 💡 改善: 科目の選択。「--選択--」を排除。
+                                subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], index=None, placeholder="科目を選択", key=f"sub_{i}")
                                 
-                                cache_key = f"prev_data_{name}_{subject}"
-                                if cache_key not in st.session_state:
-                                    with st.spinner("☁️ 過去のデータを読み込み中..."):
-                                        st.session_state[cache_key] = {
-                                            "note": get_last_handover(name, subject),
-                                            "hw_info": get_last_homework_info(name, subject),
-                                            "page": get_last_page_from_sheet(name)
-                                        }
-                                
-                                cached_data = st.session_state[cache_key]
-                                last_note = cached_data["note"]
-                                last_hw_text, last_hw_pages = cached_data["hw_info"]
-                                last_page = cached_data["page"]
-
-                                st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
-
-                                text_name = st.selectbox("テキスト", list(textbook_master.keys()), key=f"text_{i}")
-                                st.divider()
-
-                                assigned_p = 0
-                                hw_str = str(last_hw_pages)
-                                if "〜" in hw_str or "~" in hw_str: 
-                                    nums = [int(n) for n in re.findall(r'\d+', hw_str)]
-                                    if len(nums) >= 2:
-                                        assigned_p = nums[1] - nums[0] + 1
-                                elif hw_str.isdigit():
-                                    assigned_p = int(hw_str)
-
-                                st.markdown(f"🚩 **前回の宿題:** {last_hw_text} (範囲: {last_hw_pages} / 計 {assigned_p} P分)")
-
-                                st.write("✅ **実施状況（やってきた範囲）**")
-                                col_hw1, col_hw2 = st.columns(2)
-                                with col_hw1:
-                                    done_start = st.number_input("やってきた 開始P", min_value=0, value=0, key=f"done_start_{i}")
-                                with col_hw2:
-                                    done_end = st.number_input("やってきた 終了P", min_value=0, value=0, key=f"done_end_{i}")
-                                
-                                if done_end >= done_start and done_end > 0:
-                                    completed_p = done_end - done_start + 1
+                                # 💡 改善: 科目が選ばれるまで下を隠す（ブロックする）！
+                                if not subject:
+                                    st.info("👆 科目を選択すると詳細入力が開きます")
                                 else:
-                                    completed_p = 0
+                                    cache_key = f"prev_data_{name}_{subject}"
+                                    if cache_key not in st.session_state:
+                                        with st.spinner("☁️ 過去のデータを読み込み中..."):
+                                            st.session_state[cache_key] = {
+                                                "note": get_last_handover(name, subject),
+                                                "hw_info": get_last_homework_info(name, subject),
+                                                "page": get_last_page_from_sheet(name)
+                                            }
                                     
-                                st.caption(f"やってきたページ数: 計 {completed_p} P分")
-
-                                current_hw_rate = calculate_hw_rate(assigned_p, completed_p) if assigned_p > 0 else 0.0
-                                if current_hw_rate > 100.0:
-                                    current_hw_rate = 100.0
+                                    cached_data = st.session_state[cache_key]
+                                    last_note = cached_data["note"]
+                                    last_hw_text, last_hw_pages = cached_data["hw_info"]
+                                    last_page = cached_data["page"]
                                     
-                                if assigned_p > 0:
-                                    st.caption(f"📊 宿題履行率: {current_hw_rate:.1f}%")
-                                else:
-                                    st.caption("📊 宿題履行率: - % (宿題なし)")
-                                
-                                st.divider()
+                                    # 数字以外（"プリント"等）が入っている場合の安全対策
+                                    last_page_num = int(last_page) if str(last_page).isdigit() else 0
 
-                                advanced_p = st.text_input("📖 授業でどこまで進んだか", value=f"P.{last_page} 〜 ", placeholder="例：P.45〜47、関係代名詞", key=f"adv_{i}")
-                                
-                                quiz_done = st.checkbox("💯 小テストを実施した", key=f"q_done_{i}")
-                                quiz_records = []
-                                w_nums_for_sheet = ""  # 👈 専用シート用にミス問題番号を保持する変数
-                                current_quiz_pts = 0 
-                                
-                                if quiz_done:
-                                    target_chap = st.number_input("実施した章", min_value=1, value=1, step=1, key=f"q_chap_{i}")
-                                    w_nums = st.text_input("ミス問題番号", key=f"w_{i}")
-                                    w_nums_for_sheet = w_nums  # 保存用に記録
-                                    score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
-                                    quiz_records.append({"unit": target_chap, "score": score})
-                                    current_quiz_pts += calculate_quiz_points(score)
+                                    st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
 
-                                motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
+                                    # 💡 改善: 複数テキスト対応（multiselect）
+                                    selected_texts = st.multiselect("📚 使用テキスト (複数可)", list(textbook_master.keys()), key=f"texts_{i}")
+                                    text_name_str = "、".join(selected_texts) if selected_texts else "-"
+                                    st.divider()
 
-                                st.divider()
-                                st.write("🚀 **次回の宿題指示**")
-                                hw_text_options = ["-- 選択 --", "🆕 新規テキスト入力"] + list(get_textbook_master().keys())
-                                selected_hw_text = st.selectbox("次回の宿題テキスト", hw_text_options, key=f"hw_text_{i}")
+                                    assigned_p = 0
+                                    hw_str = str(last_hw_pages)
+                                    if "〜" in hw_str or "~" in hw_str: 
+                                        nums = [int(n) for n in re.findall(r'\d+', hw_str)]
+                                        if len(nums) >= 2:
+                                            assigned_p = nums[1] - nums[0] + 1
+                                    elif hw_str.isdigit():
+                                        assigned_p = int(hw_str)
 
-                                if selected_hw_text == "🆕 新規テキスト入力":
-                                    new_text_name = st.text_input("新規テキスト名を入力", key=f"new_hw_text_{i}")
-                                    if new_text_name:
-                                        add_new_textbook(new_text_name)
-                                        selected_hw_text = new_text_name
+                                    st.markdown(f"🚩 **前回の宿題:** {last_hw_text} (範囲: {last_hw_pages} / 計 {assigned_p} P分)")
 
-                                st.write("宿題の範囲")
-                                n_s_col, n_e_col = st.columns(2)
-                                next_start = n_s_col.number_input("次 開始P", min_value=0, value=0, key=f"n_start_{i}")
-                                next_end = n_e_col.number_input("次 終了P", min_value=0, value=0, key=f"n_end_{i}")
-                                
-                                if next_end >= next_start and next_end > 0:
-                                    next_hw_pages_str = f"P.{next_start}〜{next_end}"
-                                else:
-                                    next_hw_pages_str = "-"
+                                    st.write("✅ **実施状況（やってきた範囲）**")
+                                    col_hw1, col_hw2 = st.columns(2)
+                                    with col_hw1:
+                                        done_start = st.number_input("やってきた 開始P", min_value=0, value=0, key=f"done_start_{i}")
+                                    with col_hw2:
+                                        done_end = st.number_input("やってきた 終了P", min_value=0, value=0, key=f"done_end_{i}")
                                     
-                                st.caption(f"スプレッドシートに保存される範囲: {next_hw_pages_str}")
+                                    completed_p = (done_end - done_start + 1) if done_end >= done_start and done_end > 0 else 0
+                                        
+                                    st.caption(f"やってきたページ数: 計 {completed_p} P分")
 
-                                st.divider()
-                                advice = st.text_area("🗣️ 授業でのアドバイス（褒めた点など）", height=80, key=f"advc_{i}")
-                                parent_msg = st.text_area("👪 保護者への連絡事項", height=80, key=f"p_msg_{i}")
-                                next_handover = st.text_area("🔄 次回への引継ぎ事項", height=80, key=f"next_h_{i}")
+                                    current_hw_rate = calculate_hw_rate(assigned_p, completed_p) if assigned_p > 0 else 0.0
+                                    if current_hw_rate > 100.0: current_hw_rate = 100.0
+                                        
+                                    if assigned_p > 0:
+                                        st.caption(f"📊 宿題履行率: {current_hw_rate:.1f}%")
+                                    else:
+                                        st.caption("📊 宿題履行率: - % (宿題なし)")
+                                    
+                                    st.divider()
 
-                                input_data_list.append({
-                                    "name": name, "subject": subject, "text_name": text_name,
-                                    "advanced_p": advanced_p, "quiz_records": quiz_records, 
-                                    "w_nums_for_sheet": w_nums_for_sheet,  # 👈 リストに保持しておく
-                                    "attendance": attendance,
-                                    "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover,
-                                    "assigned_p": assigned_p, "completed_p": completed_p,
-                                    "motivation_rank": motivation_rank, 
-                                    "next_hw_text": selected_hw_text, 
-                                    "next_hw_pages": next_hw_pages_str
-                                })
+                                    # 💡 改善: 授業進捗の入力を2つのnumber_inputに分割！
+                                    st.write("📖 **授業でどこまで進んだか**")
+                                    col_adv1, col_adv2 = st.columns(2)
+                                    with col_adv1:
+                                        adv_start = st.number_input("授業 開始P", min_value=0, value=last_page_num, key=f"adv_start_{i}")
+                                    with col_adv2:
+                                        adv_end = st.number_input("授業 終了P", min_value=0, value=last_page_num, key=f"adv_end_{i}")
+                                    advanced_p_str = f"P.{adv_start}〜{adv_end}"
+                                    
+                                    st.divider()
+                                    
+                                    # 💡 改善: 小テストを複数回対応（実施回数を選ばせる）
+                                    num_quizzes = st.number_input("💯 小テスト実施回数", min_value=0, max_value=5, value=0, step=1, key=f"num_q_{i}")
+                                    quiz_records = []
+                                    w_nums_for_sheet_list = []
+                                    current_quiz_pts = 0 
+                                    
+                                    for q_idx in range(num_quizzes):
+                                        st.write(f"**【小テスト {q_idx + 1}】**")
+                                        target_chap = st.number_input(f"実施した章 ({q_idx+1})", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
+                                        w_nums = st.text_input(f"ミス問題番号 ({q_idx+1})", key=f"w_{i}_{q_idx}")
+                                        score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
+                                        quiz_records.append({"unit": target_chap, "score": score})
+                                        if w_nums:
+                                            w_nums_for_sheet_list.append(w_nums)
+                                        current_quiz_pts += calculate_quiz_points(score)
+                                    
+                                    w_nums_for_sheet = ",".join(w_nums_for_sheet_list)
+                                    motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
+
+                                    st.divider()
+
+                                    # 💡 改善: 集中力とミスへの反応の評価を追加！
+                                    st.write("🧠 **授業中の様子・評価**")
+                                    col_eval1, col_eval2 = st.columns(2)
+                                    with col_eval1:
+                                        concentration = st.selectbox("集中力", ["超集中", "疲労気味", "ムラあり", "集中できない"], index=None, placeholder="選択してください", key=f"conc_{i}")
+                                    with col_eval2:
+                                        reaction = st.selectbox("ミスへの反応", ["原因を分析した", "悔しがった", "放置しようとした"], index=None, placeholder="選択してください", key=f"reac_{i}")
+                                    
+                                    st.divider()
+
+                                    st.write("🚀 **次回の宿題指示**")
+                                    hw_text_options = ["🆕 新規テキスト入力"] + list(get_textbook_master().keys())
+                                    selected_hw_text = st.selectbox("次回の宿題テキスト", hw_text_options, index=None, placeholder="テキストを選択", key=f"hw_text_{i}")
+
+                                    if selected_hw_text == "🆕 新規テキスト入力":
+                                        new_text_name = st.text_input("新規テキスト名を入力", key=f"new_hw_text_{i}")
+                                        if new_text_name:
+                                            add_new_textbook(new_text_name)
+                                            selected_hw_text = new_text_name
+
+                                    st.write("宿題の範囲")
+                                    n_s_col, n_e_col = st.columns(2)
+                                    next_start = n_s_col.number_input("次 開始P", min_value=0, value=0, key=f"n_start_{i}")
+                                    next_end = n_e_col.number_input("次 終了P", min_value=0, value=0, key=f"n_end_{i}")
+                                    
+                                    if next_end >= next_start and next_end > 0:
+                                        next_hw_pages_str = f"P.{next_start}〜{next_end}"
+                                    else:
+                                        next_hw_pages_str = "-"
+                                        
+                                    st.caption(f"スプレッドシートに保存される範囲: {next_hw_pages_str}")
+
+                                    st.divider()
+                                    advice = st.text_area("🗣️ 授業でのアドバイス（褒めた点など）", height=80, key=f"advc_{i}")
+                                    parent_msg = st.text_area("👪 保護者への連絡事項", height=80, key=f"p_msg_{i}")
+                                    next_handover = st.text_area("🔄 次回への引継ぎ事項", height=80, key=f"next_h_{i}")
+
+                                    input_data_list.append({
+                                        "name": name, "subject": subject, "text_name": text_name_str,
+                                        "advanced_p": advanced_p_str, "quiz_records": quiz_records, 
+                                        "w_nums_for_sheet": w_nums_for_sheet, "attendance": attendance,
+                                        "late_time": late_time, "concentration": concentration or "-", "reaction": reaction or "-",
+                                        "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover,
+                                        "assigned_p": assigned_p, "completed_p": completed_p,
+                                        "motivation_rank": motivation_rank, 
+                                        "next_hw_text": selected_hw_text or "-", 
+                                        "next_hw_pages": next_hw_pages_str
+                                    })
 
             st.divider()
             if len(input_data_list) == num_students:
@@ -222,7 +259,7 @@ def render_multi_input_page(textbook_master):
                                 text_name=data["text_name"],
                                 advanced_p=data["advanced_p"],
                                 quiz_records=data["quiz_records"],
-                                date=date,  # カレンダーで選んだ日付をそのまま渡す
+                                date=date, 
                                 teacher_name=teacher_name,
                                 class_type=class_type,
                                 attendance=data["attendance"],
@@ -234,10 +271,13 @@ def render_multi_input_page(textbook_master):
                                 completed_p=data["completed_p"],
                                 motivation_rank=data["motivation_rank"],
                                 next_hw_text=data["next_hw_text"],
-                                next_hw_pages=data["next_hw_pages"]
+                                next_hw_pages=data["next_hw_pages"],
+                                late_time=data["late_time"],        # 🌟新規追加パラメータ
+                                concentration=data["concentration"],# 🌟新規追加パラメータ
+                                reaction=data["reaction"]           # 🌟新規追加パラメータ
                             )
 
-                            # 🌟 2. 【追加】小テストを受けた場合は「専用シート」にも保存する
+                            # 2. 小テストの専用シート保存
                             if data.get("quiz_records") and len(data["quiz_records"]) > 0:
                                 for q in data["quiz_records"]:
                                     save_quiz_to_dedicated_sheet(
@@ -247,50 +287,45 @@ def render_multi_input_page(textbook_master):
                                         chapter=q["unit"],
                                         score=q["score"],
                                         w_nums=data["w_nums_for_sheet"],
-                                        mode="授業内" # 実施形態を授業内に設定
+                                        mode="授業内"
                                     )
                             
-                            # 宿題実施率の更新関数がある場合はこれも実行（欠席以外）
                             if data["attendance"] != "欠席（振替なし）" and "欠席" not in data["attendance"]:
                                 try:
                                     update_student_homework_rate(
-                                        data["name"], 
-                                        data["subject"], 
-                                        data["assigned_p"], 
-                                        data["completed_p"]
+                                        data["name"], data["subject"], data["assigned_p"], data["completed_p"]
                                     )
-                                except Exception as e:
-                                    pass # 関数がない場合のエラー回避
+                                except Exception:
+                                    pass 
                         
                         status.update(label="保存完了！", state="complete", expanded=False)
 
                     st.success(f"✅ {num_students}名全員の記録を保存しました！")
                     
                     st.cache_data.clear()
-                    # 🌟 修正ポイント③: 2秒待ってから「コマ」と「生徒情報」だけをリセットする
                     time.sleep(2)
 
-                    # 1. 授業コマをリセット（代入ではなく、記憶から削除する！）
                     if "sb_class_slot" in st.session_state:
                         del st.session_state["sb_class_slot"]
 
-                    # 2. 生徒の入力欄に関わるセッション状態をすべて削除
                     for i in range(num_students):
                         keys_to_reset = [
-                            f"name_{i}", f"att_{i}", f"sub_{i}", f"text_{i}", 
-                            f"done_start_{i}", f"done_end_{i}", f"adv_{i}", 
-                            f"q_done_{i}", f"q_chap_{i}", f"w_{i}",
+                            f"name_{i}", f"att_{i}", f"late_{i}", f"sub_{i}", f"texts_{i}", 
+                            f"done_start_{i}", f"done_end_{i}", f"adv_start_{i}", f"adv_end_{i}", 
+                            f"num_q_{i}", f"conc_{i}", f"reac_{i}",
                             f"hw_text_{i}", f"n_start_{i}", f"n_end_{i}",
                             f"advc_{i}", f"p_msg_{i}", f"next_h_{i}"
                         ]
+                        # 動的に増える小テストのキーもリセット
+                        for q_idx in range(5):
+                            keys_to_reset.extend([f"q_chap_{i}_{q_idx}", f"w_{i}_{q_idx}"])
+
                         for k in keys_to_reset:
                             if k in st.session_state:
                                 del st.session_state[k]
                     
-                    # 3. 過去データキャッシュも削除
                     for key in list(st.session_state.keys()):
                         if key.startswith("prev_data_"):
                             del st.session_state[key]
 
-                    # 4. 再読み込み（講師名「sb_teacher」は del していないので保持されます）
                     st.rerun()
