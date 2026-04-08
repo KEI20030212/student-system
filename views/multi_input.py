@@ -184,7 +184,10 @@ def render_multi_input_page(textbook_master):
                                                 current_quiz_pts += calculate_quiz_points(score)
                                     
                                     w_nums_for_sheet = ",".join(w_nums_for_sheet_list)
-                                    motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
+
+                                    # 💡 改善: 宿題のデータがない（変数が存在しない）場合は 0 として扱う安全対策
+                                    safe_hw_rate = current_hw_rate if 'current_hw_rate' in locals() else 0
+                                    motivation_rank = calculate_motivation_rank(safe_hw_rate, current_quiz_pts)
 
                                     st.divider()
                                     
