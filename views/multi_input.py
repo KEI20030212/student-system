@@ -249,27 +249,27 @@ def render_multi_input_page(textbook_master):
                             
                             # 1. いつも通りの授業記録を保存
                             save_to_spreadsheet(
-                                name=data["name"],
-                                subject=data["subject"],
-                                text_name=data["text_name"],
-                                advanced_p=data["advanced_p"],
-                                quiz_records=data["quiz_records"],
+                                name=data.get("name", ""),
+                                subject=data.get("subject", ""),
+                                text_name=data.get("text_name_str", data.get("text_name", "")), # 👈 複数テキストの名前に対応
+                                advanced_p=data.get("advanced_p_str", ""),                      # 👈 「P.10〜20」などの新しい進捗に対応
+                                quiz_records=data.get("quiz_records", []),
                                 date=date, 
                                 teacher_name=teacher_name,
                                 class_type=class_type,
-                                attendance=data["attendance"],
+                                attendance=data.get("attendance", ""),
                                 class_slot=class_slot,
-                                advice=data["advice"],
-                                parent_msg=data["parent_msg"],
-                                next_handover=data["next_handover"],
-                                assigned_p=data["assigned_p"],
-                                completed_p=data["completed_p"],
-                                motivation_rank=data["motivation_rank"],
-                                next_hw_text=data["next_hw_text"],
-                                next_hw_pages=data["next_hw_pages"],
-                                late_time=data["late_time"],        # 🌟新規追加パラメータ
-                                concentration=data["concentration"],# 🌟新規追加パラメータ
-                                reaction=data["reaction"]           # 🌟新規追加パラメータ
+                                advice=data.get("advice", ""),
+                                parent_msg=data.get("parent_msg", ""),
+                                next_handover=data.get("next_handover", ""),
+                                assigned_p=0,  # 👈 使わなくなった古いデータなのでダミーの0を渡す
+                                completed_p=0, # 👈 使わなくなった古いデータなのでダミーの0を渡す
+                                motivation_rank=data.get("motivation_rank", ""),
+                                next_hw_text=data.get("next_hw_text", ""),
+                                next_hw_pages=data.get("next_hw_pages", ""),
+                                late_time=data.get("late_time", ""),        # 🌟新規パラメータ
+                                concentration=data.get("concentration", ""),# 🌟新規パラメータ
+                                reaction=data.get("reaction", "")           # 🌟新規パラメータ
                             )
 
                             # 2. 小テストの専用シート保存
