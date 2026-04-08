@@ -191,33 +191,7 @@ def render_multi_input_page(textbook_master):
 
                                     st.divider()
                                     
-                                    num_quizzes = st.number_input("💯 小テスト実施回数", min_value=0, max_value=5, value=0, step=1, key=f"num_q_{i}")
-                                    quiz_records = []
-                                    w_nums_for_sheet_list = []
-                                    current_quiz_pts = 0 
                                     
-                                    if num_quizzes > 0:
-                                        for q_idx in range(num_quizzes):
-                                            with st.container(border=True):
-                                                st.write(f"**【小テスト {q_idx + 1}】**")
-                                                q_name = st.selectbox(f"テストの種類", text_options, index=None, placeholder="テキストを選択", key=f"q_name_{i}_{q_idx}")
-                                                target_chap = st.number_input(f"実施した章/範囲", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
-                                                w_nums = st.text_input(f"ミス問題番号", key=f"w_{i}_{q_idx}")
-                                                
-                                                score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
-                                                quiz_records.append({
-                                                    "quiz_name": q_name or "不明",  # 👈 選んだテキスト名を記録！
-                                                    "unit": target_chap, 
-                                                    "score": score
-                                                })
-                                                if w_nums:
-                                                    w_nums_for_sheet_list.append(w_nums)
-                                                current_quiz_pts += calculate_quiz_points(score)
-                                    
-                                    w_nums_for_sheet = ",".join(w_nums_for_sheet_list)
-                                    motivation_rank = calculate_motivation_rank(current_hw_rate, current_quiz_pts)
-
-                                    st.divider()
                                     # 💡 改善: 集中力とミスへの反応の評価を追加！
                                     st.write("🧠 **授業中の様子・評価**")
                                     col_eval1, col_eval2 = st.columns(2)
