@@ -235,7 +235,7 @@ def render_multi_input_page(textbook_master):
                                         "w_nums_for_sheet": w_nums_for_sheet, "attendance": attendance,
                                         "late_time": late_time, "concentration": concentration or "-", "reaction": reaction or "-",
                                         "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover,
-                                        "assigned_p": assigned_p, "completed_p": completed_p,
+                                        "assigned_p": 0, "completed_p": 0, "advanced_p_str": advanced_p_str,
                                         "motivation_rank": motivation_rank, 
                                         "next_hw_text": selected_hw_text or "-", 
                                         "next_hw_pages": next_hw_pages_str
