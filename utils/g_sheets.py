@@ -97,7 +97,14 @@ def save_seating_data(seating_dict):
 def get_last_page_from_sheet(name):
     df = load_all_data(name)
     if not df.empty and 'ページ数' in df.columns:
-        return int(df['ページ数'].iloc[-1])
+        last_page = df['ページ数'].iloc[-1]
+    
+    try:
+        # 昔のデータ（純粋な数字）なら、今まで通り整数にする
+        return int(last_page)
+    except ValueError:
+        # 新しいデータ（「P.10〜20」など）や「-」なら、無理に数字にせずそのまま文字として返す
+        return str(last_page)
     return 0
 def save_to_spreadsheet(name, subject, text_name, advanced_p, quiz_records, date, teacher_name="未入力", class_type="1:1", attendance="出席（通常）", class_slot="-", advice="-", parent_msg="-", next_handover="-", assigned_p=0, completed_p=0, motivation_rank=0, next_hw_text="-", next_hw_pages=0, late_time="-", concentration="-", reaction="-"):
     print(f"🌟🌟🌟 保存処理スタート！ 生徒名: {name} 🌟🌟🌟") # 👈 この1行を追加！
