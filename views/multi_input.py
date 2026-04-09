@@ -264,7 +264,7 @@ def render_multi_input_page(textbook_master):
                                 subject=data.get("subject", ""),
                                 text_name=data.get("text_name_str", data.get("text_name", "")), # 👈 複数テキストの名前に対応
                                 advanced_p=data.get("advanced_p_str", ""),                      # 👈 「P.10〜20」などの新しい進捗に対応
-                                quiz_records=data.get("quiz_records", []),
+                                quiz_records=[]
                                 date=date, 
                                 teacher_name=teacher_name,
                                 class_type=class_type,
