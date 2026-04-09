@@ -135,7 +135,8 @@ def save_to_spreadsheet(name, subject, text_name, advanced_p, quiz_records, date
                 worksheet.append_row([date_str, name, subject, text_name, advanced_p, f"第{q['unit']}章", q['score'], "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, next_hw_text, next_hw_pages, late_time, concentration, reaction])
         return True
     except Exception as e:
-        print(f"スプレッドシート保存エラー: {e}") # 万が一のエラー時に原因をターミナルに出す親切設計
+        import streamlit as st
+        st.error(f"🚨 スプレッドシートの書き込みでエラーが発生しました: {e}")
         return False
 def update_student_homework_rate(name):
     from utils.calc_logic import calculate_quiz_points, calculate_motivation_rank
