@@ -36,6 +36,11 @@ def render_multi_input_page(textbook_master):
         st.session_state["cached_teacher_names"] = get_all_teacher_names()
     teacher_names = st.session_state["cached_teacher_names"]
 
+    if "cached_text_options" not in st.session_state:
+        st.session_state["cached_text_options"] = list(get_textbook_master().keys())
+    text_options = st.session_state["cached_text_options"]
+
+
     if record_type == "📖 授業":
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.5, 2])
@@ -132,7 +137,7 @@ def render_multi_input_page(textbook_master):
                                     # 🌟 さらに改善: 複数テキスト対応＆個別の進捗入力
                                     st.write("📚 **使用テキストと進捗**")
                                     # textbook_master から最新のリストを取得
-                                    text_options = list(get_textbook_master().keys())
+                                    #text_options = list(get_textbook_master().keys())
                                     selected_texts = st.multiselect("使用テキスト (複数可)", text_options, key=f"texts_{i}")
                                     
                                     advanced_p_list = []
@@ -203,7 +208,7 @@ def render_multi_input_page(textbook_master):
                                     st.divider()
 
                                     st.write("🚀 **次回の宿題指示**")
-                                    hw_text_options = ["🆕 新規テキスト入力"] + list(get_textbook_master().keys())
+                                    hw_text_options = ["🆕 新規テキスト入力"] + text_options
                                     selected_hw_text = st.selectbox("次回の宿題テキスト", hw_text_options, index=None, placeholder="テキストを選択", key=f"hw_text_{i}")
 
                                     if selected_hw_text == "🆕 新規テキスト入力":
@@ -211,6 +216,8 @@ def render_multi_input_page(textbook_master):
                                         if new_text_name:
                                             add_new_textbook(new_text_name)
                                             selected_hw_text = new_text_name
+                                            if "cached_text_options" in st.session_state:
+                                                del st.session_state["cached_text_options"]
 
                                     st.write("宿題の範囲")
                                     n_s_col, n_e_col = st.columns(2)
@@ -246,7 +253,7 @@ def render_multi_input_page(textbook_master):
 
                 st.info(f"【裏側チェック】現在の生徒数: {num_students}人 / 集めたデータ: {len(input_data_list)}件")
                 st.write(input_data_list)
-                
+
                 if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
                     with st.status("データを保存中...", expanded=True) as status:
                         for data in input_data_list:
