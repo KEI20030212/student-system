@@ -1,19 +1,25 @@
 import streamlit as st
 import pandas as pd
+import time # 🌟 APIエラー対策
+import gspread # 🌟 APIエラー対策
 from utils.g_sheets import (
-    get_all_student_names,
     load_all_data,
-    load_raw_data,          # 👈 履歴を直接いじるためのデータ取得！
-    overwrite_spreadsheet   # 👈 編集したデータを上書き保存する魔法！
+    load_raw_data,          
+    overwrite_spreadsheet   
 )
 
-def render_analysis_page():
-    st.header("📊 個別分析・履歴・振替管理")
-    student_names = get_all_student_names()
-    name = st.selectbox("👤 分析する生徒を選択", ["-- 選択 --"] + student_names)
-    if name == "-- 選択 --": st.stop()
+# 🌟 変更: 親から name を受け取るようにしました！
+def render_analysis_page(name):
+    # 🌟 APIエラー対策付きの読み込み
+    df_history = pd.DataFrame()
+    with st.spinner("📊 データを取得中..."):
+        for attempt in range(3):
+            try:
+                df_history = load_all_data(name)
+                break
+            except Exception:
+                if attempt < 2: time.sleep(2)
 
-    df_history = load_all_data(name)
     if not df_history.empty and '出欠' in df_history.columns:
         absent_count = len(df_history[df_history['出欠'] == '欠席（後日振替あり）'])
         makeup_count = len(df_history[df_history['出欠'] == '出席（振替授業を消化）'])
@@ -26,20 +32,43 @@ def render_analysis_page():
     tab_report, tab_history = st.tabs(["📊 グラフ＆レポート", "📚 過去の履歴 (直接編集)"])
 
     with tab_report:
-        if df_history.empty: st.stop()
-        df_history['日時'] = pd.to_datetime(df_history['日時'], format='mixed')
-        df_history = df_history.sort_values('日時')
-        col_g1, col_g2 = st.columns(2)
-        with col_g1: st.line_chart(data=df_history, x="日時", y="ページ数")
-        with col_g2:
-            df_history['数値点数'] = pd.to_numeric(df_history['点数'], errors='coerce')
-            df_quiz = df_history.dropna(subset=['数値点数']).copy()
-            if not df_quiz.empty: st.bar_chart(data=df_quiz, x="単元", y="数値点数")
+        if df_history.empty: 
+            st.info("データがありません。")
+        else:
+            df_history['日時'] = pd.to_datetime(df_history['日時'], format='mixed')
+            df_history = df_history.sort_values('日時')
+            col_g1, col_g2 = st.columns(2)
+            with col_g1: 
+                st.markdown("**📖 ページ進捗グラフ**")
+                st.line_chart(data=df_history, x="日時", y="ページ数")
+            with col_g2:
+                st.markdown("**💯 単元別小テスト点数**")
+                df_history['数値点数'] = pd.to_numeric(df_history['点数'], errors='coerce')
+                df_quiz = df_history.dropna(subset=['数値点数']).copy()
+                if not df_quiz.empty: st.bar_chart(data=df_quiz, x="単元", y="数値点数")
 
     with tab_history:
-        raw_df = load_raw_data(name)
+        # 🌟 APIエラー対策付きの生データ読み込み
+        raw_df = pd.DataFrame()
+        for attempt in range(3):
+            try:
+                raw_df = load_raw_data(name)
+                break
+            except Exception:
+                if attempt < 2: time.sleep(2)
+
         if not raw_df.empty:
+            st.info("💡 以下の表のセルを直接クリックして書き換え、下の「上書き保存」ボタンを押してください。")
             edited_df = st.data_editor(raw_df, num_rows="dynamic", use_container_width=True)
+            
             if st.button("💾 上書き保存", type="primary"): 
-                overwrite_spreadsheet(name, edited_df)
-                st.success("✨ データを上書き保存しました！") # 👈 保存成功のメッセージをオマケでつけました！
+                with st.spinner("☁️ データを上書き保存中...（混雑時は自動で再試行します）"):
+                    # 🌟 APIエラー対策付きの保存
+                    for attempt in range(3):
+                        try:
+                            overwrite_spreadsheet(name, edited_df)
+                            st.success("✨ データを上書き保存しました！")
+                            break
+                        except Exception:
+                            if attempt < 2: time.sleep(2)
+                            else: st.error("保存に失敗しました。時間をおいてやり直してください。")
