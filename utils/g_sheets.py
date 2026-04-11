@@ -457,16 +457,29 @@ def load_test_scores():
 def load_board_message():
     """掲示板のメッセージを取得する"""
     gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID)
-    try:
-        ws = sh.worksheet("設定_掲示板")
-    except:
-        ws = sh.add_worksheet(title="設定_掲示板", rows="10", cols="2")
-        ws.update_cell(1, 1, "メッセージ")
-        ws.update_cell(2, 1, "本日の連絡事項はありません。")
-    
-    val = ws.cell(2, 1).value
-    return val if val else "本日の連絡事項はありません。"
+    for attempt in range(3):
+        try:
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            
+            # 💡 改善ポイント：元の「except:」だと全てのエラーを飲み込んでしまうので、
+            # 「シートが見つからないエラー」の時だけ新しくシートを作るように限定しました！
+            try:
+                ws = sh.worksheet("設定_掲示板")
+            except gspread.exceptions.WorksheetNotFound: 
+                ws = sh.add_worksheet(title="設定_掲示板", rows="10", cols="2")
+                ws.update_cell(1, 1, "メッセージ")
+                ws.update_cell(2, 1, "本日の連絡事項はありません。")
+            
+            val = ws.cell(2, 1).value
+            return val if val else "本日の連絡事項はありません。"
+            
+        except gspread.exceptions.APIError:
+            # Googleが悲鳴を上げたら（APIエラー）
+            if attempt < 2:
+                time.sleep(2) # 2秒深呼吸してやり直し
+            else:
+                # 3回やってもダメだった場合は、システム全体が止まらないように仮の文字を返す
+                return "⚠️ 現在システムが混み合っています。数分待ってから画面を更新（リロード）してください。"
 def save_board_message(message):
     """掲示板のメッセージを保存する"""
     gc = get_gc_client()
