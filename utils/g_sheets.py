@@ -994,3 +994,37 @@ def load_quiz_data_from_dedicated_sheet(student_name):
         return df[df['名前'] == student_name]
     except Exception as e:
         return pd.DataFrame()
+
+def load_daily_class_record(student_name, target_date_str):
+    """
+    生徒個別のシートから、指定された日付の授業記録を1行分（辞書型）で返す関数。
+    target_date_str は "YYYY/MM/DD" の形式を想定。
+    """
+    try:
+        gc = get_gc_client() 
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        return pd.DataFrame(sh.worksheet(student_name).get_all_records())
+        
+        if df.empty:
+            return {}
+
+        # 「日時」列を比較しやすいように "YYYY/MM/DD" フォーマットに変換
+        # （時間にばらつきがあっても日付だけでマッチングできるようにします）
+        df['日時_Date'] = pd.to_datetime(df['日時'], errors='coerce').dt.strftime("%Y/%m/%d")
+        
+        # ターゲット日付も同じ形式に揃える
+        target_formatted = pd.to_datetime(target_date_str).strftime("%Y/%m/%d")
+        
+        # 日付が一致する行を抽出
+        daily_data = df[df['日時_Date'] == target_formatted]
+        
+        if not daily_data.empty:
+            # 同じ日に複数コマあった場合、最新のもの（一番下の行）を取得する
+            return daily_data.iloc[-1].to_dict()
+        else:
+            return {}
+            
+    except Exception as e:
+        print(f"授業記録の取得エラー: {e}")
+        return {}
