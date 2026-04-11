@@ -23,6 +23,7 @@ from views.account_manager import render_account_manager_page
 from views.message_sender import render_message_sender_page
 from views.salary_combined import render_salary_combined_page
 from views.dashboard_combined import render_combined_dashboard_page
+from views.student_portal import render_student_portal_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
@@ -97,9 +98,10 @@ def main():
         "📝 授業・自習記録の入力 (出欠対応)", 
         "🖨️ 小テスト作成・印刷",
         "🏫 教室・学習状況ダッシュボード",
-        "👤 生徒詳細 ＆ テスト成績",
+        "👤 生徒個別ポータル",
+        #"👤 生徒詳細 ＆ テスト成績",
         #"🌐 クラス全体ダッシュボード",
-        "📊 個別分析・履歴・振替管理",
+        #"📊 個別分析・履歴・振替管理",
         "📝 小テスト進捗マップ",
         #"📊 自習時間ランキング",
         #"💴 自分の給与確認",
@@ -135,12 +137,13 @@ def main():
     #elif page == "✅ 本日の出欠・座席表": render_attendance_seat_page()　　#home.pyに統合
     elif page == "📝 授業・自習記録の入力 (出欠対応)": render_multi_input_page(textbook_master)
     elif page == "🖨️ 小テスト作成・印刷": render_quiz_maker_page()
-    elif page == "👤 生徒詳細 ＆ テスト成績": render_student_details_page()
+    elif page == "👤 生徒個別ポータル": render_student_portal_page()
+    #elif page == "👤 生徒詳細 ＆ テスト成績": render_student_details_page()
     elif page == "🏫 教室・学習状況ダッシュボード":render_combined_dashboard_page()
     #elif page == "🌐 クラス全体ダッシュボード": render_dashboard_page()
     elif page == "📝 小テスト進捗マップ":render_quiz_list_page()
     #elif page == "📊 自習時間ランキング":render_self_study_dashboard()
-    elif page == "📊 個別分析・履歴・振替管理": render_analysis_page(),
+    #elif page == "📊 個別分析・履歴・振替管理": render_analysis_page(),
     # elif page == "💯 小テスト成績・アラート": render_quiz_list_page(textbook_master)
     elif page == "🔍 全生徒の過去ログ検索": render_search_page(),
     #elif page == "💰 給与・交通費ダッシュボード": render_salary_dashboard_page(),
