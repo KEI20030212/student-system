@@ -1004,7 +1004,7 @@ def load_daily_class_record(student_name, target_date_str):
         gc = get_gc_client() 
         sh = gc.open_by_key(SPREADSHEET_ID)
         
-        return pd.DataFrame(sh.worksheet(student_name).get_all_records())
+        df = pd.DataFrame(sh.worksheet(student_name).get_all_records())
         
         if df.empty:
             return {}
