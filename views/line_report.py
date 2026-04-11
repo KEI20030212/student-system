@@ -41,6 +41,7 @@ def render_line_report_page():
         
         if not class_record:
             st.warning(f"⚠️ {date_str} の {selected_student} さんの授業記録が見つかりません。")
+            teacher_name = "（不明）"
             subject = "（未入力）"
             period = "（未入力）"
             progress = "（未入力）"
@@ -49,6 +50,7 @@ def render_line_report_page():
             parent_msg = "（未入力）"
         else:
             # 💡 スプレッドシートの列名からデータを取得
+            teacher_name = class_record.get("担当講師", "（未入力）")
             subject = class_record.get("科目", "（未入力）")
             period = class_record.get("授業コマ", "（未入力）")
             
@@ -61,7 +63,7 @@ def render_line_report_page():
             # 集中力と反応を合体させる
             concentration = class_record.get("集中力", "")
             reaction = class_record.get("反応", "")
-            attitude = f"集中力: {concentration} / 反応: {reaction}" if concentration or reaction else "（未入力）"
+            attitude = f"集中力: {concentration} / ミスへの反応: {reaction}" if concentration or reaction else "（未入力）"
             
             advice = class_record.get("アドバイス", "（特になし）")
             parent_msg = class_record.get("保護者への連絡", "（特になし）")
@@ -105,6 +107,7 @@ def render_line_report_page():
         line_message = f"""保護者様
 
 お世話になっております。本日の {selected_student} さんの授業報告をいたします。
+（担当講師：{teacher_name}）
 
 📅 【授業内容】（{date_str} {period}）
 ・科目：{subject}
