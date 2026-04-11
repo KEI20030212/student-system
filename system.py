@@ -25,6 +25,7 @@ from views.salary_combined import render_salary_combined_page
 from views.dashboard_combined import render_combined_dashboard_page
 from views.student_portal import render_student_portal_page
 from views.quiz_management import render_quiz_management_page
+from views.line_report import render_line_report_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
@@ -110,7 +111,12 @@ def main():
         "💸 給与メニュー",
         "💌 メッセージ送信"
     ]
-    
+
+    if st.session_state['role'] in ['admin', 'owner', 'head_teacher']:
+        menu_options.extend([
+            "📱 LINE用 学習レポート生成"
+        ])
+
     if st.session_state['role'] in ['admin', 'owner']:
         menu_options.extend([
             #"✅ 本日の出欠・座席表",#home.pyに統合
@@ -148,9 +154,10 @@ def main():
     #elif page == "📊 自習時間ランキング":render_self_study_dashboard()
     #elif page == "📊 個別分析・履歴・振替管理": render_analysis_page(),
     # elif page == "💯 小テスト成績・アラート": render_quiz_list_page(textbook_master)
-    elif page == "🔍 全生徒の過去ログ検索": render_search_page(),
+    elif page == "📱 LINE用 学習レポート生成": render_line_report_page()
+    elif page == "🔍 全生徒の過去ログ検索": render_search_page()
     #elif page == "💰 給与・交通費ダッシュボード": render_salary_dashboard_page(),
-    elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page(),
+    elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page()
     # elif page == "💴 月謝（請求額）管理ダッシュボード": render_tuition_dashboard_page()
     #elif page == "💴 自分の給与確認": render_my_salary_page()
     elif page == "💸 給与メニュー": render_salary_combined_page()
