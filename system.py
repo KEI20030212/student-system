@@ -15,12 +15,13 @@ from views.self_study_dashboard import render_self_study_dashboard
 from views.analysis import render_analysis_page
 # from views.quiz_list import render_quiz_list_page
 from views.search_page import render_search_page
-from views.salary_dashboard import render_salary_dashboard_page
+#from views.salary_dashboard import render_salary_dashboard_page
 from views.analytics_dashboard import render_analytics_dashboard_page
 # from views.tuition import render_tuition_dashboard_page
-from views.my_salary import render_my_salary_page
+#from views.my_salary import render_my_salary_page
 from views.account_manager import render_account_manager_page
 from views.message_sender import render_message_sender_page
+from views.salary_combined import render_salary_combined_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
@@ -99,7 +100,8 @@ def main():
         "📊 個別分析・履歴・振替管理",
         "📝 小テスト進捗マップ",
         "📊 自習時間ランキング",
-        "💴 自分の給与確認",
+        #"💴 自分の給与確認",
+        "💸 給与メニュー",
         "💌 メッセージ送信"
     ]
     
@@ -107,7 +109,7 @@ def main():
         menu_options.extend([
             #"✅ 本日の出欠・座席表",#home.pyに統合
             "🔍 全生徒の過去ログ検索",
-            "💰 給与・交通費ダッシュボード",
+            #"💰 給与・交通費ダッシュボード",
             "📈 講師分析ダッシュボード",
             "⚙️ アカウント・システム設定"
             # "💴 月謝（請求額）管理ダッシュボード"  # ←未作成
@@ -139,10 +141,11 @@ def main():
     elif page == "📊 個別分析・履歴・振替管理": render_analysis_page(),
     # elif page == "💯 小テスト成績・アラート": render_quiz_list_page(textbook_master)
     elif page == "🔍 全生徒の過去ログ検索": render_search_page(),
-    elif page == "💰 給与・交通費ダッシュボード": render_salary_dashboard_page(),
+    #elif page == "💰 給与・交通費ダッシュボード": render_salary_dashboard_page(),
     elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page(),
     # elif page == "💴 月謝（請求額）管理ダッシュボード": render_tuition_dashboard_page()
-    elif page == "💴 自分の給与確認": render_my_salary_page()
+    #elif page == "💴 自分の給与確認": render_my_salary_page()
+    elif page == "💸 給与メニュー": render_salary_combined_page()
     elif page == "💌 メッセージ送信": render_message_sender_page()
     elif page == "⚙️ アカウント・システム設定": render_account_manager_page()
 
