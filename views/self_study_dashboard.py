@@ -2,90 +2,52 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
+import time # 🌟 APIエラー対策用
+import gspread # 🌟 APIエラー対策用
 from utils.g_sheets import load_self_study_data, load_entire_log_data, get_gc_client, SPREADSHEET_ID
 
 @st.cache_data(ttl=600)
 def get_all_student_grades():
-    """生徒情報から学年データを取得する魔法"""
-    try:
-        gc = get_gc_client()
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        ws = sh.worksheet("設定_生徒情報")
-        return pd.DataFrame(ws.get_all_records())
-    except:
-        return pd.DataFrame()
+    """生徒情報から学年データを取得する魔法（APIエラー対策版）"""
+    gc = get_gc_client()
+    for attempt in range(3):
+        try:
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            ws = sh.worksheet("設定_生徒情報")
+            return pd.DataFrame(ws.get_all_records())
+        except gspread.exceptions.APIError:
+            if attempt < 2:
+                time.sleep(2)
+            else:
+                return pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
 
 def render_self_study_dashboard():
     # --- 🖨️ 印刷用の魔法（青いバーと無駄な余白を徹底的に排除！） ---
     st.markdown("""
         <style>
         @media print {
-            /* 1. 【原因撃破】青いバー（st.infoなどのアラート箱）をブロックごと完全消去！ */
-            [data-testid="stAlert"] {
-                display: none !important;
-            }
-            
-            /* 万が一カスタムHTMLで作られた背景だった場合のための保険 */
-            * {
-                background-color: transparent !important;
-            }
-
-            /* 2. ページ上部の大きな余白を完全にゼロにして、上に詰める！ */
-            .main .block-container {
-                padding-top: 0 !important;
-                margin-top: 0 !important;
-                gap: 0 !important; /* Streamlit特有の要素間の隙間を消す */
-                max-width: 100% !important;
-            }
-
-            /* 3. Streamlitの標準ヘッダー、サイドバーを消去 */
-            header, [data-testid="stHeader"], [data-testid="stSidebar"], footer {
-                display: none !important;
-            }
-
-            /* 4. コントローラー類、表、不要なコンテナを「スペースごと」消去 */
-            .stButton, [data-testid="stSelectbox"], [data-testid="stMultiSelect"], 
-            [data-testid="stRadio"], [data-testid="stDataFrame"], [data-testid="stSpinner"], hr {
-                display: none !important;
-            }
-
-            /* 5. 既存の見出し（H1〜H6）や説明文（p）を「スペースごと」完全消去 */
-            h1, h2, h3, h4, h5, h6, p, [data-testid="stMarkdownContainer"] p {
-                display: none !important;
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-
-            /* 6. 特注タイトルの設定（極限まで上に配置！） */
-            .print-title { 
-                display: block !important; 
-                text-align: center !important;
-                color: black !important;
-                font-size: 26px !important;
-                font-weight: bold !important;
-                margin-top: 0px !important; /* 上の無駄な空間をゼロに */
-                margin-bottom: 10px !important; /* グラフとの隙間も詰める */
-                padding: 0 !important;
-            }
-
-            /* 7. Altairグラフのコンテナ設定 */
-            [data-testid="stArrowVegaLiteChart"] {
-                display: block !important;
-                width: 100% !important;
-                margin: 0 auto !important;
-                padding: 0 !important;
-            }
+            [data-testid="stAlert"] { display: none !important; }
+            * { background-color: transparent !important; }
+            .main .block-container { padding-top: 0 !important; margin-top: 0 !important; gap: 0 !important; max-width: 100% !important; }
+            header, [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
+            .stButton, [data-testid="stSelectbox"], [data-testid="stMultiSelect"], [data-testid="stRadio"], [data-testid="stDataFrame"], [data-testid="stSpinner"], hr { display: none !important; }
+            h1, h2, h3, h4, h5, h6, p, [data-testid="stMarkdownContainer"] p { display: none !important; margin: 0 !important; padding: 0 !important; }
+            .print-title { display: block !important; text-align: center !important; color: black !important; font-size: 26px !important; font-weight: bold !important; margin-top: 0px !important; margin-bottom: 10px !important; padding: 0 !important; }
+            [data-testid="stArrowVegaLiteChart"] { display: block !important; width: 100% !important; margin: 0 auto !important; padding: 0 !important; }
         }
         </style>
     """, unsafe_allow_html=True)
 
     col1, col2 = st.columns([4, 1])
     with col1:
-        st.header("📊 学習時間ダッシュボード")
+        st.subheader("📊 学習時間ダッシュボード") # 親とバランスを取るためサブヘッダーに変更
     with col2:
         if st.button("🖨️ グラフを印刷"):
             components.html("<script>window.parent.print();</script>", height=0)
         st.caption("※スマホはブラウザの「共有」メニューからプリントしてください")
+    
     st.write("自習時間と授業時間を合算したり、学年ごとに絞り込んだりできる究極のグラフです🔥")
 
     with st.spinner("あらゆる学習データをかき集めています..."):
@@ -173,13 +135,12 @@ def render_self_study_dashboard():
             return
 
         # ==========================================
-        # 4. グラフの描画（✨テキスト付き✨）
+        # 4. グラフの描画
         # ==========================================
         if merged.empty or merged['合計時間(分)'].sum() == 0:
             st.info("指定された条件のデータがありませんでした。")
             return
 
-        # 👑 特注タイトルの作成！ 
         grade_display = " / ".join(selected_grades) if len(selected_grades) <= 4 else "全学年"
         title_html = f"""
         <div class='print-title'>
@@ -188,15 +149,11 @@ def render_self_study_dashboard():
         """
         st.markdown(title_html, unsafe_allow_html=True)
 
-        # 1. グラフを描く前に、データを「合計時間が多い順」に並び替える！
         merged = merged.sort_values(by='合計時間(分)', ascending=False)
-        
-        # 2. 並び替えたあとの「生徒名のリスト」を作る
         sorted_students = merged['生徒名'].tolist() 
 
         chart_height = max(300, len(merged) * 45)
         
-        # 3. Y軸の設定の「sort=」の部分を、さっき作ったリストに書き換える！
         y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=14))
 
         if mode == "自習時間 ＋ 授業時間":
@@ -238,7 +195,7 @@ def render_self_study_dashboard():
         # ==========================================
         # 5. 詳細データ表の表示
         # ==========================================
-        st.markdown("### 📋 詳細データ") # これも印刷時には消えます！
+        st.markdown("### 📋 詳細データ")
         display_df = merged.sort_values(by='合計時間(分)', ascending=False).reset_index(drop=True)
         display_df.index = display_df.index + 1
         

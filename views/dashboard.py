@@ -3,17 +3,17 @@ import pandas as pd
 import altair as alt
 import datetime 
 import time 
+import gspread # 🌟 APIエラーを検知するために追加
 
-# 🌟 変更点1：先ほど作った新しい「一括取得関数」を呼び出す！
 from utils.g_sheets import (
     get_all_student_names,
-    get_all_student_info_dict, # 👈 これに変更しました
+    get_all_student_info_dict,
     load_all_data
 )
 from utils.calc_logic import calculate_quiz_points 
 
 def render_dashboard_page():
-    st.header("🌐 クラス全体ダッシュボード")
+    st.subheader("🌐 クラス全体ダッシュボード") # 親にヘッダーがあるので少し小さく変更
 
     student_names = get_all_student_names()
     if not student_names: return
@@ -21,20 +21,16 @@ def render_dashboard_page():
     all_grades = ["すべて"]
     all_subjects = ["すべて"]
     
-    # 🌟 変更点2：ループで1人ずつ通信するのをやめ、1回で全員分を取得する！
     with st.spinner("☁️ 生徒基本データを一括読み込み中...（通信は1回だけ！一瞬で終わります🚀）"):
-        student_info_dict = get_all_student_info_dict() # 👈 通信はここで1回だけ！
+        student_info_dict = get_all_student_info_dict() 
         
-        # あとは通信なし（Pythonのメモリ上）で爆速で処理します
         for s_name in student_names:
-            info = student_info_dict.get(s_name, {}) # エラー防止のため .get() を使用
+            info = student_info_dict.get(s_name, {})
             
-            # 学年リストの作成
             grade = info.get('学年', '未設定')
             if grade not in all_grades and grade != "未設定" and str(grade).strip() != "":
                 all_grades.append(grade)
                 
-            # 科目リストの作成
             subject_raw = str(info.get('受講科目', '未設定'))
             if subject_raw != "未設定" and subject_raw.strip() != "":
                 for sub in subject_raw.replace('、', ',').split(','):
@@ -42,17 +38,15 @@ def render_dashboard_page():
                     if sub and sub not in all_subjects:
                         all_subjects.append(sub)
             
-    # 🎛️ 学年と科目のコントローラーを横並びで配置
     col1, col2 = st.columns(2)
     with col1:
         selected_grade = st.selectbox("🎯 学年で絞り込み", all_grades)
     with col2:
         selected_subject = st.selectbox("📚 科目で絞り込み", all_subjects)
     
-    # 🎯 ターゲット生徒の絞り込み
     target_students = []
     for s in student_names:
-        info = student_info_dict.get(s, {}) # 🌟 ここも .get() に変更
+        info = student_info_dict.get(s, {})
         
         match_grade = (selected_grade == "すべて" or info.get('学年') == selected_grade)
         student_subject_str = str(info.get('受講科目', ''))
@@ -65,12 +59,11 @@ def render_dashboard_page():
         st.warning("該当する生徒がいません。")
         return
 
-    # 🗺️ マトリクス表示
-    st.subheader(f"🗺️ 教室全体 俯瞰マトリクス ({selected_grade} / {selected_subject})")
+    st.markdown(f"**🗺️ 教室全体 俯瞰マトリクス ({selected_grade} / {selected_subject})**")
     
     matrix_data = []
     for s_name in target_students:
-        info = student_info_dict.get(s_name, {}) # 🌟 ここも .get() に変更
+        info = student_info_dict.get(s_name, {})
         matrix_data.append({
             "生徒名": s_name,
             "能力 (X)": int(info.get('能力', 3) or 3),
@@ -91,13 +84,25 @@ def render_dashboard_page():
     current_month_str = datetime.date.today().strftime("%Y年%m月")
     summary_data = []
     
-    # 🌟 成績データの集計ループ（ここは各自のシートを開くため、息継ぎを残します！）
-    with st.spinner(f'☁️ {current_month_str} のデータを集計中...'):
+    with st.spinner(f'☁️ {current_month_str} のデータを集計中...（※途中でAPIが混み合っても自動復帰します）'):
         progress_bar_data = st.progress(0)
         total_targets = len(target_students)
         
         for i, s_name in enumerate(target_students):
-            df = load_all_data(s_name)
+            # 🌟 APIエラー対策：各生徒のデータ取得時に最大3回リトライ！
+            df = pd.DataFrame()
+            for attempt in range(3):
+                try:
+                    df = load_all_data(s_name)
+                    break # 成功したらループを抜ける
+                except gspread.exceptions.APIError:
+                    if attempt < 2:
+                        time.sleep(2) # 2秒深呼吸して再チャレンジ
+                    else:
+                        st.toast(f"{s_name}さんのデータ取得に失敗しました", icon="⚠️")
+                except Exception:
+                    break # その他のエラーは抜ける
+            
             adv_pages, avg_score, total_points = 0, None, 0
             
             if not df.empty:
@@ -127,17 +132,14 @@ def render_dashboard_page():
                 "累計ポイント": total_points
             })
             
-            # APIエラー回避の息継ぎ（各生徒の成績シートへのアクセス用）
-            time.sleep(0.5)
-            # 進捗バーの更新
+            time.sleep(0.5) # 元からある息継ぎ
             progress_bar_data.progress((i + 1) / total_targets)
             
-        progress_bar_data.empty() # 完了したらバーを消す
+        progress_bar_data.empty()
 
-    # --- 以下は表示コード ---
     if summary_data:
         df_summary = pd.DataFrame(summary_data)
-        st.subheader(f"🏆 累計獲得ポイント ランキング TOP3 ({selected_grade} / {selected_subject})")
+        st.markdown(f"**🏆 累計獲得ポイント ランキング TOP3 ({selected_grade} / {selected_subject})**")
         df_ranking = df_summary.sort_values(by="累計ポイント", ascending=False).head(3).reset_index(drop=True)
         
         cols = st.columns(3)
@@ -148,7 +150,7 @@ def render_dashboard_page():
                 st.markdown(f"<div style='background-color:{colors[i]}15; padding:15px; border-radius:10px; border: 2px solid {colors[i]}; text-align:center;'><h3>{medals[i]}</h3><h2>{df_ranking.loc[i, '生徒名']}</h2><h1>{df_ranking.loc[i, '累計ポイント']} <span style='font-size:0.4em;'>pt</span></h1></div>", unsafe_allow_html=True)
 
         st.divider()
-        st.subheader(f"📊 {current_month_str} の状況 ({selected_grade} / {selected_subject})")
+        st.markdown(f"**📊 {current_month_str} の状況 ({selected_grade} / {selected_subject})**")
         c1, c2 = st.columns(2)
         
         with c1: 
