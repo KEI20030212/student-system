@@ -2,94 +2,127 @@ import streamlit as st
 import datetime
 import pandas as pd
 
-# 既存のutilsから必要な関数をインポート（環境に合わせて調整してください）
+# ==========================================
+# 🌟 utils/g_sheets.py から必要な関数を呼び出し
+# ==========================================
 from utils.g_sheets import (
     get_all_student_names,
-    load_self_study_data,
     load_quiz_data_from_dedicated_sheet,
-    get_textbook_master
+    load_daily_class_record  # ⚠️ 新しく追加が必要な関数（指定日の授業記録を読み込む）
 )
 
 def render_line_report_page():
-    st.header("📱 LINE用 学習レポート生成")
-    st.write("各ダッシュボードのデータを集約して、保護者へ送るLINEメッセージを自動作成します✨")
+    st.header("📱 LINE用 授業報告レポート生成")
+    st.write("生徒と日付を選択するだけで、LINE送信用のレポートを自動生成します✨")
 
-    # 1. 生徒の選択
+    # ==========================================
+    # 1. 生徒と日付の選択エリア
+    # ==========================================
+    col1, col2 = st.columns(2)
     student_names = get_all_student_names()
-    selected_student = st.selectbox("👤 レポートを作成する生徒を選択", ["-- 選択 --"] + student_names)
+    selected_student = col1.selectbox("👤 生徒を選択", ["-- 選択 --"] + student_names)
+    
+    # 日付選択（デフォルトは今日）
+    selected_date = col2.date_input("📅 授業日を選択", datetime.date.today())
 
     if selected_student == "-- 選択 --":
+        st.info("👆 レポートを作成する生徒と日付を選択してください。")
         st.stop()
 
     st.divider()
 
-    with st.spinner("データを集約中..."):
-        # ==========================================
-        # 📊 データの取得ロジック
-        # ==========================================
-        
-        # ① 小テストデータの取得（quiz_dashboardのロジックを応用）
-        df_quiz = load_quiz_data_from_dedicated_sheet(selected_student)
-        latest_quiz_text = "最近の小テスト記録はありません。"
-        if not df_quiz.empty:
-            df_quiz['日時'] = pd.to_datetime(df_quiz['日時'], format='mixed', errors='coerce')
-            latest_quiz = df_quiz.loc[df_quiz['日時'].idxmax()]
-            latest_quiz_text = f"【{latest_quiz['テキスト']} {latest_quiz['単元']}】: {latest_quiz['点数']}点 💮"
+    with st.spinner("スプレッドシートからデータを取得中..."):
+        date_str = selected_date.strftime("%Y/%m/%d")
 
-        # ② 学習時間の取得（self_study_dashboardのロジックを応用）
-        df_self_study = load_self_study_data()
-        study_time_text = "今月の自習記録はまだありません。"
-        if not df_self_study.empty:
-            df_self_study['日付'] = pd.to_datetime(df_self_study['日付'], errors='coerce')
-            current_month = datetime.date.today().strftime('%Y年%m月')
-            df_ss_filtered = df_self_study[(df_self_study['生徒名'] == selected_student) & 
-                                           (df_self_study['日付'].dt.strftime('%Y年%m月') == current_month)]
+        # ==========================================
+        # 📊 ① 授業記録の自動取得（生徒別シートから）
+        # ==========================================
+        class_record = load_daily_class_record(selected_student, date_str)
+        
+        if not class_record:
+            st.warning(f"⚠️ {date_str} の {selected_student} さんの授業記録が見つかりません。")
+            subject = "（未入力）"
+            period = "（未入力）"
+            progress = "（未入力）"
+            attitude = "（未入力）"
+            advice = "（未入力）"
+            parent_msg = "（未入力）"
+        else:
+            # 💡 スプレッドシートの列名からデータを取得
+            subject = class_record.get("科目", "（未入力）")
+            period = class_record.get("授業コマ", "（未入力）")
             
-            if not df_ss_filtered.empty:
-                df_ss_filtered['自習時間(分)'] = pd.to_numeric(df_ss_filtered['自習時間(分)'], errors='coerce').fillna(0)
-                total_minutes = df_ss_filtered['自習時間(分)'].sum()
-                hours = total_minutes // 60
-                mins = total_minutes % 60
-                study_time_text = f"今月の自習時間: 合計 {int(hours)}時間{int(mins)}分 ⏱️"
+            # テキスト・単元・終了ページを合体させて、綺麗な「進捗」の文章にする
+            text_name = class_record.get("テキスト", "")
+            unit = class_record.get("単元", "")
+            end_page = class_record.get("終了ページ", "")
+            progress = f"{text_name} {unit}（〜{end_page}ページまで）" if text_name else "（未入力）"
+            
+            # 集中力と反応を合体させる
+            concentration = class_record.get("集中力", "")
+            reaction = class_record.get("反応", "")
+            attitude = f"集中力: {concentration} / 反応: {reaction}" if concentration or reaction else "（未入力）"
+            
+            advice = class_record.get("アドバイス", "（特になし）")
+            parent_msg = class_record.get("保護者への連絡", "（特になし）")
 
         # ==========================================
-        # 📝 先生の手動入力エリア（今日の特記事項）
+        # 📝 ② 小テスト結果の自動取得と判定
         # ==========================================
-        st.subheader("✍️ 今日の授業ハイライト")
-        c1, c2 = st.columns(2)
-        progress = c1.text_input("📚 本日の進捗 (例: 英語 P.10~15)", value="")
-        attitude = c2.selectbox("🧠 授業中の様子", ["非常に集中していた", "少し疲れが見えた", "質問が多く積極的だった", "ミスに悔しがり改善しようとしていた"], index=0)
-        teacher_comment = st.text_area("🗣️ 先生からのコメント (褒めポイントやアドバイス)", height=100)
+        df_quiz = load_quiz_data_from_dedicated_sheet(selected_student)
+        quiz_text = "小テストは実施していません" # デフォルト値
 
-        st.divider()
+        if not df_quiz.empty:
+            # 日時列を日付型に変換して比較する
+            df_quiz['日時'] = pd.to_datetime(df_quiz['日時'], format='mixed', errors='coerce')
+            target_date = pd.to_datetime(selected_date).date()
+            
+            # 選択した日付と完全に一致する小テストデータを抽出
+            daily_quiz = df_quiz[df_quiz['日時'].dt.date == target_date]
+            
+            if not daily_quiz.empty:
+                quiz_results = []
+                for _, row in daily_quiz.iterrows():
+                    # 💡 もし「授業内でやったものだけ」に絞りたい場合は
+                    # if row.get("実施形態") == "授業内": などで分岐させます
+                    text_name = row.get('テキスト', '不明')
+                    chap_name = row.get('単元', '不明') # 既存のquiz_dashboardに合わせて'単元'としています
+                    score = row.get('点数', '不明')
+                    miss_nums = row.get('ミス問題番号', '')
+                    
+                    miss_text = f"（ミス: {miss_nums}）" if miss_nums else "（ミスなし💮）"
+                    quiz_results.append(f"【{text_name} {chap_name}】: {score}点 {miss_text}")
+                
+                # 複数のテストがあった場合にも対応できるように改行でつなぐ
+                if quiz_results:
+                    quiz_text = "\n・".join(quiz_results)
 
         # ==========================================
-        # 📱 LINEメッセージの自動生成
+        # 📱 LINEメッセージの自動出力
         # ==========================================
-        st.subheader("📋 生成されたLINEメッセージ")
+        st.subheader("📋 完成したLINEメッセージ")
         
-        # 今日の日付
-        today_str = datetime.date.today().strftime("%m月%d日")
-
         line_message = f"""保護者様
 
-お世話になっております。本日の {selected_student} さんの学習状況をご報告いたします。
+お世話になっております。本日の {selected_student} さんの授業報告をいたします。
 
-📅 【本日の授業内容】
-・進捗：{progress if progress else "（未入力）"}
+📅 【授業内容】（{date_str} {period}）
+・科目：{subject}
+・進捗：{progress}
 ・様子：{attitude}
 
-💯 【直近の小テスト結果】
-・{latest_quiz_text}
+💯 【小テスト結果】
+・{quiz_text}
 
-📈 【自習の頑張り】
-・{study_time_text}
+🗣️ 【担当講師より（アドバイス等）】
+{advice}
 
-🗣️ 【担当講師より】
-{teacher_comment if teacher_comment else "本日はよく頑張りました！引き続きよろしくお願いいたします。"}
+📢 【ご連絡事項】
+{parent_msg}
 
-ご不明な点がございましたら、お気軽にご連絡ください。"""
+ご不明な点がございましたら、お気軽にご連絡ください。
+引き続きよろしくお願いいたします。"""
 
-        # st.codeを使うと、右上に自動的に「コピー」ボタンが表示されるのでLINEに貼り付けやすいです
+        # そのままコピーできるようにコードブロックで表示
         st.code(line_message, language="text")
-        st.caption("👆 右上のコピーボタンを押して、そのままLINEに貼り付けてください。")
+        st.caption("👆 右上のコピーボタンを押して、そのままLINEに貼り付けて送信できます！")
