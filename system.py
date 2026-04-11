@@ -8,20 +8,21 @@ from views.attendance_seat import render_attendance_seat_page
 from views.multi_input import render_multi_input_page
 from views.quiz_maker import render_quiz_maker_page
 from views.student_details import render_student_details_page
-from views.dashboard import render_dashboard_page
+#from views.dashboard import render_dashboard_page
 from views.quiz_dashboard import render_quiz_list_page
-from views.self_study_dashboard import render_self_study_dashboard
+#from views.self_study_dashboard import render_self_study_dashboard
 # ※まだ作っていない画面はエラー防止のためコメントアウト(#)しています
 from views.analysis import render_analysis_page
 # from views.quiz_list import render_quiz_list_page
 from views.search_page import render_search_page
 #from views.salary_dashboard import render_salary_dashboard_page
 from views.analytics_dashboard import render_analytics_dashboard_page
-# from views.tuition import render_tuition_dashboard_page
+#from views.tuition import render_tuition_dashboard_page
 #from views.my_salary import render_my_salary_page
 from views.account_manager import render_account_manager_page
 from views.message_sender import render_message_sender_page
 from views.salary_combined import render_salary_combined_page
+from views.dashboard_combined import render_combined_dashboard_pag
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
@@ -95,11 +96,12 @@ def main():
         "📢 ホーム・連絡・出席掲示板",
         "📝 授業・自習記録の入力 (出欠対応)", 
         "🖨️ 小テスト作成・印刷",
+        "🏫 教室・学習状況ダッシュボード",
         "👤 生徒詳細 ＆ テスト成績",
-        "🌐 クラス全体ダッシュボード",
+        #"🌐 クラス全体ダッシュボード",
         "📊 個別分析・履歴・振替管理",
         "📝 小テスト進捗マップ",
-        "📊 自習時間ランキング",
+        #"📊 自習時間ランキング",
         #"💴 自分の給与確認",
         "💸 給与メニュー",
         "💌 メッセージ送信"
@@ -134,10 +136,10 @@ def main():
     elif page == "📝 授業・自習記録の入力 (出欠対応)": render_multi_input_page(textbook_master)
     elif page == "🖨️ 小テスト作成・印刷": render_quiz_maker_page()
     elif page == "👤 生徒詳細 ＆ テスト成績": render_student_details_page()
-    elif page == "🌐 クラス全体ダッシュボード": render_dashboard_page()
+    elif page == "🏫 教室・学習状況ダッシュボード":render_combined_dashboard_page()
+    #elif page == "🌐 クラス全体ダッシュボード": render_dashboard_page()
     elif page == "📝 小テスト進捗マップ":render_quiz_list_page()
-    elif page == "📊 自習時間ランキング":render_self_study_dashboard()
-    # 未作成ページ（今後別ファイルで作ったらコメントアウトを外します）
+    #elif page == "📊 自習時間ランキング":render_self_study_dashboard()
     elif page == "📊 個別分析・履歴・振替管理": render_analysis_page(),
     # elif page == "💯 小テスト成績・アラート": render_quiz_list_page(textbook_master)
     elif page == "🔍 全生徒の過去ログ検索": render_search_page(),
