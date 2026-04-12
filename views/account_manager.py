@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from utils.g_sheets import get_all_accounts, add_new_account
+from utils.g_sheets import get_all_accounts, add_new_account, delete_account
 
 def render_account_manager_page():
     # 念のための最強のセキュリティロック（URL等で直接アクセスされた時用）
@@ -90,3 +90,43 @@ def render_account_manager_page():
                     
                     # 画面を再起動して最新のリストを再読み込み
                     st.rerun()
+    # ==========================================
+    # 🌟 3. 新規追加: アカウント削除機能
+    # ==========================================
+    st.divider()
+    st.subheader("🗑️ アカウントの削除")
+    
+    if accounts_dict:
+        # 削除用の選択肢を作成（例: "user01 (田中 太郎)"）
+        delete_options = [f"{uid} ({data.get('講師名', '名無し')})" for uid, data in accounts_dict.items()]
+        
+        with st.form("delete_account_form"):
+            st.warning("⚠️ アカウントを削除すると、そのユーザーはログインできなくなります。この操作は元に戻せません。")
+            selected_to_delete = st.selectbox("削除するアカウントを選択", options=delete_options)
+            
+            # 間違えて消さないようにチェックボックスでワンクッション置く
+            confirm_delete = st.checkbox("本当に削除してよろしいですか？")
+            
+            delete_btn = st.form_submit_button("🗑️ アカウントを削除する", type="primary")
+            
+            if delete_btn:
+                if not confirm_delete:
+                    st.error("⚠️ 削除する場合は「本当に削除してよろしいですか？」にチェックを入れてください。")
+                else:
+                    # 選択肢の文字列 "user01 (田中 太郎)" から、ユーザーID "user01" だけを抽出
+                    target_id = selected_to_delete.split(" ")[0]
+                    
+                    # ログイン中の自分自身のアカウントは消せないようにする（事故防止）
+                    # （※ログインIDのセッション名が 'username' ではない場合は適宜直してください）
+                    if target_id == st.session_state.get('username'): 
+                        st.error("⛔ 自分自身のアカウントは削除できません！")
+                    else:
+                        with st.spinner("アカウントを削除中..."):
+                            success = delete_account(target_id)
+                        
+                        if success:
+                            get_all_accounts(force_refresh=True)
+                            st.session_state['toast_msg'] = f"🗑️ アカウント「{target_id}」を削除しました。"
+                            st.rerun()
+                        else:
+                            st.error("❌ アカウントの削除に失敗しました。")
