@@ -175,7 +175,7 @@ def render_dashboard_page():
         
         with c1: 
             st.write("**📖 進捗ランキング**")
-            st.dataframe(df_summary.sort_values(by="選択期間の進捗(ページ)", ascending=False)[["生徒名", "今月の進捗(ページ)"]], hide_index=True, use_container_width=True)
+            st.dataframe(df_summary.sort_values(by="選択期間の進捗(ページ)", ascending=False)[["生徒名", "選択期間の進捗(ページ)"]], hide_index=True, use_container_width=True)
             
         with c2: 
             st.write("**💯 小テスト平均点**")
