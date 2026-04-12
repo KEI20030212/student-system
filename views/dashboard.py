@@ -107,11 +107,12 @@ def render_dashboard_page():
         
         for i, s_name in enumerate(target_students):
             # 🌟 APIエラー対策：各生徒のデータ取得時に最大3回リトライ！
-            df = pd.DataFrame()
+            df_personal = pd.DataFrame()
+
             max_retries = 4 # 最大4回挑戦する（0, 1, 2, 3）
             for attempt in range(max_retries):
                 try:
-                    df = load_all_data(s_name)
+                    df_personal = pd.DataFrame() = load_all_data(s_name)
                     break 
                 except gspread.exceptions.APIError:
                     if attempt < max_retries - 1:
