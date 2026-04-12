@@ -95,10 +95,6 @@ def render_dashboard_page():
         for attempt in range(3): # ここにもバックオフを入れておくと安心
             try:
                 df_all_quizzes = load_quiz_records()
-                if not df_all_quizzes.empty:
-                    st.write("デバッグ用（列名一覧）:", df_all_quizzes.columns.tolist())
-                else:
-                    st.error("シート『小テスト記録』からデータが読み込めていません")
                 if not df_all_quizzes.empty and '日時' in df_all_quizzes.columns:
                     df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
                 break
@@ -127,6 +123,8 @@ def render_dashboard_page():
                         st.toast(f"{s_name}さんのデータ取得に失敗しました", icon="⚠️")
                 except Exception:
                     break # その他のエラーは抜ける
+            if i == 0 and not df_personal.empty:
+                st.write(f"デバッグ用（{s_name}さんのシートの列名）:", df_personal.columns.tolist())
 
             # B. 小テストとポイントは、共通シート(df_all_quizzes)からその子の分だけ抜き出す
             if not df_all_quizzes.empty and '名前' in df_all_quizzes.columns:
