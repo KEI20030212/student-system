@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from utils.g_sheets import get_all_student_names
 
 # 完成している2つのファイルを部品として読み込む
@@ -8,8 +9,23 @@ from views.analysis import render_analysis_page
 def render_student_portal_page():
     st.header("🏫 生徒個別ポータル")
     
-    # 🌟 親画面で1回だけ生徒一覧を取得
-    student_names = get_all_student_names()
+    # 🌟 変更: 生徒一覧の取得にも Exponential Backoff を適用
+    student_names = []
+    max_retries = 5
+    with st.spinner("生徒データを読み込み中..."):
+        for attempt in range(max_retries):
+            try:
+                student_names = get_all_student_names()
+                # 取得できたらループを抜ける（空っぽのリストが返ってきた場合もエラーではないので抜ける）
+                if student_names is not None: 
+                    break
+            except Exception:
+                pass # エラーが起きても下に進んで待機する
+            
+            # 取得に失敗したら、待機時間を倍にして再チャレンジ (1秒, 2秒, 4秒, 8秒...)
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+                
     if not student_names: 
         st.warning("まだ生徒が登録されていません。")
         return

@@ -26,12 +26,21 @@ def render_student_details_page(selected_student):
         
         # 🌟 APIエラー対策付きの読み込み
         df_test = pd.DataFrame()
-        for attempt in range(3):
+        max_retries = 5
+        for attempt in range(max_retries):
             try:
                 df_test = load_test_scores()
                 break
             except Exception:
-                if attempt < 2: time.sleep(2)
+                if attempt < max_retries - 1: 
+                    time.sleep(2 ** attempt)
+        #APIエラー対策1個目
+        #for attempt in range(3):
+            #try:
+                #df_test = load_test_scores()
+                #break
+            #except Exception:
+                #if attempt < 2: time.sleep(2)
         
         df_student_tests = pd.DataFrame()
         if not df_test.empty:
@@ -56,8 +65,10 @@ def render_student_details_page(selected_student):
                         
                         if st.form_submit_button("💾 基本情報を保存", type="primary"):
                             with st.spinner("☁️ 情報を保存中...（混雑時は自動で再試行します）"):
+                                max_retries_save = 5
+                                for attempt in range(max_retries_save):
                                 # 🌟 APIエラー対策: 保存リトライ
-                                for attempt in range(3):
+                                #for attempt in range(3):
                                     try:
                                         update_student_info(selected_student, new_grade, new_school, new_target, new_subjects, info.get('能力', 3), info.get('やる気', 3), info.get('内申点', 3), info.get('最新偏差値', 50), info.get('宿題履行率', 100))
                                         time.sleep(1) 
@@ -67,7 +78,9 @@ def render_student_details_page(selected_student):
                                         st.rerun()
                                         break
                                     except Exception:
-                                        if attempt < 2: time.sleep(2)
+                                        if attempt < max_retries_save - 1: 
+                                            time.sleep(2 ** attempt)
+                                        #if attempt < 2: time.sleep(2)
                                         else: st.error("通信エラーが発生しました。もう一度お試しください。")
             else:
                 st.info("※プロフィールの編集は教室長のみ可能です。")
@@ -140,7 +153,9 @@ def render_student_details_page(selected_student):
                 
                 if st.button("💾 内申点を登録する", type="primary"):
                     with st.spinner("☁️ 内申点を保存中...（混雑時は自動で再試行します）"):
-                        for attempt in range(3):
+                        max_retries_save = 5
+                        for attempt in range(max_retries_save):
+                        #for attempt in range(3):
                             try:
                                 save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, None, None, None, None, None, None, None, n_pe, n_tech, n_home, n_mus, is_naishin=True)
                                 time.sleep(1)
@@ -150,7 +165,9 @@ def render_student_details_page(selected_student):
                                 st.rerun()
                                 break
                             except Exception:
-                                if attempt < 2: time.sleep(2)
+                                if attempt < max_retries_save - 1: 
+                                    time.sleep(2 ** attempt)
+                                #if attempt < 2: time.sleep(2)
                                 else: st.error("通信エラーが発生しました。もう一度お試しください。")
 
             else:
@@ -199,7 +216,9 @@ def render_student_details_page(selected_student):
 
                 if st.button("💾 この成績を登録する", type="primary"):
                     with st.spinner("☁️ 成績を保存中...（混雑時は自動で再試行します）"):
-                        for attempt in range(3):
+                        max_retries_save = 5
+                        for attempt in range(max_retries_save):
+                        #for attempt in range(3):
                             try:
                                 save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, dev_3, dev_5, pe, tech, home, mus, is_naishin=False)
                                 time.sleep(1)
@@ -209,7 +228,9 @@ def render_student_details_page(selected_student):
                                 st.rerun()
                                 break
                             except Exception:
-                                if attempt < 2: time.sleep(2)
+                                if attempt < max_retries_save - 1: 
+                                    time.sleep(2 ** attempt)
+                                #if attempt < 2: time.sleep(2)
                                 else: st.error("通信エラーが発生しました。もう一度お試しください。")
 
     with tab_view:

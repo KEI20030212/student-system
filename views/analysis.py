@@ -13,12 +13,16 @@ def render_analysis_page(name):
     # 🌟 APIエラー対策付きの読み込み
     df_history = pd.DataFrame()
     with st.spinner("📊 データを取得中..."):
-        for attempt in range(3):
+        max_retries = 5
+        for attempt in range(max_retries):
+        #for attempt in range(3):
             try:
                 df_history = load_all_data(name)
                 break
             except Exception:
-                if attempt < 2: time.sleep(2)
+                if attempt < max_retries - 1: 
+                    time.sleep(2 ** attempt)
+                #if attempt < 2: time.sleep(2)
 
     if not df_history.empty and '出欠' in df_history.columns:
         absent_count = len(df_history[df_history['出欠'] == '欠席（後日振替あり）'])
@@ -50,12 +54,14 @@ def render_analysis_page(name):
     with tab_history:
         # 🌟 APIエラー対策付きの生データ読み込み
         raw_df = pd.DataFrame()
-        for attempt in range(3):
+        for attempt in range(max_retries):
+        #for attempt in range(3):
             try:
                 raw_df = load_raw_data(name)
                 break
             except Exception:
-                if attempt < 2: time.sleep(2)
+                if attempt < max_retries - 1: 
+                    time.sleep(2 ** attempt)
 
         if not raw_df.empty:
             st.info("💡 以下の表のセルを直接クリックして書き換え、下の「上書き保存」ボタンを押してください。")
@@ -64,11 +70,14 @@ def render_analysis_page(name):
             if st.button("💾 上書き保存", type="primary"): 
                 with st.spinner("☁️ データを上書き保存中...（混雑時は自動で再試行します）"):
                     # 🌟 APIエラー対策付きの保存
-                    for attempt in range(3):
+                    for attempt in range(max_retries):
+                    #for attempt in range(3):
                         try:
                             overwrite_spreadsheet(name, edited_df)
                             st.success("✨ データを上書き保存しました！")
                             break
                         except Exception:
-                            if attempt < 2: time.sleep(2)
+                            if attempt < max_retries - 1: 
+                                time.sleep(2 ** attempt)
+                            #if attempt < 2: time.sleep(2)
                             else: st.error("保存に失敗しました。時間をおいてやり直してください。")
