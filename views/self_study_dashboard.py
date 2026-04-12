@@ -14,14 +14,19 @@ def get_all_student_grades():
         try:
             sh = gc.open_by_key(SPREADSHEET_ID)
             ws = sh.worksheet("設定_生徒情報")
-            return pd.DataFrame(ws.get_all_records())
+            df = pd.DataFrame(ws.get_all_records())
+            
+            # 無事にデータが取れたら返す
+            if not df.empty:
+                return df
+
         except gspread.exceptions.APIError:
-            if attempt < 2:
-                time.sleep(2)
-            else:
-                return pd.DataFrame()
+            time.sleep(2)
         except Exception:
-            return pd.DataFrame()
+            time.sleep(2)
+    
+    get_all_student_grades.clear()
+    return pd.DataFrame()
 
 def render_self_study_dashboard():
     # --- 🖨️ 印刷用の魔法（青いバーと無駄な余白を徹底的に排除！） ---
@@ -93,6 +98,10 @@ def render_self_study_dashboard():
             valid_grades = []
             if not df_grades.empty and '学年' in df_grades.columns:
                 valid_grades = sorted([g for g in df_grades['学年'].unique() if str(g).strip() != ""])
+            
+            if not valid_grades:
+            st.warning("⚠️ 学年データの取得に一時的に失敗しました。リロードしてください。")
+            st.stop()
             
             selected_grades = st.multiselect("🎓 学年で絞り込み (複数選択可)", options=valid_grades, default=valid_grades)
 
