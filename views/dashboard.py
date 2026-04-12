@@ -129,9 +129,9 @@ def render_dashboard_page():
                     break # その他のエラーは抜ける
 
             # B. 小テストとポイントは、共通シート(df_all_quizzes)からその子の分だけ抜き出す
-            if not df_all_quizzes.empty and '生徒名' in df_all_quizzes.columns:
+            if not df_all_quizzes.empty and '名前' in df_all_quizzes.columns:
                 # その生徒の名前でフィルタリング
-                df_student_quizzes = df_all_quizzes[df_all_quizzes['生徒名'] == s_name].copy()
+                df_student_quizzes = df_all_quizzes[df_all_quizzes['名前'] == s_name].copy()
             else:
                 df_student_quizzes = pd.DataFrame()
             
