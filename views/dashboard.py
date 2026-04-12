@@ -15,6 +15,11 @@ from utils.calc_logic import calculate_quiz_points
 def render_dashboard_page():
     st.subheader("🌐 クラス全体ダッシュボード") # 親にヘッダーがあるので少し小さく変更
 
+    today = datetime.date.today()
+    month_options = [(today - datetime.timedelta(days=i*30)).strftime("%Y年%m月") for i in range(12)]
+    month_options.insert(0, "全期間") # 「全期間」という選択肢も追加
+    selected_period = st.selectbox("📅 集計期間を選択", month_options)
+
     student_names = get_all_student_names()
     if not student_names: return
     
@@ -112,9 +117,22 @@ def render_dashboard_page():
                 
                 if '日時' in df.columns:
                     df['日時'] = pd.to_datetime(df['日時'], format='mixed', errors='coerce')
-                    df_month = df[df['日時'].dt.strftime("%Y年%m月") == current_month_str]
-                    
-                    if not df_month.empty:
+
+                    # --- 2. 選択された期間でデータを絞り込む ---
+                    if selected_period == "全期間":
+                        df_filtered = df # 全データ
+                    else:
+                        df_filtered = df[df['日時'].dt.strftime("%Y年%m月") == selected_period]
+                    # --- 3. 絞り込んだデータ(df_filtered)を使って両方を計算 ---
+                    if not df_filtered.empty:
+                        # ポイント計算（絞り込み後のデータを使用）
+                        if '点数' in df_filtered.columns:
+                            scores = pd.to_numeric(df_filtered['点数'], errors='coerce').dropna()
+                            for s_val in scores:
+                                total_points += calculate_quiz_points(s_val)
+                            # 平均点計算
+                            avg_score = scores.mean()
+                        
                         try:
                             max_p = pd.to_numeric(df_month['ページ数'], errors='coerce').max()
                             min_p = pd.to_numeric(df_month['ページ数'], errors='coerce').min()
@@ -122,14 +140,12 @@ def render_dashboard_page():
                                 adv_pages = int(max_p - min_p)
                         except:
                             adv_pages = 0
-                            
-                        avg_score = pd.to_numeric(df_month['点数'], errors='coerce').mean()
 
             summary_data.append({
                 "生徒名": s_name, 
                 "今月の進捗(ページ)": adv_pages, 
                 "小テスト平均点": round(avg_score, 1) if pd.notna(avg_score) else None, 
-                "累計ポイント": total_points
+                "選択期間の獲得ポイント": total_points # ここが「累計」から「期間内」に変わる
             })
             
             time.sleep(0.5) # 元からある息継ぎ
