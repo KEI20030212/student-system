@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
-import time # 🌟 APIエラー対策用
-import gspread # 🌟 APIエラー対策用
+import time 
+import gspread 
 from utils.g_sheets import load_self_study_data, load_entire_log_data, get_gc_client, SPREADSHEET_ID
 
 @st.cache_data(ttl=600)
@@ -19,17 +19,18 @@ def get_all_student_grades():
             # 無事にデータが取れたら返す
             if not df.empty:
                 return df
-
+                
         except gspread.exceptions.APIError:
             time.sleep(2)
         except Exception:
             time.sleep(2)
-    
+            
+    # キャッシュを破棄して空のDataFrameを返す
     get_all_student_grades.clear()
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（青いバーと無駄な余白を徹底的に排除！） ---
+    # --- 🖨️ 印刷用の魔法 ---
     st.markdown("""
         <style>
         @media print {
@@ -47,7 +48,7 @@ def render_self_study_dashboard():
 
     col1, col2 = st.columns([4, 1])
     with col1:
-        st.subheader("📊 学習時間ダッシュボード") # 親とバランスを取るためサブヘッダーに変更
+        st.subheader("📊 学習時間ダッシュボード")
     with col2:
         if st.button("🖨️ グラフを印刷"):
             components.html("<script>window.parent.print();</script>", height=0)
@@ -55,10 +56,10 @@ def render_self_study_dashboard():
     
     st.write("自習時間と授業時間を合算したり、学年ごとに絞り込んだりできる究極のグラフです🔥")
 
+    # ==========================================
+    # 1. データの読み込み (スピナー内に配置)
+    # ==========================================
     with st.spinner("あらゆる学習データをかき集めています..."):
-        # ==========================================
-        # 1. データの読み込み
-        # ==========================================
         df_self_study = load_self_study_data()
         if not df_self_study.empty:
             df_self_study['日付'] = pd.to_datetime(df_self_study['日付'], errors='coerce')
@@ -78,139 +79,139 @@ def render_self_study_dashboard():
         st.info("学習記録がまだありません。")
         return
 
-        # ==========================================
-        # 2. UI（コントローラー）の作成
-        # ==========================================
-        st.markdown("### 🎛️ 表示設定")
-        c1, c2, c3 = st.columns(3)
+    # ==========================================
+    # 2. UI（コントローラー）の作成
+    # ==========================================
+    st.markdown("### 🎛️ 表示設定")
+    c1, c2, c3 = st.columns(3)
+    
+    months_ss = df_self_study['年月'].unique().tolist() if not df_self_study.empty else []
+    months_cl = df_classes['年月'].unique().tolist() if not df_classes.empty else []
+    month_list = sorted(list(set(months_ss + months_cl)), reverse=True)
+    
+    with c1:
+        selected_month = st.selectbox("📅 月を選択", ["すべての期間（累計）"] + month_list)
+    
+    with c2:
+        mode = st.radio("⏱️ 表示モード", ["自習時間のみ", "自習時間 ＋ 授業時間"])
         
-        months_ss = df_self_study['年月'].unique().tolist() if not df_self_study.empty else []
-        months_cl = df_classes['年月'].unique().tolist() if not df_classes.empty else []
-        month_list = sorted(list(set(months_ss + months_cl)), reverse=True)
+    with c3:
+        valid_grades = []
+        if not df_grades.empty and '学年' in df_grades.columns:
+            valid_grades = sorted([g for g in df_grades['学年'].unique() if str(g).strip() != ""])
         
-        with c1:
-            selected_month = st.selectbox("📅 月を選択", ["すべての期間（累計）"] + month_list)
-        
-        with c2:
-            mode = st.radio("⏱️ 表示モード", ["自習時間のみ", "自習時間 ＋ 授業時間"])
-            
-        with c3:
-            valid_grades = []
-            if not df_grades.empty and '学年' in df_grades.columns:
-                valid_grades = sorted([g for g in df_grades['学年'].unique() if str(g).strip() != ""])
-            
-            if not valid_grades:
+        if not valid_grades:
             st.warning("⚠️ 学年データの取得に一時的に失敗しました。リロードしてください。")
             st.stop()
-
+            
         selected_grades = st.multiselect("🎓 学年で絞り込み (複数選択可)", options=valid_grades, default=valid_grades)
 
-        # ==========================================
-        # 3. データの絞り込みと合算
-        # ==========================================
-        if not df_self_study.empty:
-            df_ss_filtered = df_self_study.copy()
-            if selected_month != "すべての期間（累計）":
-                df_ss_filtered = df_ss_filtered[df_ss_filtered['年月'] == selected_month]
-            ss_grouped = df_ss_filtered.groupby('生徒名')['自習時間(分)'].sum().reset_index()
-        else:
-            ss_grouped = pd.DataFrame(columns=['生徒名', '自習時間(分)'])
+    # ==========================================
+    # 3. データの絞り込みと合算
+    # ==========================================
+    if not df_self_study.empty:
+        df_ss_filtered = df_self_study.copy()
+        if selected_month != "すべての期間（累計）":
+            df_ss_filtered = df_ss_filtered[df_ss_filtered['年月'] == selected_month]
+        ss_grouped = df_ss_filtered.groupby('生徒名')['自習時間(分)'].sum().reset_index()
+    else:
+        ss_grouped = pd.DataFrame(columns=['生徒名', '自習時間(分)'])
 
-        if mode == "自習時間 ＋ 授業時間" and not df_classes.empty:
-            df_cl_filtered = df_classes.copy()
-            if selected_month != "すべての期間（累計）":
-                df_cl_filtered = df_cl_filtered[df_cl_filtered['年月'] == selected_month]
-            
-            cl_grouped = df_cl_filtered.groupby('生徒名').size().reset_index(name='コマ数')
-            cl_grouped['授業時間(分)'] = cl_grouped['コマ数'] * 90
-            
-            merged = pd.merge(ss_grouped, cl_grouped[['生徒名', '授業時間(分)']], on='生徒名', how='outer').fillna(0)
-            merged['合計時間(分)'] = merged['自習時間(分)'] + merged['授業時間(分)']
-        else:
-            merged = ss_grouped.copy()
-            merged['授業時間(分)'] = 0
-            merged['合計時間(分)'] = merged['自習時間(分)']
-
-        if not df_grades.empty and '生徒名' in df_grades.columns and '学年' in df_grades.columns:
-            merged = pd.merge(merged, df_grades[['生徒名', '学年']], on='生徒名', how='left')
-            merged['学年'] = merged['学年'].fillna('不明')
-        else:
-            merged['学年'] = '不明'
-
-        if selected_grades:
-            merged = merged[merged['学年'].isin(selected_grades)]
-        else:
-            st.warning("学年が1つも選択されていません。表示したい学年を選んでください！")
-            return
-
-        # ==========================================
-        # 4. グラフの描画
-        # ==========================================
-        if merged.empty or merged['合計時間(分)'].sum() == 0:
-            st.info("指定された条件のデータがありませんでした。")
-            return
-
-        grade_display = " / ".join(selected_grades) if len(selected_grades) <= 4 else "全学年"
-        title_html = f"""
-        <div class='print-title'>
-            🏆 勉強時間ランキング ({grade_display}) - {selected_month}
-        </div>
-        """
-        st.markdown(title_html, unsafe_allow_html=True)
-
-        merged = merged.sort_values(by='合計時間(分)', ascending=False)
-        sorted_students = merged['生徒名'].tolist() 
-
-        chart_height = max(300, len(merged) * 45)
+    if mode == "自習時間 ＋ 授業時間" and not df_classes.empty:
+        df_cl_filtered = df_classes.copy()
+        if selected_month != "すべての期間（累計）":
+            df_cl_filtered = df_cl_filtered[df_cl_filtered['年月'] == selected_month]
         
-        y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=14))
-
-        if mode == "自習時間 ＋ 授業時間":
-            plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
-            
-            bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, height=25).encode(
-                x=alt.X('時間:Q', title='学習時間 (分)'),
-                y=y_encoding,
-                color=alt.Color('時間の種類:N', scale=alt.Scale(domain=['自習時間(分)', '授業時間(分)'], range=['#ff7f0e', '#1f77b4']), legend=alt.Legend(title="学習の種類", orient="top")),
-                tooltip=['生徒名', '時間の種類', '時間', '合計時間(分)']
-            )
-            
-            text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=14, fontWeight='bold', color='#333').encode(
-                x='合計時間(分):Q',
-                y=y_encoding,
-                text=alt.Text('合計時間(分):Q', format='d')
-            )
-            
-            chart = alt.layer(bars, text).properties(height=chart_height)
-            
-        else:
-            bars = alt.Chart(merged).mark_bar(cornerRadiusEnd=4, height=25).encode(
-                x=alt.X('合計時間(分):Q', title='自習時間 (分)'),
-                y=y_encoding,
-                color=alt.Color('合計時間(分):Q', scale=alt.Scale(scheme='blues'), legend=None),
-                tooltip=['生徒名', '合計時間(分)']
-            )
-            
-            text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=14, fontWeight='bold', color='#333').encode(
-                x='合計時間(分):Q',
-                y=y_encoding,
-                text=alt.Text('合計時間(分):Q', format='d')
-            )
-            
-            chart = alt.layer(bars, text).properties(height=chart_height)
-
-        st.altair_chart(chart, use_container_width=True)
-
-        # ==========================================
-        # 5. 詳細データ表の表示
-        # ==========================================
-        st.markdown("### 📋 詳細データ")
-        display_df = merged.sort_values(by='合計時間(分)', ascending=False).reset_index(drop=True)
-        display_df.index = display_df.index + 1
+        cl_grouped = df_cl_filtered.groupby('生徒名').size().reset_index(name='コマ数')
+        cl_grouped['授業時間(分)'] = cl_grouped['コマ数'] * 90
         
-        if mode == "自習時間 ＋ 授業時間":
-            cols_to_show = ['生徒名', '学年', '合計時間(分)', '自習時間(分)', '授業時間(分)']
-        else:
-            cols_to_show = ['生徒名', '学年', '自習時間(分)']
-            
-        st.dataframe(display_df[cols_to_show], use_container_width=True)
+        merged = pd.merge(ss_grouped, cl_grouped[['生徒名', '授業時間(分)']], on='生徒名', how='outer').fillna(0)
+        merged['合計時間(分)'] = merged['自習時間(分)'] + merged['授業時間(分)']
+    else:
+        merged = ss_grouped.copy()
+        merged['授業時間(分)'] = 0
+        merged['合計時間(分)'] = merged['自習時間(分)']
+
+    if not df_grades.empty and '生徒名' in df_grades.columns and '学年' in df_grades.columns:
+        merged = pd.merge(merged, df_grades[['生徒名', '学年']], on='生徒名', how='left')
+        merged['学年'] = merged['学年'].fillna('不明')
+    else:
+        merged['学年'] = '不明'
+
+    if selected_grades:
+        merged = merged[merged['学年'].isin(selected_grades)]
+    else:
+        st.warning("学年が1つも選択されていません。表示したい学年を選んでください！")
+        return
+
+    # ==========================================
+    # 4. グラフの描画
+    # ==========================================
+    if merged.empty or merged['合計時間(分)'].sum() == 0:
+        st.info("指定された条件のデータがありませんでした。")
+        return
+
+    grade_display = " / ".join(selected_grades) if len(selected_grades) <= 4 else "全学年"
+    title_html = f"""
+    <div class='print-title'>
+        🏆 勉強時間ランキング ({grade_display}) - {selected_month}
+    </div>
+    """
+    st.markdown(title_html, unsafe_allow_html=True)
+
+    merged = merged.sort_values(by='合計時間(分)', ascending=False)
+    sorted_students = merged['生徒名'].tolist() 
+
+    chart_height = max(300, len(merged) * 45)
+    
+    y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=14))
+
+    if mode == "自習時間 ＋ 授業時間":
+        plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
+        
+        bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, height=25).encode(
+            x=alt.X('時間:Q', title='学習時間 (分)'),
+            y=y_encoding,
+            color=alt.Color('時間の種類:N', scale=alt.Scale(domain=['自習時間(分)', '授業時間(分)'], range=['#ff7f0e', '#1f77b4']), legend=alt.Legend(title="学習の種類", orient="top")),
+            tooltip=['生徒名', '時間の種類', '時間', '合計時間(分)']
+        )
+        
+        text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=14, fontWeight='bold', color='#333').encode(
+            x='合計時間(分):Q',
+            y=y_encoding,
+            text=alt.Text('合計時間(分):Q', format='d')
+        )
+        
+        chart = alt.layer(bars, text).properties(height=chart_height)
+        
+    else:
+        bars = alt.Chart(merged).mark_bar(cornerRadiusEnd=4, height=25).encode(
+            x=alt.X('合計時間(分):Q', title='自習時間 (分)'),
+            y=y_encoding,
+            color=alt.Color('合計時間(分):Q', scale=alt.Scale(scheme='blues'), legend=None),
+            tooltip=['生徒名', '合計時間(分)']
+        )
+        
+        text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=14, fontWeight='bold', color='#333').encode(
+            x='合計時間(分):Q',
+            y=y_encoding,
+            text=alt.Text('合計時間(分):Q', format='d')
+        )
+        
+        chart = alt.layer(bars, text).properties(height=chart_height)
+
+    st.altair_chart(chart, use_container_width=True)
+
+    # ==========================================
+    # 5. 詳細データ表の表示
+    # ==========================================
+    st.markdown("### 📋 詳細データ")
+    display_df = merged.sort_values(by='合計時間(分)', ascending=False).reset_index(drop=True)
+    display_df.index = display_df.index + 1
+    
+    if mode == "自習時間 ＋ 授業時間":
+        cols_to_show = ['生徒名', '学年', '合計時間(分)', '自習時間(分)', '授業時間(分)']
+    else:
+        cols_to_show = ['生徒名', '学年', '自習時間(分)']
+        
+    st.dataframe(display_df[cols_to_show], use_container_width=True)
