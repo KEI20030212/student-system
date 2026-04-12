@@ -1028,3 +1028,32 @@ def load_daily_class_record(student_name, target_date_str):
     except Exception as e:
         print(f"授業記録の取得エラー: {e}")
         return {}
+
+# ==========================================
+# 🌟 システム設定：指定したアカウントを削除する関数
+# ==========================================
+def delete_account(user_id):
+    """
+    指定されたユーザーIDのスプレッドシート行を削除する。
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        # ⚠️ ここはご自身のアカウント管理シートの名前に変更してください
+        ws = sh.worksheet("設定_アカウント") 
+        
+        try:
+            # 1列目（A列）からユーザーIDを検索
+            cell = ws.find(user_id, in_column=1)
+            # 見つかったらその行をごっそり削除
+            ws.delete_rows(cell.row)
+            return True
+        except gspread.exceptions.CellNotFound:
+            # 万が一IDが見つからなかった場合
+            print(f"ユーザーID '{user_id}' が見つかりませんでした。")
+            return False
+            
+    except Exception as e:
+        print(f"アカウント削除エラー: {e}")
+        return False
