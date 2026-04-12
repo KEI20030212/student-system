@@ -95,6 +95,10 @@ def render_dashboard_page():
         for attempt in range(3): # ここにもバックオフを入れておくと安心
             try:
                 df_all_quizzes = load_quiz_records()
+                if not df_all_quizzes.empty:
+            st.write("デバッグ用（列名一覧）:", df_all_quizzes.columns.tolist())
+        else:
+            st.error("シート『小テスト記録』からデータが読み込めていません")
                 if not df_all_quizzes.empty and '日時' in df_all_quizzes.columns:
                     df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
                 break
