@@ -24,7 +24,7 @@ def get_all_student_grades():
             time.sleep(2)
         except Exception:
             time.sleep(2)
-    
+            
     get_all_student_grades.clear()
     return pd.DataFrame()
 
@@ -102,7 +102,7 @@ def render_self_study_dashboard():
             if not valid_grades:
             st.warning("⚠️ 学年データの取得に一時的に失敗しました。リロードしてください。")
             st.stop()
-            
+
             selected_grades = st.multiselect("🎓 学年で絞り込み (複数選択可)", options=valid_grades, default=valid_grades)
 
         # ==========================================
