@@ -20,13 +20,23 @@ def render_account_manager_page():
     
     st.subheader("👥 登録済みアカウント一覧")
     if accounts_dict:
+        role_mapping = {
+            "owner": "👑 オーナー",
+            "admin": "🏢 教室長",
+            "am": "👔 AM",
+            "head_teacher": "🎓 主任講師",
+            "teacher": "👩‍🏫 講師"
+        }
         # 辞書型をデータフレームに変換して見やすくする
         account_list = []
         for uid, data in accounts_dict.items():
+            raw_role = data.get("権限", "teacher") # 権限がない場合はとりあえずteacher扱い
+            display_role = role_mapping.get(raw_role, f"❓ 不明 ({raw_role})")
+
             account_list.append({
                 "ユーザーID": uid,
                 "講師名": data.get("講師名", ""),
-                "権限": "👑 教室長 (admin)" if data.get("権限") == "admin" else "👩‍🏫 先生 (teacher)",
+                "権限": display_role,
                 "パスワード": "********" # 👈 セキュリティのため隠す！
             })
         df_accounts = pd.DataFrame(account_list)
