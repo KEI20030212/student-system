@@ -24,7 +24,7 @@ def get_all_student_grades():
                 
         except gspread.exceptions.APIError:
             wait_time = 2 ** attempt
-            time.sleep(wait_time
+            time.sleep(wait_time)
         except Exception:
             time.sleep(2)
             
