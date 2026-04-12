@@ -84,7 +84,7 @@ def render_account_manager_page():
                     success = add_new_account(new_id, new_pass, new_name, new_role)
                 
                 if success:
-                    get_all_accounts(force_refresh=True)
+                    get_all_accounts.clear()
                     # 成功メッセージを表示（toastは画面右下にフワッと出ます）
                     st.session_state['toast_msg'] = f"✅ {new_name} 先生のアカウントを作成しました！"
                     
@@ -125,7 +125,8 @@ def render_account_manager_page():
                             success = delete_account(target_id)
                         
                         if success:
-                            get_all_accounts(force_refresh=True)
+                            get_all_accounts.clear()
+
                             st.session_state['toast_msg'] = f"🗑️ アカウント「{target_id}」を削除しました。"
                             st.rerun()
                         else:
