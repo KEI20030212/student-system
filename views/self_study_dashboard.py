@@ -74,9 +74,9 @@ def render_self_study_dashboard():
 
         df_grades = get_all_student_grades()
 
-        if df_self_study.empty and df_classes.empty:
-            st.info("学習記録がまだありません。")
-            return
+    if df_self_study.empty and df_classes.empty:
+        st.info("学習記録がまだありません。")
+        return
 
         # ==========================================
         # 2. UI（コントローラー）の作成
