@@ -10,7 +10,9 @@ from utils.g_sheets import load_self_study_data, load_entire_log_data, get_gc_cl
 def get_all_student_grades():
     """生徒情報から学年データを取得する魔法（APIエラー対策版）"""
     gc = get_gc_client()
-    for attempt in range(3):
+    max_retries = 7
+
+    for attempt in range(max_retries):
         try:
             sh = gc.open_by_key(SPREADSHEET_ID)
             ws = sh.worksheet("設定_生徒情報")
@@ -21,7 +23,8 @@ def get_all_student_grades():
                 return df
                 
         except gspread.exceptions.APIError:
-            time.sleep(2)
+            wait_time = 2 ** attempt
+            time.sleep(wait_time
         except Exception:
             time.sleep(2)
             
