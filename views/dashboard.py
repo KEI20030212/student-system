@@ -9,7 +9,8 @@ import gspread # 🌟 APIエラーを検知するために追加
 from utils.g_sheets import (
     get_all_student_names,
     get_all_student_info_dict,
-    load_all_data
+    load_all_data,
+    load_quiz_records
 )
 from utils.calc_logic import calculate_quiz_points 
 
@@ -89,7 +90,17 @@ def render_dashboard_page():
 
     current_month_str = datetime.date.today().strftime("%Y年%m月")
     summary_data = []
-    
+    with st.spinner('☁️ 全生徒の共通テスト記録を読み込み中...'):
+        df_all_quizzes = pd.DataFrame()
+        for attempt in range(3): # ここにもバックオフを入れておくと安心
+            try:
+                df_all_quizzes = load_quiz_records()
+                if not df_all_quizzes.empty and '日時' in df_all_quizzes.columns:
+                    df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
+                break
+            except:
+                time.sleep(2)
+
     with st.spinner(f'☁️ {current_month_str} のデータを集計中...（※途中でAPIが混み合っても自動復帰します）'):
         progress_bar_data = st.progress(0)
         total_targets = len(target_students)
@@ -111,31 +122,38 @@ def render_dashboard_page():
                         st.toast(f"{s_name}さんのデータ取得に失敗しました", icon="⚠️")
                 except Exception:
                     break # その他のエラーは抜ける
+
+            # B. 小テストとポイントは、共通シート(df_all_quizzes)からその子の分だけ抜き出す
+            if not df_all_quizzes.empty and '生徒名' in df_all_quizzes.columns:
+                # その生徒の名前でフィルタリング
+                df_student_quizzes = df_all_quizzes[df_all_quizzes['生徒名'] == s_name].copy()
+            else:
+                df_student_quizzes = pd.DataFrame()
             
             adv_pages, avg_score, total_points = 0, None, 0
             
-            if not df.empty:
-                if '点数' in df.columns:
-                    for s_val in pd.to_numeric(df['点数'], errors='coerce').dropna():
-                        total_points += calculate_quiz_points(s_val)
-                
-                if '日時' in df.columns:
-                    df['日時'] = pd.to_datetime(df['日時'], format='mixed', errors='coerce')
+            # --- ポイント・平均点の計算 (共通シートから抜き出したデータを使用) ---
+            if not df_student_quizzes.empty:
+                # 期間絞り込み
+                if selected_period == "全期間":
+                    q_filtered = df_student_quizzes
+                else:
+                    q_filtered = df_student_quizzes[df_student_quizzes['日時'].dt.strftime("%Y年%m月") == selected_period]
 
-                    # --- 2. 選択された期間でデータを絞り込む ---
-                    if selected_period == "全期間":
-                        df_filtered = df # 全データ
-                    else:
-                        df_filtered = df[df['日時'].dt.strftime("%Y年%m月") == selected_period]
-                    # --- 3. 絞り込んだデータ(df_filtered)を使って両方を計算 ---
-                    if not df_filtered.empty:
-                        # ポイント計算（絞り込み後のデータを使用）
-                        if '点数' in df_filtered.columns:
-                            scores = pd.to_numeric(df_filtered['点数'], errors='coerce').dropna()
-                            for s_val in scores:
-                                total_points += calculate_quiz_points(s_val)
-                            # 平均点計算
-                            avg_score = scores.mean()
+                if not q_filtered.empty and '点数' in q_filtered.columns:
+                    scores = pd.to_numeric(q_filtered['点数'], errors='coerce').dropna()
+                    for s_val in scores:
+                        total_points += calculate_quiz_points(s_val)
+                    avg_score = scores.mean()
+
+            # --- 進捗の計算 (個別シートを使用) ---
+            if not df_personal.empty:
+                # ページ進捗は日付で絞り込んで計算
+                df_p_filtered = df_personal
+                if '日時' in df_personal.columns:
+                    df_personal['日時'] = pd.to_datetime(df_personal['日時'], format='mixed', errors='coerce')
+                    if selected_period != "全期間":
+                        df_p_filtered = df_personal[df_personal['日時'].dt.strftime("%Y年%m月") == selected_period]
                         
                         try:
                             max_p = pd.to_numeric(df_filtered['ページ数'], errors='coerce').max()
@@ -149,7 +167,7 @@ def render_dashboard_page():
                 "生徒名": s_name, 
                 "選択期間の進捗(ページ)": adv_pages, 
                 "選択期間の平均点": round(avg_score, 1) if pd.notna(avg_score) else None, 
-                "選択期間の獲得ポイント": total_points # ここが「累計」から「期間内」に変わる
+                "選択期間の獲得ポイント": total_points 
             })
             
             time.sleep(0.5) # 元からある息継ぎ
