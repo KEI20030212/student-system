@@ -112,7 +112,7 @@ def render_dashboard_page():
             max_retries = 4 # 最大4回挑戦する（0, 1, 2, 3）
             for attempt in range(max_retries):
                 try:
-                    df_personal = pd.DataFrame() = load_all_data(s_name)
+                    df_personal = load_all_data(s_name)
                     break 
                 except gspread.exceptions.APIError:
                     if attempt < max_retries - 1:
@@ -157,8 +157,8 @@ def render_dashboard_page():
                         df_p_filtered = df_personal[df_personal['日時'].dt.strftime("%Y年%m月") == selected_period]
                         
                         try:
-                            max_p = pd.to_numeric(df_filtered['ページ数'], errors='coerce').max()
-                            min_p = pd.to_numeric(df_filtered['ページ数'], errors='coerce').min()
+                            max_p = pd.to_numeric(df_p_filtered['ページ数'], errors='coerce').max()
+                            min_p = pd.to_numeric(df_p_filtered['ページ数'], errors='coerce').min()
                             if pd.notna(max_p) and pd.notna(min_p):
                                 adv_pages = int(max_p - min_p)
                         except:
