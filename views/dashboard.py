@@ -3,6 +3,7 @@ import pandas as pd
 import altair as alt
 import datetime 
 import time 
+import random
 import gspread # 🌟 APIエラーを検知するために追加
 
 from utils.g_sheets import (
@@ -96,13 +97,16 @@ def render_dashboard_page():
         for i, s_name in enumerate(target_students):
             # 🌟 APIエラー対策：各生徒のデータ取得時に最大3回リトライ！
             df = pd.DataFrame()
-            for attempt in range(3):
+            max_retries = 4 # 最大4回挑戦する（0, 1, 2, 3）
+            for attempt in range(max_retries):
                 try:
                     df = load_all_data(s_name)
-                    break # 成功したらループを抜ける
+                    break 
                 except gspread.exceptions.APIError:
-                    if attempt < 2:
-                        time.sleep(2) # 2秒深呼吸して再チャレンジ
+                    if attempt < max_retries - 1:
+                        # 待機時間を指数関数的に増やす (1秒 → 2秒 → 4秒) + ランダムなズレ(0〜1秒)
+                        sleep_time = (2 ** attempt) + random.uniform(0, 1)
+                        time.sleep(sleep_time)
                     else:
                         st.toast(f"{s_name}さんのデータ取得に失敗しました", icon="⚠️")
                 except Exception:
@@ -134,8 +138,8 @@ def render_dashboard_page():
                             avg_score = scores.mean()
                         
                         try:
-                            max_p = pd.to_numeric(df_month['ページ数'], errors='coerce').max()
-                            min_p = pd.to_numeric(df_month['ページ数'], errors='coerce').min()
+                            max_p = pd.to_numeric(df_filtered['ページ数'], errors='coerce').max()
+                            min_p = pd.to_numeric(df_filtered['ページ数'], errors='coerce').min()
                             if pd.notna(max_p) and pd.notna(min_p):
                                 adv_pages = int(max_p - min_p)
                         except:
@@ -143,8 +147,8 @@ def render_dashboard_page():
 
             summary_data.append({
                 "生徒名": s_name, 
-                "今月の進捗(ページ)": adv_pages, 
-                "小テスト平均点": round(avg_score, 1) if pd.notna(avg_score) else None, 
+                "選択期間の進捗(ページ)": adv_pages, 
+                "選択期間の平均点": round(avg_score, 1) if pd.notna(avg_score) else None, 
                 "選択期間の獲得ポイント": total_points # ここが「累計」から「期間内」に変わる
             })
             
