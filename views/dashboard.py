@@ -156,23 +156,23 @@ def render_dashboard_page():
     if summary_data:
         df_summary = pd.DataFrame(summary_data)
         st.markdown(f"**🏆 累計獲得ポイント ランキング TOP3 ({selected_grade} / {selected_subject})**")
-        df_ranking = df_summary.sort_values(by="累計ポイント", ascending=False).head(3).reset_index(drop=True)
+        df_ranking = df_summary.sort_values(by="選択期間の獲得ポイント", ascending=False).head(3).reset_index(drop=True)
         
         cols = st.columns(3)
         colors, medals = ["#FFD700", "#C0C0C0", "#CD7F32"], ["🥇 1位", "🥈 2位", "🥉 3位"]
         
         for i in range(min(3, len(df_ranking))):
             with cols[i]:
-                st.markdown(f"<div style='background-color:{colors[i]}15; padding:15px; border-radius:10px; border: 2px solid {colors[i]}; text-align:center;'><h3>{medals[i]}</h3><h2>{df_ranking.loc[i, '生徒名']}</h2><h1>{df_ranking.loc[i, '累計ポイント']} <span style='font-size:0.4em;'>pt</span></h1></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background-color:{colors[i]}15; padding:15px; border-radius:10px; border: 2px solid {colors[i]}; text-align:center;'><h3>{medals[i]}</h3><h2>{df_ranking.loc[i, '生徒名']}</h2><h1>{df_ranking.loc[i, '選択期間の獲得ポイント']} <span style='font-size:0.4em;'>pt</span></h1></div>", unsafe_allow_html=True)
 
         st.divider()
-        st.markdown(f"**📊 {current_month_str} の状況 ({selected_grade} / {selected_subject})**")
+        st.markdown(f"**📊 選択期間の状況 ({selected_grade} / {selected_subject})**")
         c1, c2 = st.columns(2)
         
         with c1: 
             st.write("**📖 進捗ランキング**")
-            st.dataframe(df_summary.sort_values(by="今月の進捗(ページ)", ascending=False)[["生徒名", "今月の進捗(ページ)"]], hide_index=True, use_container_width=True)
+            st.dataframe(df_summary.sort_values(by="選択期間の進捗(ページ)", ascending=False)[["生徒名", "今月の進捗(ページ)"]], hide_index=True, use_container_width=True)
             
         with c2: 
             st.write("**💯 小テスト平均点**")
-            st.dataframe(df_summary.dropna(subset=["小テスト平均点"]).sort_values(by="小テスト平均点", ascending=False)[["生徒名", "小テスト平均点"]], hide_index=True, use_container_width=True)
+            st.dataframe(df_summary.dropna(subset=["選択期間の平均点"]).sort_values(by="選択期間の平均点", ascending=False)[["生徒名", "選択期間の平均点"]], hide_index=True, use_container_width=True)
