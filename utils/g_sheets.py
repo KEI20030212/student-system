@@ -1057,3 +1057,18 @@ def delete_account(user_id):
     except Exception as e:
         print(f"アカウント削除エラー: {e}")
         return False
+
+# utils/g_sheets.py に追加
+
+def load_quiz_records():
+    """
+    全員共通の「小テスト記録」シートから全データを読み込む
+    """
+    gc = get_gc_client()
+    try:
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        # 固定で「小テスト記録」という名前のシートを開く
+        return pd.DataFrame(sh.worksheet("小テスト記録").get_all_records())
+    except Exception as e:
+        print(f"Error loading quiz records: {e}")
+        return pd.DataFrame()
