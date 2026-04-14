@@ -251,8 +251,6 @@ def render_multi_input_page(textbook_master):
             st.divider()
             if len(input_data_list) == num_students:
 
-                st.info(f"【裏側チェック】現在の生徒数: {num_students}人 / 集めたデータ: {len(input_data_list)}件")
-                st.write(input_data_list)
 
                 if st.button("🚀 全員の記録をまとめて保存する", type="primary", use_container_width=True):
                     with st.status("データを保存中...", expanded=True) as status:
