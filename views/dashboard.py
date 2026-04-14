@@ -11,7 +11,8 @@ from utils.g_sheets import (
     get_all_student_names,
     get_all_student_info_dict,
     load_all_data,
-    load_quiz_records
+    load_quiz_records,
+    get_quiz_maker_sheets
 )
 from utils.calc_logic import calculate_quiz_points 
 
@@ -102,6 +103,9 @@ def render_dashboard_page():
             except:
                 time.sleep(2)
 
+    with st.spinner("☁️ 小テストの満点データを読み込み中..."):
+        quiz_master_dict = get_quiz_maker_sheets()
+
     with st.spinner(f'☁️ {current_month_str} のデータを集計中...（※途中でAPIが混み合っても自動復帰します）'):
         progress_bar_data = st.progress(0)
         total_targets = len(target_students)
@@ -143,10 +147,29 @@ def render_dashboard_page():
                     q_filtered = df_student_quizzes[df_student_quizzes['日時'].dt.strftime("%Y年%m月") == selected_period]
 
                 if not q_filtered.empty and '点数' in q_filtered.columns:
-                    scores = pd.to_numeric(q_filtered['点数'], errors='coerce').dropna()
-                    for s_val in scores:
-                        total_points += calculate_quiz_points(s_val)
-                    avg_score = scores.mean()
+                    valid_scores = []
+                    
+                    # 1行ずつ（1回のテストごとに）データを取り出して処理する
+                    for index, row in q_filtered.iterrows():
+                        score_val = row['点数']
+                        quiz_name = row.get('テスト名', '') # テスト名も取得する！
+                        
+                        # 空欄ならスキップ
+                        if pd.isna(score_val) or str(score_val).strip() == "":
+                            continue
+                            
+                        try:
+                            # 「欠席」などの文字を除外して、純粋な数字にする
+                            numeric_score = float(score_val)
+                            valid_scores.append(numeric_score)
+                            
+                            # 🌟 新しい計算関数に「点数」「テスト名」「満点リスト」の3つを渡す！
+                            total_points += calculate_quiz_points(numeric_score, quiz_name, quiz_master_dict)
+                        except ValueError:
+                            pass # 数字に変換できない文字は無視
+
+                    if valid_scores:
+                        avg_score = sum(valid_scores) / len(valid_scores)
 
             # --- 進捗の計算 (個別シートを使用) ---
             if not df_personal.empty:
