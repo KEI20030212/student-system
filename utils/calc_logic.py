@@ -1,12 +1,14 @@
 import math
 
-def calculate_quiz_points(score, quiz_name, quiz_master_dict):
+# 👇 quiz_name と quiz_master_dict に「=None」をつけて、無くてもOK（オプション）にします！
+def calculate_quiz_points(score, quiz_name=None, quiz_master_dict=None):
     try:
         got_score = float(score)
         
         # マスターリストからそのテストの満点を取得（見つからない場合は100点満点とする）
         full_marks = 100
-        if quiz_name in quiz_master_dict:
+        # 👇 辞書データがちゃんと送られてきた時だけ、辞書から満点をチェックする
+        if quiz_master_dict is not None and quiz_name in quiz_master_dict:
             full_marks = quiz_master_dict[quiz_name].get("full_marks", 100)
         
         # 百分率を計算
