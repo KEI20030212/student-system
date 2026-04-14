@@ -152,19 +152,26 @@ def render_dashboard_page():
             # --- 進捗の計算 (個別シートを使用) ---
             if not df_personal.empty:
                 # ページ進捗は日付で絞り込んで計算
-                df_p_filtered = df_personal
-                if '日時' in df_personal.columns:
-                    df_personal['日時'] = pd.to_datetime(df_personal['日時'], format='mixed', errors='coerce')
+                df_p_filtered = df_personal.copy()
+
+                # 2. 科目で絞り込み (重要！他の科目のページが混ざらないように)
+                if selected_subject != "すべて" and '科目' in df_p_filtered.columns:
+                    # シートの「科目」列に、選択中の科目名が含まれる行だけにする
+                    df_p_filtered = df_p_filtered[df_p_filtered['科目'].str.contains(selected_subject, na=False)]
+                
+                # 3. 期間で絞り込み
+                if '日時' in df_p_filtered.columns:
+                    df_p_filtered['日時'] = pd.to_datetime(df_p_filtered['日時'], format='mixed', errors='coerce')
                     if selected_period != "全期間":
-                        df_p_filtered = df_personal[df_personal['日時'].dt.strftime("%Y年%m月") == selected_period]
+                        df_p_filtered = df_p_filtered[df_p_filtered['日時'].dt.strftime("%Y年%m月") == selected_period]
                         
-                        try:
-                            max_p = pd.to_numeric(df_p_filtered['ページ数'], errors='coerce').max()
-                            min_p = pd.to_numeric(df_p_filtered['ページ数'], errors='coerce').min()
-                            if pd.notna(max_p) and pd.notna(min_p):
-                                adv_pages = int(max_p - min_p)
-                        except:
-                            adv_pages = 0
+                try:
+                    pages = pd.to_numeric(df_p_filtered['ページ数'], errors='coerce').dropna()
+                    if not pages.empty:
+                        # 最大ページ - 最小ページ でその期間の進捗を出す
+                        adv_pages = int(pages.max() - pages.min())
+                except:
+                    adv_pages = 0
 
             summary_data.append({
                 "生徒名": s_name, 
