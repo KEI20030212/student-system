@@ -2,17 +2,26 @@ import math
 
 def calculate_quiz_points(score):
     try:
-        s = float(score)
-        if s >= 100: return 20
-        elif s >= 90: return 10
-        elif s >= 80: return 9
-        elif s >= 70: return 8
-        elif s >= 60: return 7
-        elif s >= 50: return 6
-        elif s >= 40: return 5
-        elif s >= 30: return 4
-        elif s >= 20: return 3
-        elif s >= 10: return 2
+        got_score = float(score)
+        
+        # マスターリストからそのテストの満点を取得（見つからない場合は100点満点とする）
+        full_marks = 100
+        if quiz_name in quiz_master_dict:
+            full_marks = quiz_master_dict[quiz_name].get("full_marks", 100)
+        
+        # 百分率を計算
+        percent = (got_score / full_marks) * 100
+        
+        if percent >= 100: return 20
+        elif percent >= 90: return 10
+        elif percent >= 80: return 9
+        elif percent >= 70: return 8
+        elif percent >= 60: return 7
+        elif percent >= 50: return 6
+        elif percent >= 40: return 5
+        elif percent >= 30: return 4
+        elif percent >= 20: return 3
+        elif percent >= 10: return 2
         else: return 1
     except:
         return 0

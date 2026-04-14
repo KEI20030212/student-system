@@ -365,12 +365,22 @@ def get_quiz_maker_sheets():
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("設定_小テスト一覧")
     records = ws.get_all_records()
-    return {str(row['テスト名']): str(row['スプレッドシートID']) for row in records if row['テスト名']}
+
+    quiz_data = {}
+    for row in records:
+        name = str(row.get('テスト名', ''))
+        if name:
+            quiz_data[name] = {
+                "id": str(row.get('スプレッドシートID', '')),
+                "full_marks": row.get('満点', 100)  # もし空ならデフォルト100点とする
+            }
+    return quiz_data
+
 def add_quiz_maker_sheet(test_name, sheet_id):
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("設定_小テスト一覧")
-    ws.append_row([test_name, sheet_id])
+    ws.append_row([test_name, sheet_id, full_marks])
     st.cache_data.clear()
 def delete_quiz_maker_sheet(test_name):
     gc = get_gc_client()
