@@ -80,7 +80,7 @@ def render_dashboard_page():
     current_month_str = datetime.date.today().strftime("%Y年%m月")
     summary_data = []
     matrix_data = []
-    
+
     with st.spinner('☁️ 全生徒の共通テスト記録を読み込み中...'):
         df_all_quizzes = pd.DataFrame()
         for attempt in range(3): # ここにもバックオフを入れておくと安心
@@ -255,8 +255,8 @@ def render_dashboard_page():
     if matrix_data:
         df_matrix = pd.DataFrame(matrix_data)
         chart = alt.Chart(df_matrix).mark_circle(size=400, opacity=0.8, color="#1E90FF").encode(
-            x=alt.X('能力 (X)', scale=alt.Scale(domain=[0.5, 5.5]), title="🧠 能力 (1〜5)"),
-            y=alt.Y('やる気 (Y)', scale=alt.Scale(domain=[0.5, 5.5]), title="🔥 やる気 (1〜5)"),
+            x=alt.X('能力 (X)', scale=alt.Scale(domain=[0.5, 5.5]), axis=alt.Axis(values=[1, 2, 3, 4, 5]), title="🧠 能力 (1〜5)"),
+            y=alt.Y('やる気 (Y)', scale=alt.Scale(domain=[0.5, 5.5]), axis=alt.Axis(values=[1, 2, 3, 4, 5]), title="🔥 やる気 (1〜5)"),
             tooltip=['生徒名', '能力 (X)', 'やる気 (Y)']
         )
         text = chart.mark_text(align='left', baseline='middle', dx=15, dy=0, fontSize=12, fontWeight='bold').encode(text='生徒名')
