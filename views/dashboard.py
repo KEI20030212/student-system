@@ -80,27 +80,7 @@ def render_dashboard_page():
     current_month_str = datetime.date.today().strftime("%Y年%m月")
     summary_data = []
     matrix_data = []
-    for s_name in target_students:
-        info = student_info_dict.get(s_name, {})
-        matrix_data.append({
-            "生徒名": s_name,
-            "能力 (X)": int(info.get('能力', 3) or 3),
-            "やる気 (Y)": int(info.get('やる気', 3) or 3)
-        })
-    df_matrix = pd.DataFrame(matrix_data)
     
-    chart = alt.Chart(df_matrix).mark_circle(size=400, opacity=0.8, color="#1E90FF").encode(
-        x=alt.X('能力 (X)', scale=alt.Scale(domain=[0.5, 5.5]), title="🧠 能力 (1〜5)"),
-        y=alt.Y('やる気 (Y)', scale=alt.Scale(domain=[0.5, 5.5]), title="🔥 やる気 (1〜5)"),
-        tooltip=['生徒名', '能力 (X)', 'やる気 (Y)']
-    )
-    text = chart.mark_text(align='left', baseline='middle', dx=15, dy=0, fontSize=12, fontWeight='bold').encode(text='生徒名')
-    rule_x = alt.Chart(pd.DataFrame({'x': [3]})).mark_rule(color='gray', strokeDash=[5,5]).encode(x='x')
-    rule_y = alt.Chart(pd.DataFrame({'y': [3]})).mark_rule(color='gray', strokeDash=[5,5]).encode(y='y')
-    st.altair_chart(chart + text + rule_x + rule_y, use_container_width=True)
-
-    current_month_str = datetime.date.today().strftime("%Y年%m月")
-    summary_data = []
     with st.spinner('☁️ 全生徒の共通テスト記録を読み込み中...'):
         df_all_quizzes = pd.DataFrame()
         for attempt in range(3): # ここにもバックオフを入れておくと安心
