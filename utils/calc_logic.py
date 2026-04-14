@@ -1,6 +1,6 @@
 import math
 
-def calculate_quiz_points(score):
+def calculate_quiz_points(score, quiz_name, quiz_master_dict):
     try:
         got_score = float(score)
         
