@@ -177,7 +177,7 @@ def render_dashboard_page():
                             total = 0
                             for start_str, end_str in matches:
                                 # 右の数字 - 左の数字 を計算（逆に書いてあっても大丈夫なように絶対値をとる）
-                                total += abs(int(end_str) - int(start_str))
+                                total += abs(int(end_str) - int(start_str)) + 1
                             return total
 
                         # 各行の「終了ページ」に上の関数を適用して、「今回の進捗」というデータを作る
@@ -189,7 +189,7 @@ def render_dashboard_page():
                         adv_pages = 0
                 except Exception as e:
                     adv_pages = 0
-                    
+
             summary_data.append({
                 "生徒名": s_name, 
                 "選択期間の進捗(ページ)": adv_pages, 
