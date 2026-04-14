@@ -97,7 +97,9 @@ def save_seating_data(seating_dict):
 def get_last_page_from_sheet(name):
     df = load_all_data(name)
     if not df.empty and 'ページ数' in df.columns:
-        last_page = df['ページ数'].iloc[-1]
+        return 0
+    
+    last_page = df['ページ数'].iloc[-1]
     
     try:
         # 昔のデータ（純粋な数字）なら、今まで通り整数にする
