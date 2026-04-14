@@ -5,6 +5,7 @@ import datetime
 import time 
 import random
 import gspread # 🌟 APIエラーを検知するために追加
+import re
 
 from utils.g_sheets import (
     get_all_student_names,
@@ -165,14 +166,30 @@ def render_dashboard_page():
                     if selected_period != "全期間":
                         df_p_filtered = df_p_filtered[df_p_filtered['日時'].dt.strftime("%Y年%m月") == selected_period]
                         
+                # 🌟 4. 進捗（ページ数）の計算（複数行・範囲指定対応バージョン！）
                 try:
-                    pages = pd.to_numeric(df_p_filtered['ページ数'], errors='coerce').dropna()
-                    if not pages.empty:
-                        # 最大ページ - 最小ページ でその期間の進捗を出す
-                        adv_pages = int(pages.max() - pages.min())
-                except:
-                    adv_pages = 0
+                    if '終了ページ' in df_p_filtered.columns:
+                        # 各行のテキストから進捗を計算する専用の関数をその場で作る
+                        def calc_pages_from_text(text):
+                            if pd.isna(text): return 0
+                            # 「数字」+「〜 や - など」+「数字」 のペアをすべて見つけ出す
+                            matches = re.findall(r'(\d+)\s*[~〜\-ー]\s*(\d+)', str(text))
+                            total = 0
+                            for start_str, end_str in matches:
+                                # 右の数字 - 左の数字 を計算（逆に書いてあっても大丈夫なように絶対値をとる）
+                                total += abs(int(end_str) - int(start_str))
+                            return total
 
+                        # 各行の「終了ページ」に上の関数を適用して、「今回の進捗」というデータを作る
+                        df_p_filtered['今回の進捗'] = df_p_filtered['終了ページ'].apply(calc_pages_from_text)
+                        
+                        # その期間の進捗をすべて合計する
+                        adv_pages = int(df_p_filtered['今回の進捗'].sum())
+                    else:
+                        adv_pages = 0
+                except Exception as e:
+                    adv_pages = 0
+                    
             summary_data.append({
                 "生徒名": s_name, 
                 "選択期間の進捗(ページ)": adv_pages, 
