@@ -89,10 +89,14 @@ def render_salary_dashboard_page():
         df_instructors = pd.concat([df_instructors, pd.DataFrame(new_rows)], ignore_index=True)
 
     st.subheader("👨‍🏫 講師ごとの単価・設定")
-    edited_prices = st.data_editor(df_instructors, hide_index=True, use_container_width=True, num_rows="dynamic")
+    with st.form("master_edit_form"):
+        edited_prices = st.data_editor(df_instructors, hide_index=True, use_container_width=True, num_rows="dynamic")
 
-    # 🌟 API対策2: マスタ保存時の連打防止とキャッシュクリア
-    if st.button("💾 変更をスプレッドシート（マスタ）に保存する"):
+        # 🌟 st.button ではなく st.form_submit_button に変えるのがポイント！
+        submit_btn = st.form_submit_button("💾 変更をスプレッドシート（マスタ）に保存する")
+
+    # 保存ボタンが押された時だけの処理
+    if submit_btn:
         with st.spinner("☁️ マスタを保存中...（連打しないでね）"):
             update_instructor_master(edited_prices)
             time.sleep(1) # 息継ぎ
