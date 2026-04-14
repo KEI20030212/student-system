@@ -96,7 +96,7 @@ def save_seating_data(seating_dict):
         ws.append_row(row)
 def get_last_page_from_sheet(name):
     df = load_all_data(name)
-    if not df.empty and 'ページ数' in df.columns:
+    if df.empty or 'ページ数' not in df.columns:
         return 0
     
     last_page = df['ページ数'].iloc[-1]
