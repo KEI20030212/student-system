@@ -12,9 +12,14 @@ from utils.g_sheets import (
     get_all_student_info_dict,
     load_all_data,
     load_quiz_records,
-    get_quiz_maker_sheets
+    get_quiz_maker_sheets,
+    load_test_scores
 )
-from utils.calc_logic import calculate_quiz_points 
+from utils.calc_logic import (
+    calculate_quiz_points,
+    calculate_ability_rank,
+    calculate_motivation_rank
+)
 
 def render_dashboard_page():
     st.subheader("🌐 クラス全体ダッシュボード") # 親にヘッダーがあるので少し小さく変更
@@ -70,6 +75,10 @@ def render_dashboard_page():
 
     st.markdown(f"**🗺️ 教室全体 俯瞰マトリクス ({selected_grade} / {selected_subject})**")
     
+    matrix_placeholder = st.empty()
+
+    current_month_str = datetime.date.today().strftime("%Y年%m月")
+    summary_data = []
     matrix_data = []
     for s_name in target_students:
         info = student_info_dict.get(s_name, {})
@@ -106,11 +115,19 @@ def render_dashboard_page():
     with st.spinner("☁️ 小テストの満点データを読み込み中..."):
         quiz_master_dict = get_quiz_maker_sheets()
 
+    with st.spinner("☁️ 模試・内申点データを照合中..."):
+        df_all_tests = pd.DataFrame()
+        try:
+            df_all_tests = load_test_scores()
+        except Exception:
+            pass
+
     with st.spinner(f'☁️ {current_month_str} のデータを集計中...（※途中でAPIが混み合っても自動復帰します）'):
         progress_bar_data = st.progress(0)
         total_targets = len(target_students)
         
         for i, s_name in enumerate(target_students):
+            info = student_info_dict.get(s_name, {})
             # 🌟 APIエラー対策：各生徒のデータ取得時に最大3回リトライ！
             df_personal = pd.DataFrame()
 
@@ -211,6 +228,38 @@ def render_dashboard_page():
                 except Exception as e:
                     adv_pages = 0
 
+            # ① 能力 (X) を計算する
+            latest_dev, latest_naishin = 50.0, 3 # デフォルト値
+            if not df_all_tests.empty and '生徒名' in df_all_tests.columns:
+                df_s = df_all_tests[df_all_tests['生徒名'] == s_name]
+                if not df_s.empty:
+                    df_moshi = df_s[df_s['テスト種別'] == "外部模試"]
+                    if not df_moshi.empty and f"{selected_subject} 偏差値" in df_moshi.columns:
+                        val = df_moshi.iloc[-1][f"{selected_subject} 偏差値"]
+                        if pd.notna(val) and str(val).replace('.','',1).isdigit(): latest_dev = float(val)
+                    
+                    df_naishin = df_s[df_s['テスト種別'] == "通知表（内申点）"]
+                    if not df_naishin.empty and f"{selected_subject} 内申" in df_naishin.columns:
+                        val = df_naishin.iloc[-1][f"{selected_subject} 内申"]
+                        if pd.notna(val) and str(val).isdigit(): latest_naishin = int(val)
+            
+            ability_x = calculate_ability_rank(latest_naishin, latest_dev)
+
+            # ② やる気 (Y) を計算する
+            raw_hw_rate = str(info.get('宿題履行率', '0.0')).replace('%', '').strip()
+            try: hw_rate = float(raw_hw_rate)
+            except ValueError: hw_rate = 0.0
+            
+            # 💡 さっき計算した total_points と 宿題履行率 を関数に渡す！
+            motivation_y = calculate_motivation_rank(hw_rate, total_points) 
+
+            # ③ マトリクス用のリストに追加
+            matrix_data.append({
+                "生徒名": s_name,
+                "能力 (X)": ability_x,
+                "やる気 (Y)": motivation_y
+            })
+
             summary_data.append({
                 "生徒名": s_name, 
                 "選択期間の進捗(ページ)": adv_pages, 
@@ -222,6 +271,19 @@ def render_dashboard_page():
             progress_bar_data.progress((i + 1) / total_targets)
             
         progress_bar_data.empty()
+
+    if matrix_data:
+        df_matrix = pd.DataFrame(matrix_data)
+        chart = alt.Chart(df_matrix).mark_circle(size=400, opacity=0.8, color="#1E90FF").encode(
+            x=alt.X('能力 (X)', scale=alt.Scale(domain=[0.5, 5.5]), title="🧠 能力 (1〜5)"),
+            y=alt.Y('やる気 (Y)', scale=alt.Scale(domain=[0.5, 5.5]), title="🔥 やる気 (1〜5)"),
+            tooltip=['生徒名', '能力 (X)', 'やる気 (Y)']
+        )
+        text = chart.mark_text(align='left', baseline='middle', dx=15, dy=0, fontSize=12, fontWeight='bold').encode(text='生徒名')
+        rule_x = alt.Chart(pd.DataFrame({'x': [3]})).mark_rule(color='gray', strokeDash=[5,5]).encode(x='x')
+        rule_y = alt.Chart(pd.DataFrame({'y': [3]})).mark_rule(color='gray', strokeDash=[5,5]).encode(y='y')
+
+        matrix_placeholder.altair_chart(chart + text + rule_x + rule_y, use_container_width=True)    
 
     if summary_data:
         df_summary = pd.DataFrame(summary_data)
