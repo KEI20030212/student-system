@@ -25,11 +25,12 @@ def render_quiz_maker_page():
         with st.form("add_quiz_form"):
             new_name = st.text_input("📝 テストの名前 (例: 中2 数学 計算ドリル)")
             new_id = st.text_input("🔑 スプレッドシートのID", placeholder="1A2B3C4D5E6F7G...")
+            new_full_marks = st.number_input("💯 満点", min_value=1, value=100)
             submit_new = st.form_submit_button("リストに登録する ✨")
             
             if submit_new:
                 if new_name and new_id:
-                    add_quiz_maker_sheet(new_name, new_id)
+                    add_quiz_maker_sheet(new_name, new_id, new_full_marks)
                     st.success(f"「{new_name}」をリストに登録しました！")
                     time.sleep(1)
                     st.rerun()
