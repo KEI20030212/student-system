@@ -1,10 +1,13 @@
 import streamlit as st
 import time
 from utils.g_sheets import get_all_student_names
+from utils.g_sheets import get_student_info
 
 # 完成している2つのファイルを部品として読み込む
 from views.student_details import render_student_details_page
 from views.analysis import render_analysis_page
+# 🌟 修正: 名前を正しく「render_conference_report」にしました
+from views.conference_report import render_conference_report
 
 def render_student_portal_page():
     st.header("🏫 生徒個別ポータル")
@@ -33,6 +36,20 @@ def render_student_portal_page():
     # 🌟 全機能共通の生徒選択バー
     selected_student = st.selectbox("👤 対象の生徒を選択してください", ["-- 選択 --"] + student_names)
 
+    # ==========================================
+    # 🌟 NEW! サイドバーに面談モードのスイッチを追加
+    # ==========================================
+    st.sidebar.divider()
+    is_conference_mode = st.sidebar.toggle("👨‍👩‍👦 面談モード", value=False)
+    
+    if is_conference_mode:
+        st.sidebar.success("✅ 面談モードON（読取専用）")
+        st.sidebar.caption("※保護者と一緒に画面を見るためのモードです。")
+    else:
+        st.sidebar.info("✏️ 通常モード（入力・編集）")
+
+    # ==========================================
+
     # 🌟 生徒が選ばれていない時の「機能紹介画面」！
     if selected_student == "-- 選択 --":
         st.info("👆 上のメニューから生徒を選択すると、以下の個別メニューが利用できます！")
@@ -58,17 +75,29 @@ def render_student_portal_page():
                 """)
         return
 
-    # 🌟 生徒が選ばれたら、機能切り替えボタンを表示
-    app_mode = st.radio(
-        "📂 表示するメニューを選んでください", 
-        ["👤 生徒詳細・成績入力", "📊 個別分析・履歴・振替管理"], 
-        horizontal=True
-    )
-    
-    st.divider()
-    
-    # 選ばれた機能に応じて、生徒名を渡しながら画面を呼び出す
-    if app_mode == "👤 生徒詳細・成績入力":
-        render_student_details_page(selected_student)
+
+    # ==========================================
+    # 🌟 ここで「面談モード」と「通常モード」を分岐させます！
+    # ==========================================
+    if is_conference_mode:
+        # 面談モードがONのとき：面談レポートだけを全画面に表示する
+        with st.spinner("面談用データを準備中..."):
+            info = get_student_info(selected_student) # 面談画面で使うため情報を取得
+            
+        render_conference_report(selected_student, info)
+        
     else:
-        render_analysis_page(selected_student)
+        # 面談モードがOFF（通常）のとき：いつものメニューを表示する
+        app_mode = st.radio(
+            "📂 表示するメニューを選んでください", 
+            ["👤 生徒詳細・成績入力", "📊 個別分析・履歴・振替管理"], 
+            horizontal=True
+        )
+        
+        st.divider()
+        
+        # 選ばれた機能に応じて、生徒名を渡しながら画面を呼び出す
+        if app_mode == "👤 生徒詳細・成績入力":
+            render_student_details_page(selected_student)
+        else:
+            render_analysis_page(selected_student)
