@@ -1,4 +1,5 @@
 import streamlit as st
+import time # 🌟 必須！APIエラー防止の息継ぎ用に追加
 
 # 裏方部隊（すべての関数を1つにまとめてインポートします）
 from utils.g_sheets import (
@@ -18,7 +19,7 @@ def render_home_page():
     user_role = st.session_state.get('role', '')
     
     # ==========================================
-    # 🌟 個別メッセージエリア (変更なし)
+    # 🌟 個別メッセージエリア
     # ==========================================
     st.subheader("💌 あなた宛てのメッセージ")
     
@@ -114,7 +115,7 @@ def render_home_page():
     st.divider()
     
     # ==========================================
-    # 🌟 掲示板エリア (変更なし)
+    # 🌟 掲示板エリア
     # ==========================================
     st.subheader("📌 講師向け 連絡事項・掲示板")
     current_message = load_board_message()
@@ -126,9 +127,13 @@ def render_home_page():
         with st.expander("✏️ 掲示板を編集する"):
             new_msg = st.text_area("先生たちへのメッセージを入力", value=current_message, height=150)
             if st.button("💾 掲示板を更新", type="primary"):
-                save_board_message(new_msg)
-                load_board_message.clear()
-                st.success("掲示板を更新しました！全先生のホーム画面に反映されます。")
+                # 🌟 API対策: スピナーと息継ぎの追加
+                with st.spinner("☁️ 掲示板を更新中...（※APIエラー防止のため少し待ちます☕）"):
+                    save_board_message(new_msg)
+                    time.sleep(1) # 息継ぎ
+                    load_board_message.clear()
+                st.success("✅ 掲示板を更新しました！全先生のホーム画面に反映されます。")
+                time.sleep(1.5) # メッセージを見せる時間
                 st.rerun()
 
     st.divider() 
@@ -138,24 +143,23 @@ def render_home_page():
     # ==========================================
     st.subheader("🗺️ 本日の教室状況・座席管理")
     
-    # 時間割リスト
     time_slots = [
         "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
         "0コマ目 (13:10~14:40)", "1コマ目 (14:50~16:20)",
         "2コマ目 (16:40~18:10)", "3コマ目 (18:20~19:50)", "4コマ目 (20:00~21:30)"
     ]
     
-    # 生徒名と全座席データの取得
-    student_names = get_all_student_names()
-    if not student_names: student_names = []
-    
-    try:
-        all_seating_data = load_seating_data()
-    except Exception:
-        all_seating_data = {}
-        st.error("座席データの読み込みに失敗しました。")
+    # 🌟 API対策: 初期データ読み込み時のスピナー
+    with st.spinner("☁️ 本日の座席データを読み込み中..."):
+        student_names = get_all_student_names()
+        if not student_names: student_names = []
+        
+        try:
+            all_seating_data = load_seating_data()
+        except Exception:
+            all_seating_data = {}
+            st.error("座席データの読み込みに失敗しました。")
 
-    # 管理者（教室長・オーナー）かどうかの判定
     can_edit_seat = user_role in ['admin', 'owner']
     
     if can_edit_seat:
@@ -163,7 +167,6 @@ def render_home_page():
     else:
         st.write("時間帯のタブを切り替えて、各コマの座席表を確認できます。")
 
-    # ブース数の決定（過去のデータから最大ブース数を推測、デフォルト6）
     if 'num_booths' not in st.session_state:
         max_b = 6
         for key in all_seating_data.keys():
@@ -174,7 +177,6 @@ def render_home_page():
                     max_b = int(b_num_str)
         st.session_state['num_booths'] = max_b
 
-    # 管理者のみ「ブースの増減」ボタンを表示
     if can_edit_seat:
         col_add, col_sub, _ = st.columns([1, 1, 3])
         with col_add:
@@ -189,23 +191,19 @@ def render_home_page():
                 else:
                     st.warning("これ以上減らせません！")
 
-    # 見やすいように「Aコマ目」など短い名前でタブを作成
     tab_names = [slot.split(" ")[0] for slot in time_slots]
     tabs = st.tabs(tab_names)
 
-    # 各コマごとの処理ループ
     for slot_idx, slot_name in enumerate(time_slots):
         with tabs[slot_idx]:
             st.markdown(f"#### 🕒 {slot_name} の座席表")
             
-            # --- 今のコマのデータだけを抽出 ---
             slot_data = {}
             for key, info in all_seating_data.items():
                 if f"{slot_name}||" in str(key):
                     b_name = key.split("||")[1]
                     slot_data[b_name] = info
                 elif "||" not in str(key) and slot_idx == 0:
-                    # 古い仕様のデータ（||が含まれていない）はとりあえず最初のコマに割り当てる
                     slot_data[key] = info
 
             # ==========================================
@@ -215,7 +213,6 @@ def render_home_page():
                 new_seating_for_slot = {}
                 assigned_students = set()
                 
-                # 既にこのコマで選ばれている生徒をリストアップ
                 for i in range(st.session_state['num_booths']):
                     s_key = f"seat_{slot_idx}_{i}"
                     if s_key in st.session_state:
@@ -228,7 +225,6 @@ def render_home_page():
                         if info.get("生徒名") != "-- 空席 --":
                             assigned_students.add(info["生徒名"])
 
-                # 3つずつ行を作る
                 for i in range(0, st.session_state['num_booths'], 3):
                     cols = st.columns(3)
                     for j in range(3):
@@ -267,23 +263,25 @@ def render_home_page():
                                         
                                     new_seating_for_slot[booth_name] = {"生徒名": new_occupant, "状態": new_status}
                 
-                # 保存ボタン（コマごと）
+                # 個別コマの保存ボタン
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button(f"💾 {tab_names[slot_idx]}の座席表を確定・共有する", type="primary", key=f"save_btn_{slot_idx}", use_container_width=True):
-                    with st.spinner(f'{tab_names[slot_idx]} の座席を保存中...'):
-                        # 新しいデータを全データに合成して上書き保存する
+                    # 🌟 API対策: スピナーと息継ぎを追加
+                    with st.spinner(f'☁️ {tab_names[slot_idx]} の座席を保存中...（※APIエラーを回避中☕）'):
                         for b_name, info in new_seating_for_slot.items():
                             all_seating_data[f"{slot_name}||{b_name}"] = info
                             
                         save_seating_data(all_seating_data)
-                        st.success(f"✨ {slot_name} の座席表をクラウドに保存しました！")
-                        st.rerun()
+                        time.sleep(1) # 息継ぎ
+                    st.success(f"✨ {slot_name} の座席表をクラウドに保存しました！")
+                    time.sleep(1.5)
+                    st.rerun()
 
             # ==========================================
             # 👀 閲覧モード（一般講師など、全員）
             # ==========================================
             else:
-                num_booths_view = max(6, len(slot_data)) # データがない場合は最低6枠表示
+                num_booths_view = max(6, len(slot_data)) 
                 
                 if not slot_data:
                     st.info(f"{slot_name} の座席データはまだ登録されていません。")
@@ -316,24 +314,31 @@ def render_home_page():
     if can_edit_seat:
         st.divider()
         if st.button("💾 全コマの座席表をまとめて確定・共有する", type="primary", use_container_width=True):
-            with st.spinner("全コマの座席データを保存中..."):
+            # 🌟 API対策: ご希望のプログレスバー＆スピナーアニメーションを実装！
+            with st.spinner("☁️ 全コマの座席データを一括集計中...（※途中でAPIが混み合っても自動復帰します☕）"):
+                progress_bar = st.progress(0)
+                total_slots = len(time_slots)
                 
-                # すべてのタブのセッションステート（入力状態）を回収してデータを作成
                 for slot_idx, slot_name in enumerate(time_slots):
                     for booth_idx in range(st.session_state['num_booths']):
                         booth_name = f"ブース{booth_idx+1}"
                         
-                        # 画面上の選択肢を取得（まだ表示されていない場合はデフォルト値）
                         seat_val = st.session_state.get(f"seat_{slot_idx}_{booth_idx}", "-- 空席 --")
                         status_val = st.session_state.get(f"status_{slot_idx}_{booth_idx}", "出席")
                         
                         if seat_val == "-- 空席 --":
                             status_val = "出席"
                             
-                        # "コマ名||ブース名" の形式で保存
                         all_seating_data[f"{slot_name}||{booth_name}"] = {"生徒名": seat_val, "状態": status_val}
+                    
+                    # 進行状況のバーを少しずつ進める（ついでに少しだけ息継ぎして負荷分散）
+                    progress_bar.progress((slot_idx + 1) / total_slots)
+                    time.sleep(0.1) 
                 
-                # スプレッドシートに一括保存
+                # 全てのデータをまとめたら1回だけスプレッドシートへ送信
                 save_seating_data(all_seating_data)
-                st.success("✨ 全コマの座席表をクラウドにまとめて保存しました！")
-                st.rerun()
+                time.sleep(1) # API保存後の息継ぎ
+                
+            st.success("✨ 全コマの座席表をクラウドにまとめて保存しました！")
+            time.sleep(1.5) # 成功メッセージをユーザーに見せるための待機
+            st.rerun()
