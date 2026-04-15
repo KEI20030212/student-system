@@ -77,32 +77,61 @@ def render_conference_report(selected_student, info):
 
     st.divider()
 
-    # --- 2. 学校成績の推移 ---
+    # ==========================================
+    # 2. 学校成績の推移（5科目マルチライン）
+    # ==========================================
     st.subheader("📈 成績の推移 (5科目)")
     if not df_student_tests.empty:
-        df_plot = df_student_tests[df_student_tests['テスト種別'].str.contains("テスト|模試", na=False)].copy()
-        if not df_plot.empty:
-            df_plot['実施日'] = pd.to_datetime(df_plot['実施日'], errors='coerce')
-            df_plot = df_plot.sort_values('実施日')
-            subjects = ["英語", "数学", "国語", "理科", "社会"]
-            df_melted = df_plot.melt(id_vars=['実施日', 'テスト種別'], value_vars=subjects, var_name='科目', value_name='点数')
-            df_melted['点数'] = pd.to_numeric(df_melted['点数'], errors='coerce')
-            df_melted = df_melted.dropna(subset=['点数'])
+        # 💡 列名の違い（実施日か、日付か）を自動で判別して吸収する安全設計
+        date_col = '実施日' if '実施日' in df_student_tests.columns else '日付' if '日付' in df_student_tests.columns else None
+        type_col = 'テスト種別' if 'テスト種別' in df_student_tests.columns else 'テスト名' if 'テスト名' in df_student_tests.columns else None
 
-            chart = alt.Chart(df_melted).mark_line(point=True).encode(
-                x=alt.X('実施日:T', title='実施日'),
-                y=alt.Y('点数:Q', scale=alt.Scale(domain=[0, 100]), title='点数'),
-                color=alt.Color('科目:N', scale=alt.Scale(domain=subjects, range=['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00'])),
-                tooltip=['実施日', 'テスト種別', '科目', '点数']
-            ).properties(height=350)
-            st.altair_chart(chart, use_container_width=True)
+        if not date_col:
+            # 万が一どちらの列名もない場合は、クラッシュさせずに現在の列名を画面に表示して教える
+            st.error(f"⚠️ 成績データの中に「実施日」または「日付」という名前の列が見つかりません。スプレッドシートを確認してください。\n（現在の列名: {', '.join(df_student_tests.columns)}）")
         else:
-            st.info("グラフ化できる定期テスト・模試のデータがまだありません。")
+            # テスト種別の絞り込み（列が存在する場合のみ）
+            if type_col:
+                df_plot = df_student_tests[df_student_tests[type_col].astype(str).str.contains("テスト|模試", na=False)].copy()
+            else:
+                df_plot = df_student_tests.copy()
+
+            if not df_plot.empty:
+                # 日付順に並び替え
+                df_plot[date_col] = pd.to_datetime(df_plot[date_col], errors='coerce')
+                df_plot = df_plot.sort_values(date_col)
+                
+                subjects = ["英語", "数学", "国語", "理科", "社会"]
+                # シートに実際に存在する科目列だけを抽出（国語と算数しかない場合などのエラー防止）
+                available_subjects = [s for s in subjects if s in df_plot.columns]
+                
+                # グラフ描画用にデータを変形
+                id_vars_list = [date_col]
+                if type_col: id_vars_list.append(type_col)
+
+                df_melted = df_plot.melt(id_vars=id_vars_list, value_vars=available_subjects, var_name='科目', value_name='点数')
+                df_melted['点数'] = pd.to_numeric(df_melted['点数'], errors='coerce')
+                df_melted = df_melted.dropna(subset=['点数'])
+
+                # ツールチップ（マウスオーバー時の表示）の設定
+                tooltip_list = [date_col, '科目', '点数']
+                if type_col: tooltip_list.insert(1, type_col)
+
+                # グラフの描画
+                chart = alt.Chart(df_melted).mark_line(point=True).encode(
+                    x=alt.X(f'{date_col}:T', title='実施日'),
+                    y=alt.Y('点数:Q', scale=alt.Scale(domain=[0, 100]), title='点数'),
+                    color=alt.Color('科目:N', scale=alt.Scale(domain=available_subjects, range=['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00'])),
+                    tooltip=tooltip_list
+                ).properties(height=350)
+                
+                st.altair_chart(chart, use_container_width=True)
+            else:
+                st.info("グラフ化できる定期テスト・模試のデータがまだありません。")
     else:
         st.info("成績データが登録されていません。")
 
     st.divider()
-
     # --- 3. 小テスト進捗 ---
     st.subheader("📊 小テスト（基礎学力）の定着状況")
     if master_dict and not df_quiz.empty:
