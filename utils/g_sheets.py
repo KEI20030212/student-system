@@ -293,7 +293,9 @@ def save_test_score(date, name, test_type, eng, math_score, jpn, sci, soc,
     
     row_to_append = [row_dict.get(col, "-") for col in header]
     ws.append_row(row_to_append)
-    st.cache_data.clear()def load_all_data(student_name):
+    st.cache_data.clear()
+
+def load_all_data(student_name):
     df = load_raw_data(student_name)
     if not df.empty and '終了ページ' in df.columns:
         df['ページ数'] = df['終了ページ'].astype(str).str.extract(r'(\d+)').astype(float)
