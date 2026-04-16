@@ -382,7 +382,7 @@ def get_quiz_maker_sheets():
             }
     return quiz_data
 
-def add_quiz_maker_sheet(test_name, sheet_id):
+def add_quiz_maker_sheet(test_name, sheet_id, full_marks): # 🌟 ここに full_marks を追加！
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("設定_小テスト一覧")
