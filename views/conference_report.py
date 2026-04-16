@@ -7,6 +7,48 @@ import time
 # 🛡️ APIエラー対策：堅牢なデータ読み込み関数群
 # ==========================================
 @st.cache_data(ttl=600, show_spinner=False)
+def cached_calculate_attendance_rate(student_name):
+    from utils.g_sheets import load_raw_data # 生徒個別シートを読み込む既存の関数（※）
+    import time
+    
+    max_retries = 5
+    df_attendance = pd.DataFrame()
+    
+    # --- 🛡️ APIエラー対策: 指数バックオフ付き読み込み ---
+    for attempt in range(max_retries):
+        try:
+            # 生徒名と同じ名前のシートを読み込む想定
+            df_attendance = load_raw_data(student_name)
+            break
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                return "取得エラー"
+
+    if df_attendance.empty or '出欠' not in df_attendance.columns:
+        return "データなし"
+
+    # --- 📊 出席率の計算ロジック ---
+    # 1. 判定用のキーワード
+    attend_keywords = ['出席（通常）', '出席（振替授業を消化）']
+    absent_keywords = ['欠席（後日振替あり）', '欠席（振替なし）']
+    
+    # 2. それぞれの数をカウント
+    # ※ 列名が「出欠」であることを前提にしています
+    records = df_attendance['出欠'].dropna().astype(str)
+    attend_count = records.isin(attend_keywords).sum()
+    absent_count = records.isin(absent_keywords).sum()
+    
+    total_lessons = attend_count + absent_count
+    
+    if total_lessons == 0:
+        return "0% (履歴なし)"
+    
+    rate = (attend_count / total_lessons) * 100
+    return f"{int(rate)}%"
+
+@st.cache_data(ttl=600, show_spinner=False)
 def safe_load_test_scores():
     from utils.g_sheets import load_test_scores
     max_retries = 5
@@ -58,7 +100,10 @@ def render_conference_report(selected_student, info):
 
     # --- 1. 宿題履行状況 ＆ 努力の量 ---
     st.subheader("🔥 学習への取り組み姿勢")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
+    with st.spinner("出席率を計算中..."):
+        # 🌟 ここで先ほど作った計算関数を呼び出す
+        attendance_rate = cached_calculate_attendance_rate(selected_student)
     
     hw_rate_str = str(info.get('宿題履行率', '0')).replace('%', '')
     try:
@@ -66,11 +111,14 @@ def render_conference_report(selected_student, info):
     except ValueError:
         hw_rate = 0.0
 
-    col1.metric("🏠 宿題履行率", f"{hw_rate}%")
-    total_quiz_attempts = len(df_quiz) if not df_quiz.empty else 0
-    col2.metric("📝 小テスト総実施回数", f"{total_quiz_attempts} 回")
-    col3.metric("🎯 志望校・目標", info.get('志望校・目的', '未設定'))
+    attendance_rate = info.get('出席率', 'データなし')
 
+    col1.metric("🏠 宿題履行率", f"{hw_rate}%")
+    col2.metric("📅 出席率", attendance_rate) # 🌟 自動計算された値が表示される
+    
+    total_quiz_attempts = len(df_quiz) if not df_quiz.empty else 0
+    col3.metric("📝 小テスト総回数", f"{total_quiz_attempts} 回")
+    col4.metric("🎯 志望校・目標", info.get('志望校・目的', '未設定'))
     if hw_rate >= 90: st.success("素晴らしい取り組みです！この学習習慣が成績向上の最大の武器になります。")
     elif hw_rate >= 70: st.info("概ね良好に学習できています。間違えた問題の解き直しを徹底するとさらに伸びます。")
     else: st.warning("まずは宿題をやり切る習慣づけが必要です。ご家庭での学習時間の固定化をご協力お願いします。")
@@ -137,22 +185,38 @@ def render_conference_report(selected_student, info):
     if master_dict and not df_quiz.empty:
         df_quiz['点数'] = pd.to_numeric(df_quiz['点数'], errors='coerce')
         summary_data = []
-        for text_name, chaps in master_dict.items():
+
+        attempted_texts = df_quiz['テキスト'].dropna().unique()
+
+        for text_name in attempted_texts:
+            if text_name not in master_dict:
+                continue # マスターにない場合はスキップ
+                
+            chaps = master_dict[text_name]
             total_chaps = len(chaps)
             df_text = df_quiz[(df_quiz['テキスト'] == text_name) & (df_quiz['点数'] >= 80)]
             done_chaps = df_text['単元'].nunique() if '単元' in df_text.columns else 0
-            progress = int((done_chaps / total_chaps) * 100) if total_chaps > 0 else 0
-            summary_data.append({"テキスト名": text_name, "進捗率(%)": progress, "合格章数": f"{done_chaps} / {total_chaps} 章"})
             
-        df_summary = pd.DataFrame(summary_data)
-        bar_chart = alt.Chart(df_summary).mark_bar().encode(
-            x=alt.X('進捗率(%):Q', scale=alt.Scale(domain=[0, 100])),
-            y=alt.Y('テキスト名:N', sort='-x'),
-            color=alt.Color('進捗率(%):Q', scale=alt.Scale(scheme='blues')),
-            tooltip=['テキスト名', '進捗率(%)', '合格章数']
-        ).properties(height=200)
-        st.altair_chart(bar_chart, use_container_width=True)
-        st.dataframe(df_summary, hide_index=True, use_container_width=True)
+            progress = int((done_chaps / total_chaps) * 100) if total_chaps > 0 else 0
+            summary_data.append({
+                "テキスト名": text_name,
+                "進捗率(%)": progress,
+                "合格章数": f"{done_chaps} / {total_chaps} 章"
+            }
+        if summary_data:
+            df_summary = pd.DataFrame(summary_data)
+            bar_chart = alt.Chart(df_summary).mark_bar().encode(
+                x=alt.X('進捗率(%):Q', scale=alt.Scale(domain=[0, 100])),
+                y=alt.Y('テキスト名:N', sort='-x'),
+                color=alt.Color('進捗率(%):Q', scale=alt.Scale(scheme='blues')),
+                tooltip=['テキスト名', '進捗率(%)', '合格章数']
+            ).properties(height=200)
+            st.altair_chart(bar_chart, use_container_width=True)
+            
+            # 🌟 印刷対策：インデックスをテキスト名にして、st.tableで静的に表示
+            st.table(df_summary.set_index("テキスト名"))
+        else:
+            st.info("集計できる小テストデータがありません。")
     else:
         st.info("小テストのデータがまだありません。")
 
@@ -161,8 +225,10 @@ def render_conference_report(selected_student, info):
     if not df_quiz.empty:
         df_weak = df_quiz[df_quiz['点数'] < 60].sort_values(by='日時', ascending=False).head(5)
         if not df_weak.empty:
-            st.write("以下の単元は、直近のテストで点数が伸び悩んだため、次回の授業等で優先的に対策を行います。")
+            st.write("以下の単元は、直近のテストで点数が伸び悩んだため、次回の授業や講習で優先的に対策を行います。")
             display_weak = df_weak[['日時', 'テキスト', '単元', '点数', 'ミス番号']]
-            st.dataframe(display_weak, hide_index=True, use_container_width=True)
+            
+            # 🌟 印刷対策：インデックスを「日時」にして、st.tableで表示
+            st.table(display_weak.set_index("日時"))
         else:
             st.success("現在、極端に点数が低い（苦手な）単元は見当たりません！順調です。")
