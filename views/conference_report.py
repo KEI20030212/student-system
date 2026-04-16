@@ -128,12 +128,14 @@ def render_conference_report(selected_student, info):
     # ==========================================
     st.subheader("📈 成績の推移 (5科目)")
     if not df_student_tests.empty:
-        date_col = '実施日' if '実施日' in df_student_tests.columns else '日付' if '日付' in df_student_tests.columns else None
+        # 🌟 日付列の判定に「日時」を追加しました
+        date_col = '実施日' if '実施日' in df_student_tests.columns else '日付' if '日付' in df_student_tests.columns else '日時' if '日時' in df_student_tests.columns else None
         type_col = 'テスト種別' if 'テスト種別' in df_student_tests.columns else 'テスト名' if 'テスト名' in df_student_tests.columns else None
 
         if not date_col:
-            st.error(f"⚠️ 成績データの中に「実施日」または「日付」という名前の列が見つかりません。スプレッドシートを確認してください。\n（現在の列名: {', '.join(df_student_tests.columns)}）")
+            st.error(f"⚠️ 成績データの中に日付に関する列が見つかりません。\n（現在の列名: {', '.join(df_student_tests.columns)}）")
         else:
+            # グラフ用のデータ作成
             if type_col:
                 df_plot = df_student_tests[df_student_tests[type_col].astype(str).str.contains("テスト|模試", na=False)].copy()
             else:
@@ -168,7 +170,7 @@ def render_conference_report(selected_student, info):
                 st.info("グラフ化できる定期テスト・模試のデータがまだありません。")
     else:
         st.info("成績データが登録されていません。")
-
+        
     st.divider()
 
     # ==========================================
