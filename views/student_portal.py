@@ -10,8 +10,18 @@ from views.analysis import render_analysis_page
 from views.conference_report import render_conference_report
 
 def render_student_portal_page():
-    st.header("🏫 生徒個別ポータル")
+    col_title, col_toggle = st.columns([3, 1])
     
+    with col_title:
+        st.header("🏫 生徒個別ポータル")
+        
+    with col_toggle:
+        st.markdown("<br>", unsafe_allow_html=True) # スイッチの高さをタイトルと合わせるための微調整
+        is_conference_mode = st.toggle("👨‍👩‍👦 面談モード", value=False)
+        
+    if is_conference_mode:
+        st.caption("✅ 面談モードON（読取専用）※保護者と一緒に画面を見るためのモードです。")
+
     # 🌟 変更: 生徒一覧の取得にも Exponential Backoff を適用
     student_names = []
     max_retries = 5
@@ -39,8 +49,8 @@ def render_student_portal_page():
     # ==========================================
     # 🌟 NEW! サイドバーに面談モードのスイッチを追加
     # ==========================================
-    st.sidebar.divider()
-    is_conference_mode = st.sidebar.toggle("👨‍👩‍👦 面談モード", value=False)
+    #st.sidebar.divider()
+    #is_conference_mode = st.sidebar.toggle("👨‍👩‍👦 面談モード", value=False)
     
     if is_conference_mode:
         st.sidebar.success("✅ 面談モードON（読取専用）")
