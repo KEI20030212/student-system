@@ -135,8 +135,9 @@ def render_student_details_page(selected_student):
             date = c1.date_input("実施日", datetime.date.today())
             test_type = c2.selectbox("📝 テスト種別", ["定期テスト(中間など)", "期末テスト", "外部模試", "通知表（内申点）", "その他"])
 
+            # --- 1. 通知表（内申点）の入力 ---
             if test_type == "通知表（内申点）":
-                st.info("各科目の内申点（1〜5）を入力してください。※ここで入力した値がカルテのマトリクスに自動反映されます。")
+                st.info("各科目の内申点（1〜5）を入力してください。")
                 n1, n2, n3, n4, n5 = st.columns(5)
                 n_eng = n1.number_input("英語 内申", 1, 5, value=None)
                 n_math = n2.number_input("数学 内申", 1, 5, value=None)
@@ -145,48 +146,45 @@ def render_student_details_page(selected_student):
                 n_soc = n5.number_input("社会 内申", 1, 5, value=None)
                 
                 st.divider()
-                n6, n7, n8, n9 = st.columns(4)
-                n_pe = n6.number_input("保体 内申", 1, 5, value=None)
-                n_tech = n7.number_input("技術 内申", 1, 5, value=None)
-                n_home = n8.number_input("家庭 内申", 1, 5, value=None)
-                n_mus = n9.number_input("音楽 内申", 1, 5, value=None)
+                # 🌟 技家をひとつにまとめ、美術を追加
+                nb1, nb2, nb3, nb4 = st.columns(4)
+                n_pe = nb1.number_input("保体 内申", 1, 5, value=None)
+                n_gika = nb2.number_input("技家 内申", 1, 5, value=None) # 🛠️ 合体！
+                n_art = nb3.number_input("美術 内申", 1, 5, value=None)  # 🎨 追加
+                n_mus = nb4.number_input("音楽 内申", 1, 5, value=None)
                 
                 if st.button("💾 内申点を登録する", type="primary"):
-                    with st.spinner("☁️ 内申点を保存中...（混雑時は自動で再試行します）"):
-                        max_retries_save = 5
-                        for attempt in range(max_retries_save):
-                        #for attempt in range(3):
-                            try:
-                                save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, None, None, None, None, None, None, None, n_pe, n_tech, n_home, n_mus, is_naishin=True)
-                                time.sleep(1)
-                                st.cache_data.clear()
-                                st.success("内申点を登録しました！カルテ画面のマトリクスに反映されます。")
-                                time.sleep(1.5)
-                                st.rerun()
-                                break
-                            except Exception:
-                                if attempt < max_retries_save - 1: 
-                                    time.sleep(2 ** attempt)
-                                #if attempt < 2: time.sleep(2)
-                                else: st.error("通信エラーが発生しました。もう一度お試しください。")
+                    with st.spinner("保存中..."):
+                        # 保存時は技術・家庭の両方に同じ内申点を入れるか、片方を空にするなどの処理が必要
+                        # ここでは g_sheets.py の仕様に合わせて引数を渡します
+                        save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
+                                        None, None, None, None, None, None, None, 
+                                        n_pe, n_gika, None, n_mus, n_art, is_naishin=True)
+                        st.cache_data.clear()
+                        st.success("内申点を登録しました！")
+                        st.rerun()
 
+            # --- 2. テスト成績（定期・期末・模試）の入力 ---
             else:
-                with st.expander("⚙️ 各教科の満点設定（基本100点/副教科50点）"):
+                with st.expander("⚙️ 各教科の満点設定"):
                     mc1, mc2, mc3, mc4, mc5 = st.columns(5)
                     m_eng = mc1.number_input("英 満点", 0, 100, 100)
                     m_math = mc2.number_input("数 満点", 0, 100, 100)
-                    m_jpn = mc3.number_input("国語 満点", 0, 100, 100)
-                    m_sci = mc4.number_input("理科 満点", 0, 100, 100)
-                    m_soc = mc5.number_input("社会 満点", 0, 100, 100)
+                    m_jpn = mc3.number_input("国 満点", 0, 100, 100)
+                    m_sci = mc4.number_input("理 満点", 0, 100, 100)
+                    m_soc = mc5.number_input("社 満点", 0, 100, 100)
                     
-                    m_pe, m_tech, m_home, m_mus = 50, 50, 50, 50
+                    # 🌟 テストの満点設定はバラバラ
+                    m_pe, m_tech, m_home, m_art, m_mus = 50, 50, 50, 50, 50
                     if test_type == "期末テスト":
-                        mc6, mc7, mc8, mc9 = st.columns(4)
-                        m_pe = mc6.number_input("保体 満点", 0, 100, 50)
+                        mc6, mc7, mc8, mc9, mc10 = st.columns(5)
+                        m_pe = mc6.number_input("保 満点", 0, 100, 50)
                         m_tech = mc7.number_input("技 満点", 0, 100, 50)
                         m_home = mc8.number_input("家 満点", 0, 100, 50)
-                        m_mus = mc9.number_input("音 満点", 0, 100, 50)
+                        m_art = mc9.number_input("美 満点", 0, 100, 50)
+                        m_mus = mc10.number_input("音 満点", 0, 100, 50)
 
+                # 5教科スコア
                 sc1, sc2, sc3, sc4, sc5 = st.columns(5)
                 eng = sc1.number_input(f"英語 (/{m_eng})", 0, m_eng, value=None)
                 math_score = sc2.number_input(f"数学 (/{m_math})", 0, m_math, value=None)
@@ -194,7 +192,8 @@ def render_student_details_page(selected_student):
                 sci = sc4.number_input(f"理科 (/{m_sci})", 0, m_sci, value=None)
                 soc = sc5.number_input(f"社会 (/{m_soc})", 0, m_soc, value=None)
 
-                dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, dev_3, dev_5 = None, None, None, None, None, None, None
+                # 模試用偏差値
+                dev_eng, dev_math, dev_jpn, dev_sci, dev_soc = None, None, None, None, None
                 if test_type == "外部模試":
                     st.divider()
                     st.markdown("##### 📊 偏差値の入力")
@@ -205,27 +204,25 @@ def render_student_details_page(selected_student):
                     dev_sci = d4.number_input("理科 偏差値", 0.0, 90.0, value=None, step=0.1)
                     dev_soc = d5.number_input("社会 偏差値", 0.0, 90.0, value=None, step=0.1)
 
-                pe, tech, home, mus = None, None, None, None
+                # 期末テスト用副教科（テストはバラバラ！）
+                pe, tech, home, art, mus = None, None, None, None, None
                 if test_type == "期末テスト":
                     st.divider()
-                    sc6, sc7, sc8, sc9 = st.columns(4)
-                    pe = sc6.number_input(f"保健体育 (/{m_pe})", 0, m_pe, value=None)
+                    sc6, sc7, sc8, sc9, sc10 = st.columns(5)
+                    pe = sc6.number_input(f"保体 (/{m_pe})", 0, m_pe, value=None)
                     tech = sc7.number_input(f"技術 (/{m_tech})", 0, m_tech, value=None)
                     home = sc8.number_input(f"家庭科 (/{m_home})", 0, m_home, value=None)
-                    mus = sc9.number_input(f"音楽 (/{m_mus})", 0, m_mus, value=None)
+                    art = sc9.number_input(f"美術 (/{m_art})", 0, m_art, value=None)
+                    mus = sc10.number_input(f"音楽 (/{m_mus})", 0, m_mus, value=None)
 
                 if st.button("💾 この成績を登録する", type="primary"):
-                    with st.spinner("☁️ 成績を保存中...（混雑時は自動で再試行します）"):
-                        max_retries_save = 5
-                        for attempt in range(max_retries_save):
-                        #for attempt in range(3):
-                            try:
-                                save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, dev_3, dev_5, pe, tech, home, mus, is_naishin=False)
-                                time.sleep(1)
-                                st.cache_data.clear()
-                                st.success("成績を登録しました！")
-                                time.sleep(1.5)
-                                st.rerun()
+                    with st.spinner("保存中..."):
+                        save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, 
+                                        dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, None, None, 
+                                        pe, tech, home, mus, art, is_naishin=False)
+                        st.cache_data.clear()
+                        st.success("成績を登録しました！")
+                        st.rerun()
                                 break
                             except Exception:
                                 if attempt < max_retries_save - 1: 
