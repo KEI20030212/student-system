@@ -24,18 +24,21 @@ def render_quiz_maker_page():
         st.write("他の先生も使えるように、新しい小テストのファイルをリストに保存します！")
         with st.form("add_quiz_form"):
             new_name = st.text_input("📝 テストの名前 (例: 中2 数学 計算ドリル)")
-            new_id = st.text_input("🔑 スプレッドシートのID", placeholder="1A2B3C4D5E6F7G...")
+            # 🌟 変更: IDの(必須)というプレッシャーをなくしました
+            new_id = st.text_input("🔑 スプレッドシートのID (後から設定する場合は空欄でOK)", placeholder="1A2B3C4D5E6F7G...")
             new_full_marks = st.number_input("💯 満点", min_value=1, value=100)
             submit_new = st.form_submit_button("リストに登録する ✨")
             
             if submit_new:
-                if new_name and new_id:
-                    add_quiz_maker_sheet(new_name, new_id, new_full_marks)
+                # 🌟 変更: 名前さえあれば登録できるようにしました
+                if new_name:
+                    save_id = new_id.strip() if new_id else ""
+                    add_quiz_maker_sheet(new_name, save_id, new_full_marks)
                     st.success(f"「{new_name}」をリストに登録しました！")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.warning("⚠️ 名前とIDの両方を入力してください。")
+                    st.warning("⚠️ テストの名前は必ず入力してください。")
 
     st.divider()
 
@@ -66,103 +69,107 @@ def render_quiz_maker_page():
     with st.container(border=True):
         st.markdown("#### ⚙️ 印刷設定")
         
-        # ==========================================
-        # 🌟 修正ポイント1: テストの種類を選ぶラジオボタン
-        # ==========================================
         test_type = st.radio(
             "📝 テストの種類を選択", 
             ["確認テスト", "良問テスト(簡)", "良問テスト(難)"], 
             horizontal=True
         )
         
-        # 選んだテストの種類によって、入力項目とターゲットシートを切り替えます
         if test_type == "確認テスト":
             target_sheet_name = "確認テスト"
-            st.write("▼ 範囲を指定して問題を作成します")
+            st.write("▼ 出題範囲を設定します")
+            
+            # 🌟 変更: 単一の章か、範囲指定かを選べるようにしました
+            range_mode = st.radio("範囲の指定方法", ["1つの章から出題", "複数の章をまたいで出題"], horizontal=True)
+            
             c1, c2, c3 = st.columns(3)
-            start_num = c1.number_input("はじめの番号 (B2セル)", min_value=1, value=1)
-            end_num = c2.number_input("終わりの番号 (B3セル)", min_value=1, value=20)
-            shuffle = c3.checkbox("🔀 問題をシャッフルする (D3セル)", value=False)
+            
+            if range_mode == "1つの章から出題":
+                # 1つの章だけの場合は、入力項目を1つにして、裏でB2・B3に同じ数字を割り当てます
+                target_num = c1.number_input("出題する章番号", min_value=1, value=1)
+                start_num = target_num
+                end_num = target_num
+                shuffle = c2.checkbox("🔀 問題をシャッフルする", value=False)
+            else:
+                # 複数章の場合は今まで通り
+                start_num = c1.number_input("はじめの番号 (B2セル)", min_value=1, value=1)
+                end_num = c2.number_input("終わりの番号 (B3セル)", min_value=1, value=20)
+                shuffle = c3.checkbox("🔀 問題をシャッフルする", value=False)
         else:
-            # 良問テストの場合は「章番号」を入力させる
             c_chap, _ = st.columns([1, 2])
             chapter_num = c_chap.number_input("🔢 章番号 (〇に入る数字)", min_value=1, value=1, step=1)
             target_sheet_name = f"{test_type}{chapter_num}"
             st.info(f"💡 スプレッドシートの「{target_sheet_name}」シートをそのままPDF化します。")
 
-        # ボタンの文字も動的に変わるようにしました
         if st.button(f"✨ {target_sheet_name} を作成する", type="primary", use_container_width=True):
-            with st.spinner(f"魔法の小テストジェネレーターを起動中... [{target_sheet_name}]"):
-                try:
-                    gc = get_gc_client()
-                    sh = gc.open_by_key(sheet_id)
-                    
-                    # ==========================================
-                    # 🌟 修正ポイント2: 確認テストの時だけ範囲指定シートを操作
-                    # ==========================================
-                    if test_type == "確認テスト":
-                        setting_ws = sh.worksheet("テスト範囲指定")
-                        setting_ws.update_acell('B2', start_num)
-                        setting_ws.update_acell('B3', end_num)
-                        setting_ws.update_acell('D3', shuffle) 
-                        time.sleep(3) # 反映を待つ
-                    
-                    # ターゲットとなるシート（確認テスト or 良問テスト〇）を探す
-                    target_ws = None
-                    for ws in sh.worksheets():
-                        clean_ws_title = ws.title.replace(" ", "").replace("　", "")
-                        clean_target = target_sheet_name.replace(" ", "").replace("　", "")
+            # 🌟 変更: IDがない場合はここでストップして教える
+            if not sheet_id:
+                st.error("⚠️ このテストにはスプレッドシートのIDが登録されていません！一度削除してID付きで再登録をお願いします。")
+            else:
+                with st.spinner(f"魔法の小テストジェネレーターを起動中... [{target_sheet_name}]"):
+                    try:
+                        gc = get_gc_client()
+                        sh = gc.open_by_key(sheet_id)
                         
-                        if clean_ws_title == clean_target:
-                            target_ws = ws
-                            break
+                        if test_type == "確認テスト":
+                            setting_ws = sh.worksheet("テスト範囲指定")
+                            # 🌟 変更: start_num と end_num が単一章なら同じ数字で飛んでいきます
+                            setting_ws.update_acell('B2', start_num)
+                            setting_ws.update_acell('B3', end_num)
+                            setting_ws.update_acell('D3', shuffle) 
+                            time.sleep(3) 
+                        
+                        target_ws = None
+                        for ws in sh.worksheets():
+                            clean_ws_title = ws.title.replace(" ", "").replace("　", "")
+                            clean_target = target_sheet_name.replace(" ", "").replace("　", "")
                             
-                    if target_ws is None:
-                        existing_sheets = [ws.title for ws in sh.worksheets()]
-                        st.error(f"❌ 「{target_sheet_name}」という名前のシートが見つかりません！")
-                        st.info(f"🔍 【プログラムが見つけた実際のシート名一覧】\n" + " ／ ".join(existing_sheets))
-                        st.write("💡 アドバイス: カッコの全角・半角（ `()` と `（）` ）がスプレッドシートと合っているか確認してください！")
-                        st.stop()
+                            if clean_ws_title == clean_target:
+                                target_ws = ws
+                                break
+                                
+                        if target_ws is None:
+                            existing_sheets = [ws.title for ws in sh.worksheets()]
+                            st.error(f"❌ 「{target_sheet_name}」という名前のシートが見つかりません！")
+                            st.info(f"🔍 【プログラムが見つけた実際のシート名一覧】\n" + " ／ ".join(existing_sheets))
+                            st.write("💡 アドバイス: カッコの全角・半角（ `()` と `（）` ）がスプレッドシートと合っているか確認してください！")
+                            st.stop()
+                            
+                        gid = target_ws.id
                         
-                    gid = target_ws.id
-                    
-                    base_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=pdf&gid={gid}&portrait=true&size=A4&gridlines=false&fitw=true"
-                    # 良問テストも「A1:I28が問題、J1:R28が解答」の形式と想定しています
-                    url_q = f"{base_url}&range=A1:I28"
-                    url_a = f"{base_url}&range=J1:R28"
-                    
-                    import google.auth.transport.requests
-                    import requests
-                    from google.oauth2.service_account import Credentials
-                    
-                    scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-                    secret_dict = json.loads(st.secrets["gcp_service_account_json"])
-                    creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
-                    req = google.auth.transport.requests.Request()
-                    creds.refresh(req)
-                    headers = {"Authorization": f"Bearer {creds.token}"}
-                    
-                    # 1. 問題と解答をそれぞれダウンロード
-                    res_q = requests.get(url_q, headers=headers)
-                    res_a = requests.get(url_a, headers=headers)
-                    
-                    # 2. PDFの結合処理（ガッチャンコ！）
-                    merger = PdfWriter()
-                    merger.append(io.BytesIO(res_q.content))
-                    merger.append(io.BytesIO(res_a.content))
-                    
-                    merged_pdf_stream = io.BytesIO()
-                    merger.write(merged_pdf_stream)
-                    
-                    # 3. 画面に渡すためにセッションに保存（どのテストを作ったかの名前も保存！）
-                    st.session_state['pdf_q'] = res_q.content
-                    st.session_state['pdf_a'] = res_a.content
-                    st.session_state['pdf_merged'] = merged_pdf_stream.getvalue()
-                    st.session_state['generated_test_name'] = target_sheet_name # ← 追加！
-                    
-                    st.success(f"✅ 【{target_sheet_name}】のセットPDF生成が完了しました！")
-                except Exception as e:
-                    st.error(f"❌ エラーが発生しました。詳細: {e}")
+                        base_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=pdf&gid={gid}&portrait=true&size=A4&gridlines=false&fitw=true"
+                        url_q = f"{base_url}&range=A1:I28"
+                        url_a = f"{base_url}&range=J1:R28"
+                        
+                        import google.auth.transport.requests
+                        import requests
+                        from google.oauth2.service_account import Credentials
+                        
+                        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+                        secret_dict = json.loads(st.secrets["gcp_service_account_json"])
+                        creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
+                        req = google.auth.transport.requests.Request()
+                        creds.refresh(req)
+                        headers = {"Authorization": f"Bearer {creds.token}"}
+                        
+                        res_q = requests.get(url_q, headers=headers)
+                        res_a = requests.get(url_a, headers=headers)
+                        
+                        merger = PdfWriter()
+                        merger.append(io.BytesIO(res_q.content))
+                        merger.append(io.BytesIO(res_a.content))
+                        
+                        merged_pdf_stream = io.BytesIO()
+                        merger.write(merged_pdf_stream)
+                        
+                        st.session_state['pdf_q'] = res_q.content
+                        st.session_state['pdf_a'] = res_a.content
+                        st.session_state['pdf_merged'] = merged_pdf_stream.getvalue()
+                        st.session_state['generated_test_name'] = target_sheet_name 
+                        
+                        st.success(f"✅ 【{target_sheet_name}】のセットPDF生成が完了しました！")
+                    except Exception as e:
+                        st.error(f"❌ エラーが発生しました。詳細: {e}")
 
     # ==========================================
     # ダウンロードUI
@@ -183,7 +190,6 @@ def render_quiz_maker_page():
             '''
             st.markdown(html_button, unsafe_allow_html=True)
 
-        # 実際に作成したテストの名前をファイル名に組み込む
         gen_name = st.session_state.get('generated_test_name', 'テスト')
 
         st.markdown("#### 📚 セット印刷（おすすめ！）")
