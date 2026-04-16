@@ -34,13 +34,6 @@ def render_student_details_page(selected_student):
             except Exception:
                 if attempt < max_retries - 1: 
                     time.sleep(2 ** attempt)
-        #APIエラー対策1個目
-        #for attempt in range(3):
-            #try:
-                #df_test = load_test_scores()
-                #break
-            #except Exception:
-                #if attempt < 2: time.sleep(2)
         
         df_student_tests = pd.DataFrame()
         if not df_test.empty:
@@ -67,8 +60,6 @@ def render_student_details_page(selected_student):
                             with st.spinner("☁️ 情報を保存中...（混雑時は自動で再試行します）"):
                                 max_retries_save = 5
                                 for attempt in range(max_retries_save):
-                                # 🌟 APIエラー対策: 保存リトライ
-                                #for attempt in range(3):
                                     try:
                                         update_student_info(selected_student, new_grade, new_school, new_target, new_subjects, info.get('能力', 3), info.get('やる気', 3), info.get('内申点', 3), info.get('最新偏差値', 50), info.get('宿題履行率', 100))
                                         time.sleep(1) 
@@ -80,8 +71,8 @@ def render_student_details_page(selected_student):
                                     except Exception:
                                         if attempt < max_retries_save - 1: 
                                             time.sleep(2 ** attempt)
-                                        #if attempt < 2: time.sleep(2)
-                                        else: st.error("通信エラーが発生しました。もう一度お試しください。")
+                                        else: 
+                                            st.error("通信エラーが発生しました。もう一度お試しください。")
             else:
                 st.info("※プロフィールの編集は教室長のみ可能です。")
 
@@ -107,12 +98,16 @@ def render_student_details_page(selected_student):
             st.caption(f"💡 【自動参照】最新偏差値: **{latest_dev}** / 最新内申点: **{latest_naishin}**")
             
             raw_hw_rate = str(info.get('宿題履行率', '0.0')).replace('%', '').strip()
-            try: current_hw_rate = float(raw_hw_rate)
-            except ValueError: current_hw_rate = 0.0
+            try: 
+                current_hw_rate = float(raw_hw_rate)
+            except ValueError: 
+                current_hw_rate = 0.0
                 
             raw_motivation = str(info.get('やる気', '1')).strip()
-            try: current_motivation = int(float(raw_motivation))
-            except ValueError: current_motivation = 1
+            try: 
+                current_motivation = int(float(raw_motivation))
+            except ValueError: 
+                current_motivation = 1
             
             ability = calculate_ability_rank(latest_naishin, latest_dev)
             
@@ -155,8 +150,6 @@ def render_student_details_page(selected_student):
                 
                 if st.button("💾 内申点を登録する", type="primary"):
                     with st.spinner("保存中..."):
-                        # 保存時は技術・家庭の両方に同じ内申点を入れるか、片方を空にするなどの処理が必要
-                        # ここでは g_sheets.py の仕様に合わせて引数を渡します
                         save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
                                         None, None, None, None, None, None, None, 
                                         n_pe, n_gika, None, n_mus, n_art, is_naishin=True)
@@ -223,12 +216,6 @@ def render_student_details_page(selected_student):
                         st.cache_data.clear()
                         st.success("成績を登録しました！")
                         st.rerun()
-                                break
-                            except Exception:
-                                if attempt < max_retries_save - 1: 
-                                    time.sleep(2 ** attempt)
-                                #if attempt < 2: time.sleep(2)
-                                else: st.error("通信エラーが発生しました。もう一度お試しください。")
 
     with tab_view:
         if not df_student_tests.empty:
