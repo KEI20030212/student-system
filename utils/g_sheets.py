@@ -1094,9 +1094,6 @@ def load_quiz_records():
 @st.cache_data(ttl=60) # 短めのキャッシュでリアルタイム性を確保
 def load_school_homework_data():
     """学校の課題データを全件取得（APIエラー対策版）"""
-    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
-    import pandas as pd
-    import time
 
     gc = get_gc_client()
     max_retries = 5
@@ -1115,10 +1112,6 @@ def load_school_homework_data():
 
 def add_school_homework(student_name, subject, content, deadline, memo):
     """新しい課題を登録（APIエラー対策版）"""
-    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
-    import datetime
-    import time
-
     gc = get_gc_client()
     max_retries = 3
     new_row = [
@@ -1143,8 +1136,6 @@ def add_school_homework(student_name, subject, content, deadline, memo):
 
 def update_homework_status(row_index, new_status):
     """課題のステータスを更新（row_indexはDataFrameのインデックス+2）"""
-    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
-    import time
 
     gc = get_gc_client()
     for attempt in range(3):
