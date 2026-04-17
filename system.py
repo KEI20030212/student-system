@@ -26,12 +26,14 @@ from views.dashboard_combined import render_combined_dashboard_page
 from views.student_portal import render_student_portal_page
 from views.quiz_management import render_quiz_management_page
 from views.line_report import render_line_report_page
+from views.school_homework import render_school_homework_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
 from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
 from utils.g_sheets import load_textbook_master, get_textbook_master, add_new_textbook, get_last_homework_info
 from utils.g_sheets import get_all_accounts
+
 
 # ページの基本設定
 img = Image.open("icon.jpg")
@@ -102,6 +104,7 @@ def main():
         "🏫 教室・学習状況ダッシュボード",
         "👤 生徒個別ポータル",
         "💯 小テスト管理センター",
+        "🎒 学校課題管理",
         #"👤 生徒詳細 ＆ テスト成績",
         #"🌐 クラス全体ダッシュボード",
         #"📊 個別分析・履歴・振替管理",
@@ -149,6 +152,7 @@ def main():
     elif page == "💯 小テスト管理センター": render_quiz_management_page()
     #elif page == "👤 生徒詳細 ＆ テスト成績": render_student_details_page()
     elif page == "🏫 教室・学習状況ダッシュボード":render_combined_dashboard_page()
+    elif page == "🎒 学校課題管理": render_school_homework_page()
     #elif page == "🌐 クラス全体ダッシュボード": render_dashboard_page()
     #elif page == "📝 小テスト進捗マップ":render_quiz_list_page()
     #elif page == "📊 自習時間ランキング":render_self_study_dashboard()
