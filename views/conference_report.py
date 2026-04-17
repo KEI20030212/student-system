@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import streamlit.components.v1 as components
 import time
 
 # ==========================================
@@ -81,7 +82,38 @@ def cached_calculate_attendance_rate(student_name):
 # 🎯 面談レポート画面のメイン関数
 # ==========================================
 def render_conference_report(selected_student, info):
-    st.header(f"🎓 {selected_student} さん 面談レポート")
+    # --- 🖨️ 印刷用の魔法（面談レポート最適化版） ---
+    st.markdown("""
+        <style>
+        @media print {
+            /* 余計なUIを非表示にする（アラート、ヘッダー、サイドバーなど） */
+            [data-testid="stAlert"], header, [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
+            /* 操作用のボタンやラジオボタン、スピナーを消す */
+            .stButton, [data-testid="stRadio"], [data-testid="stSpinner"] { display: none !important; }
+            
+            /* 背景を白にして文字を見やすく */
+            * { background-color: transparent !important; }
+            
+            /* 画面上部の余白を詰める */
+            .main .block-container { padding-top: 0 !important; margin-top: 0 !important; gap: 10px !important; max-width: 100% !important; }
+            
+            /* 印刷時に表やグラフが真っ二つに割れるのを防ぐ */
+            [data-testid="stTable"], [data-testid="stDataFrame"], [data-testid="stArrowVegaLiteChart"], [data-testid="stMetric"] { 
+                page-break-inside: avoid !important; 
+            }
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # --- タイトルと印刷ボタンを横並びに ---
+    col_title, col_print = st.columns([4, 1])
+    with col_title:
+        st.header(f"🎓 {selected_student} さん 面談レポート")
+    with col_print:
+        if st.button("🖨️ レポートを印刷"):
+            components.html("<script>window.parent.print();</script>", height=0)
+        st.caption("※スマホはブラウザの共有から")
+
     st.caption("※この画面はデータ読み込み専用です。通信エラーを防ぐため一時保存されたデータを表示しています。")
 
     with st.spinner("学習データを集計中..."):
@@ -129,7 +161,7 @@ def render_conference_report(selected_student, info):
     st.subheader("📈 成績の推移")
     
     if not df_student_tests.empty:
-        # 🌟 表示切り替えスイッチ
+        # 🌟 表示切り替えスイッチ (印刷時はCSSで非表示になります)
         view_type = st.radio(
             "表示するデータを選択してください：",
             ["定期テスト", "模試", "内申（通知表）"],
@@ -144,7 +176,6 @@ def render_conference_report(selected_student, info):
         else:
             # --- 🔍 切り替えロジック ---
             if view_type == "定期テスト":
-                # 「テスト」「期末」「中間」「実力」を含むものを抽出
                 df_plot = df_student_tests[df_student_tests[type_col].astype(str).str.contains("テスト|期末|中間|実力", na=False)].copy()
                 subjects = ["英語", "数学", "国語", "理科", "社会"]
                 y_label = "点数"
@@ -152,7 +183,6 @@ def render_conference_report(selected_student, info):
                 color_range = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
 
             elif view_type == "模試":
-                # 「模試」「下野」「もぎ」などを含むものを抽出
                 df_plot = df_student_tests[df_student_tests[type_col].astype(str).str.contains("模試|下野|もぎ", na=False)].copy()
                 subjects = ["英語", "数学", "国語", "理科", "社会"]
                 y_label = "点数（または偏差値）"
@@ -160,7 +190,6 @@ def render_conference_report(selected_student, info):
                 color_range = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
 
             else:  # 内申（通知表）
-                # 全データから「内申」列に数値が入っている行を対象にする
                 df_plot = df_student_tests.copy()
                 subjects = ["英語 内申", "数学 内申", "国語 内申", "理科 内申", "社会 内申"]
                 y_label = "評定"
@@ -172,7 +201,6 @@ def render_conference_report(selected_student, info):
                 df_plot[date_col] = pd.to_datetime(df_plot[date_col], errors='coerce')
                 df_plot = df_plot.sort_values(date_col)
                 
-                # スプレッドシートに存在する列だけを抽出
                 available_subjects = [s for s in subjects if s in df_plot.columns]
                 
                 if not available_subjects:
