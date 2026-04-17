@@ -1149,34 +1149,38 @@ def update_homework_status(row_index, new_status):
             time.sleep(2)
     return False
     
-def add_school_homework_multi(student_list, subject, content, deadline, memo):
-    """新しい課題を複数人へ一括登録（エラー詳細を返す版）"""
-    if not student_list:
-        return False, "生徒が選択されていません。"
+def add_school_homework_multi(student_list, subject, task_list, deadline, memo):
+    """
+    複数人の生徒に対し、複数の課題を一括で登録する
+    task_list: ['課題1', '課題2', ...] というリスト形式
+    """
+    if not student_list or not task_list:
+        return False, "生徒または課題が空です。"
 
     gc = get_gc_client()
     max_retries = 3
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     deadline_str = deadline.strftime("%Y-%m-%d")
     
+    # 全生徒 × 全課題 の行データを作成
     rows_to_add = []
-    for student in student_list:
-        rows_to_add.append([
-            now_str,
-            student,
-            subject,
-            content,
-            deadline_str,
-            "未着手",
-            memo
-        ])
+    for task in task_list:
+        for student in student_list:
+            rows_to_add.append([
+                now_str,
+                student,
+                subject,
+                task,      # ここがループで回ってきた各課題
+                deadline_str,
+                "未着手",
+                memo
+            ])
 
     last_error = ""
     for attempt in range(max_retries):
         try:
             sh = gc.open_by_key(SPREADSHEET_ID)
             ws = sh.worksheet("学校課題管理")
-            # value_input_option を明示的に指定することでエラーを防ぐ
             ws.append_rows(rows_to_add, value_input_option="USER_ENTERED")
             return True, "成功"
         except Exception as e:
