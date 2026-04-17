@@ -1150,10 +1150,6 @@ def update_homework_status(row_index, new_status):
     return False
 def add_school_homework_multi(student_list, subject, content, deadline, memo):
     """新しい課題を複数人へ一括登録（エラー詳細を返す版）"""
-    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
-    from datetime import datetime
-    import time
-
     if not student_list:
         return False, "生徒が選択されていません。"
 
