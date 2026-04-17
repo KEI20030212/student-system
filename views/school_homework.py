@@ -1,15 +1,21 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime
-from utils.g_sheets import load_school_homework_data, update_homework_status, add_school_homework_multi, get_all_student_grades
+import time
+from utils.g_sheets import (
+    load_school_homework_data, 
+    update_homework_status, 
+    add_school_homework_multi, 
+    get_all_student_grades
+)
 
 def render_school_homework_page():
     st.header("🎒 学校課題管理（内申点対策）")
     
-    tab1, tab2 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録"])
+    tab1, tab2 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録（学校・学年指定）"])
 
     # ==========================================
-    # タブ1：アラート・進捗更新（そのまま）
+    # タブ1：アラート・進捗更新（生徒ごとの状況確認）
     # ==========================================
     with tab1:
         st.write("「完了（終わった）」と「提出済（学校に出した）」を分けて管理します。")
@@ -19,8 +25,9 @@ def render_school_homework_page():
             st.info("現在、登録されている学校の課題はありません。")
         else:
             df_active = df[df["ステータス"] != "提出済"].copy()
-            df_active["提出期限"] = pd.to_datetime(df_active["提出期限"]).dt.date
-            df_active = df_active.sort_values("提出期限")
+            # 日付変換のエラー対策
+            df_active["提出期限"] = pd.to_datetime(df_active["提出期限"], errors='coerce').dt.date
+            df_active = df_active.dropna(subset=["提出期限"]).sort_values("提出期限")
 
             today = date.today()
 
@@ -50,52 +57,47 @@ def render_school_homework_page():
                     
                     if st.button("更新を保存", key=f"btn_{idx}"):
                         if update_homework_status(idx + 2, new_status):
-                            st.success(f"{row['生徒名']}さんのステータスを「{new_status}」に更新しました！")
+                            st.success(f"{row['生徒名']}さんの状況を更新しました！")
                             st.rerun()
 
     # ==========================================
-    # タブ2：学校 × 学年 での一括登録
+    # タブ2：学校 × 学年 での超シンプル一括登録
     # ==========================================
     with tab2:
-        st.subheader("➕ 複数人に同じ課題を一括登録")
+        st.subheader("➕ 学校・学年を指定して一括登録")
+        st.info("生徒を一人ずつ選ぶ必要はありません。指定した条件に合う生徒全員に一括で課題を追加します。")
         
         df_students = get_all_student_grades()
         
         if df_students.empty:
-            st.warning("生徒データが取得できません。少し待ってから再読み込みしてください。")
+            st.warning("生徒データが取得できません。設定_生徒情報シートを確認してください。")
         else:
-            # 🏫 学校と学年のリストを作成
-            # ※「設定_生徒情報」シートに「学校名」という列がある前提です
+            # 🏫 フィルターの準備
             if '学校名' in df_students.columns:
-                valid_schools = [s for s in df_students['学校名'].unique() if str(s).strip() != ""]
+                valid_schools = sorted([s for s in df_students['学校名'].unique() if str(s).strip() != ""])
             else:
-                valid_schools = []
-                st.error("「設定_生徒情報」シートに「学校名」という列が見つかりません！")
+                st.error("「設定_生徒情報」シートに「学校名」列がありません。")
+                return
 
-            valid_grades = [g for g in df_students['学年'].unique() if str(g).strip() != ""]
+            valid_grades = sorted([g for g in df_students['学年'].unique() if str(g).strip() != ""])
             
-            col_filter1, col_filter2 = st.columns(2)
-            with col_filter1:
-                selected_school = st.selectbox("🏫 対象の学校", ["すべて"] + valid_schools)
-            with col_filter2:
-                selected_grade = st.selectbox("🎯 対象の学年", ["すべて"] + valid_grades)
-            
-            # 学校と学年でフィルターをかける
-            filtered_df = df_students.copy()
-            if selected_school != "すべて":
-                filtered_df = filtered_df[filtered_df['学校名'] == selected_school]
-            if selected_grade != "すべて":
-                filtered_df = filtered_df[filtered_df['学年'] == selected_grade]
-
-            filtered_students = filtered_df['生徒名'].tolist()
-
-            with st.form("add_multi_hw_form"):
-                st.write(f"**該当する生徒: {len(filtered_students)}名**")
-                selected_students = st.multiselect(
-                    "👤 対象の生徒（×で外したり、追加できます）", 
-                    options=df_students['生徒名'].tolist(),
-                    default=filtered_students
-                )
+            # --- 入力フォーム ---
+            with st.form("simple_add_form"):
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    target_school = st.selectbox("🏫 対象の学校", valid_schools)
+                with col_f2:
+                    target_grade = st.selectbox("🎯 対象の学年", valid_grades)
+                
+                # この時点で該当する生徒を裏でリストアップ
+                target_student_list = df_students[
+                    (df_students['学校名'] == target_school) & 
+                    (df_students['学年'] == target_grade)
+                ]['生徒名'].tolist()
+                
+                st.write(f"💡 **対象生徒:** {', '.join(target_student_list) if target_student_list else '該当者なし'}")
+                
+                st.divider()
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -106,21 +108,21 @@ def render_school_homework_page():
                 content = st.text_input("課題内容 (例: 学校ワーク P10〜P25)")
                 memo = st.text_area("メモ (LINEでの補足情報など)")
                 
-                if st.form_submit_button("一括登録する！"):
-                    if not selected_students:
-                        st.error("生徒を1人以上選択してください！")
+                submitted = st.form_submit_button("この学校・学年の全員に登録！", use_container_width=True)
+                
+                if submitted:
+                    if not target_student_list:
+                        st.error(f"{target_school}の{target_grade}に該当する生徒がいません。")
                     elif not content:
                         st.error("課題内容は必須です！")
                     else:
-                        with st.spinner("スプレッドシートに一括登録しています..."):
-                            # 返り値が2つ（成否, エラー文）になったので受け取る
-                            is_success, error_msg = add_school_homework_multi(selected_students, subject, content, deadline, memo)
-                            
+                        with st.spinner("一括登録中..."):
+                            is_success, error_msg = add_school_homework_multi(
+                                target_student_list, subject, content, deadline, memo
+                            )
                             if is_success:
-                                st.success(f"{len(selected_students)}名に {subject} の課題を登録しました！")
-                                import time
+                                st.success(f"【{target_school} {target_grade}】の{len(target_student_list)}名に登録完了！")
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                # ⚠️ ここで具体的なエラーメッセージを表示します！
-                                st.error(f"登録に失敗しました。詳細エラー: {error_msg}")
+                                st.error(f"登録失敗: {error_msg}")
