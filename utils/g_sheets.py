@@ -1115,7 +1115,7 @@ def add_school_homework(student_name, subject, content, deadline, memo):
     gc = get_gc_client()
     max_retries = 3
     new_row = [
-        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         student_name,
         subject,
         content,
@@ -1155,7 +1155,7 @@ def add_school_homework_multi(student_list, subject, content, deadline, memo):
 
     gc = get_gc_client()
     max_retries = 3
-    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     deadline_str = deadline.strftime("%Y-%m-%d")
     
     # 登録するデータをリスト化
