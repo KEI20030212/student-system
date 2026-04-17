@@ -1088,3 +1088,72 @@ def load_quiz_records():
     except Exception as e:
         print(f"Error loading quiz records: {e}")
         return pd.DataFrame()
+
+# utils/g_sheets.py に追加
+
+@st.cache_data(ttl=60) # 短めのキャッシュでリアルタイム性を確保
+def load_school_homework_data():
+    """学校の課題データを全件取得（APIエラー対策版）"""
+    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
+    import pandas as pd
+    import time
+
+    gc = get_gc_client()
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            ws = sh.worksheet("学校課題管理")
+            data = ws.get_all_records()
+            return pd.DataFrame(data)
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                st.error(f"データ取得に失敗しました: {e}")
+                return pd.DataFrame()
+
+def add_school_homework(student_name, subject, content, deadline, memo):
+    """新しい課題を登録（APIエラー対策版）"""
+    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
+    import datetime
+    import time
+
+    gc = get_gc_client()
+    max_retries = 3
+    new_row = [
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        student_name,
+        subject,
+        content,
+        deadline.strftime("%Y-%m-%d"),
+        "未着手",
+        memo
+    ]
+
+    for attempt in range(max_retries):
+        try:
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            ws = sh.worksheet("学校課題管理")
+            ws.append_row(new_row)
+            return True
+        except Exception:
+            time.sleep(2)
+    return False
+
+def update_homework_status(row_index, new_status):
+    """課題のステータスを更新（row_indexはDataFrameのインデックス+2）"""
+    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
+    import time
+
+    gc = get_gc_client()
+    for attempt in range(3):
+        try:
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            ws = sh.worksheet("学校課題管理")
+            # ステータス列（F列 = 6番目）を更新
+            ws.update_cell(row_index, 6, new_status)
+            return True
+        except Exception:
+            time.sleep(2)
+    return False
