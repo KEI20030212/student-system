@@ -1148,6 +1148,7 @@ def update_homework_status(row_index, new_status):
         except Exception:
             time.sleep(2)
     return False
+    
 def add_school_homework_multi(student_list, subject, content, deadline, memo):
     """新しい課題を複数人へ一括登録（エラー詳細を返す版）"""
     if not student_list:
@@ -1182,7 +1183,9 @@ def add_school_homework_multi(student_list, subject, content, deadline, memo):
             last_error = str(e)
             time.sleep(2)
             
-    return False, last_error@st.cache_data(ttl=600)
+    return False, last_error
+
+@st.cache_data(ttl=600)
 def get_all_student_grades():
     """生徒情報から学年データを取得する"""
     gc = get_gc_client()
