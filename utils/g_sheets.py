@@ -1180,3 +1180,16 @@ def add_school_homework_multi(student_list, subject, content, deadline, memo):
         except Exception:
             time.sleep(2)
     return False
+@st.cache_data(ttl=600)
+def get_all_student_grades():
+    """生徒情報から学年データを取得する"""
+    gc = get_gc_client()
+    for attempt in range(5):
+        try:
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            ws = sh.worksheet("設定_生徒情報")
+            df = pd.DataFrame(ws.get_all_records())
+            return df
+        except Exception:
+            time.sleep(2)
+    return pd.DataFrame()
