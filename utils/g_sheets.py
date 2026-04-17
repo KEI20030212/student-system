@@ -1149,16 +1149,19 @@ def update_homework_status(row_index, new_status):
             time.sleep(2)
     return False
 def add_school_homework_multi(student_list, subject, content, deadline, memo):
-    """新しい課題を複数人へ一括登録（APIエラー対策・時短版）"""
+    """新しい課題を複数人へ一括登録（エラー詳細を返す版）"""
+    from utils.g_sheets import get_gc_client, SPREADSHEET_ID
+    from datetime import datetime
+    import time
+
     if not student_list:
-        return False
+        return False, "生徒が選択されていません。"
 
     gc = get_gc_client()
     max_retries = 3
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     deadline_str = deadline.strftime("%Y-%m-%d")
     
-    # 登録するデータをリスト化
     rows_to_add = []
     for student in student_list:
         rows_to_add.append([
@@ -1171,16 +1174,19 @@ def add_school_homework_multi(student_list, subject, content, deadline, memo):
             memo
         ])
 
+    last_error = ""
     for attempt in range(max_retries):
         try:
             sh = gc.open_by_key(SPREADSHEET_ID)
             ws = sh.worksheet("学校課題管理")
-            ws.append_rows(rows_to_add) # 複数行を一括で追加！
-            return True
-        except Exception:
+            # value_input_option を明示的に指定することでエラーを防ぐ
+            ws.append_rows(rows_to_add, value_input_option="USER_ENTERED")
+            return True, "成功"
+        except Exception as e:
+            last_error = str(e)
             time.sleep(2)
-    return False
-@st.cache_data(ttl=600)
+            
+    return False, last_error@st.cache_data(ttl=600)
 def get_all_student_grades():
     """生徒情報から学年データを取得する"""
     gc = get_gc_client()
