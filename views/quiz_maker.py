@@ -64,7 +64,15 @@ def render_quiz_maker_page():
                 st.rerun()
 
     # 選ばれた小テストのIDを取得
-    sheet_id = quiz_dict[quiz_name]
+    # 選ばれた小テストのデータを取得
+    quiz_data = quiz_dict[quiz_name]
+    
+    # もしデータが「IDと満点のセット（辞書）」だったら、IDだけを引っこ抜く
+    if type(quiz_data) is dict:
+        sheet_id = quiz_data["id"]
+    else:
+        # 古いデータで、文字だけが入っていた場合の保険
+        sheet_id = quiz_data
 
     with st.container(border=True):
         st.markdown("#### ⚙️ 印刷設定")
