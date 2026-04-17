@@ -9,16 +9,15 @@ def render_school_homework_page():
     tab1, tab2 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録"])
 
     # ==========================================
-    # タブ1：アラート・進捗更新（完了と提出済の使い分け）
+    # タブ1：アラート・進捗更新（そのまま）
     # ==========================================
     with tab1:
-        st.write("「完了（ワークが終わった）」と「提出済（学校に出した）」を分けて管理します。")
+        st.write("「完了（終わった）」と「提出済（学校に出した）」を分けて管理します。")
         df = load_school_homework_data()
         
         if df.empty:
             st.info("現在、登録されている学校の課題はありません。")
         else:
-            # 「提出済」は表示から消す（裏には残る）
             df_active = df[df["ステータス"] != "提出済"].copy()
             df_active["提出期限"] = pd.to_datetime(df_active["提出期限"]).dt.date
             df_active = df_active.sort_values("提出期限")
@@ -28,27 +27,20 @@ def render_school_homework_page():
             for idx, row in df_active.iterrows():
                 days_left = (row["提出期限"] - today).days
                 
-                # 💡 アラートのロジックを改良
                 if row["ステータス"] == "完了":
-                    # 終わっているけど、まだ提出していない生徒へのアラート
-                    label = "【提出確認】学校に出しましたか？"
-                    icon = "🟦"
+                    label, icon = "【提出確認】学校に出しましたか？", "🟦"
                 elif days_left < 0:
-                    label = f"【期限超過！】 {abs(days_left)}日経過"
-                    icon = "🔴"
+                    label, icon = f"【期限超過！】 {abs(days_left)}日経過", "🔴"
                 elif days_left <= 2:
-                    label = f"【期限直前】 あと{days_left}日"
-                    icon = "🟡"
+                    label, icon = f"【期限直前】 あと{days_left}日", "🟡"
                 else:
-                    label = f"あと{days_left}日"
-                    icon = "🟢"
+                    label, icon = f"あと{days_left}日", "🟢"
 
                 with st.expander(f"{icon} {row['生徒名']} : {row['教科']} ({label})"):
                     st.write(f"**課題内容:** {row['課題内容']}")
                     st.write(f"**提出期限:** {row['提出期限']}")
                     st.write(f"**メモ:** {row['メモ']}")
                     
-                    # 更新用UI
                     new_status = st.selectbox(
                         "ステータスを更新", 
                         ["未着手", "進行中", "完了", "提出済"],
@@ -62,30 +54,43 @@ def render_school_homework_page():
                             st.rerun()
 
     # ==========================================
-    # タブ2：課題の一括登録（学年絞り込み）
+    # タブ2：学校 × 学年 での一括登録
     # ==========================================
     with tab2:
         st.subheader("➕ 複数人に同じ課題を一括登録")
         
-        # 名簿からデータを取得
         df_students = get_all_student_grades()
         
         if df_students.empty:
             st.warning("生徒データが取得できません。少し待ってから再読み込みしてください。")
         else:
-            # 学年のリストを作成（空欄を除外）
+            # 🏫 学校と学年のリストを作成
+            # ※「設定_生徒情報」シートに「学校」という列がある前提です
+            if '学校' in df_students.columns:
+                valid_schools = [s for s in df_students['学校'].unique() if str(s).strip() != ""]
+            else:
+                valid_schools = []
+                st.error("「設定_生徒情報」シートに「学校」という列が見つかりません！")
+
             valid_grades = [g for g in df_students['学年'].unique() if str(g).strip() != ""]
             
-            # 学年でフィルター
-            selected_grade = st.selectbox("🎯 対象の学年で絞り込み", ["すべて"] + valid_grades)
+            col_filter1, col_filter2 = st.columns(2)
+            with col_filter1:
+                selected_school = st.selectbox("🏫 対象の学校", ["すべて"] + valid_schools)
+            with col_filter2:
+                selected_grade = st.selectbox("🎯 対象の学年", ["すべて"] + valid_grades)
             
+            # 学校と学年でフィルターをかける
+            filtered_df = df_students.copy()
+            if selected_school != "すべて":
+                filtered_df = filtered_df[filtered_df['学校'] == selected_school]
             if selected_grade != "すべて":
-                filtered_students = df_students[df_students['学年'] == selected_grade]['生徒名'].tolist()
-            else:
-                filtered_students = df_students['生徒名'].tolist()
+                filtered_df = filtered_df[filtered_df['学年'] == selected_grade]
+
+            filtered_students = filtered_df['生徒名'].tolist()
 
             with st.form("add_multi_hw_form"):
-                # 複数選択可！デフォルトで絞り込んだ全員を選択状態にする
+                st.write(f"**該当する生徒: {len(filtered_students)}名**")
                 selected_students = st.multiselect(
                     "👤 対象の生徒（×で外したり、追加できます）", 
                     options=df_students['生徒名'].tolist(),
@@ -108,11 +113,14 @@ def render_school_homework_page():
                         st.error("課題内容は必須です！")
                     else:
                         with st.spinner("スプレッドシートに一括登録しています..."):
-                            if add_school_homework_multi(selected_students, subject, content, deadline, memo):
+                            # 返り値が2つ（成否, エラー文）になったので受け取る
+                            is_success, error_msg = add_school_homework_multi(selected_students, subject, content, deadline, memo)
+                            
+                            if is_success:
                                 st.success(f"{len(selected_students)}名に {subject} の課題を登録しました！")
-                                # 少し待ってから画面をリロード
                                 import time
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                st.error("登録に失敗しました。少し待ってからやり直してください。")
+                                # ⚠️ ここで具体的なエラーメッセージを表示します！
+                                st.error(f"登録に失敗しました。詳細エラー: {error_msg}")
