@@ -65,12 +65,12 @@ def render_school_homework_page():
             st.warning("生徒データが取得できません。少し待ってから再読み込みしてください。")
         else:
             # 🏫 学校と学年のリストを作成
-            # ※「設定_生徒情報」シートに「学校」という列がある前提です
-            if '学校' in df_students.columns:
-                valid_schools = [s for s in df_students['学校'].unique() if str(s).strip() != ""]
+            # ※「設定_生徒情報」シートに「学校名」という列がある前提です
+            if '学校名' in df_students.columns:
+                valid_schools = [s for s in df_students['学校名'].unique() if str(s).strip() != ""]
             else:
                 valid_schools = []
-                st.error("「設定_生徒情報」シートに「学校」という列が見つかりません！")
+                st.error("「設定_生徒情報」シートに「学校名」という列が見つかりません！")
 
             valid_grades = [g for g in df_students['学年'].unique() if str(g).strip() != ""]
             
@@ -83,7 +83,7 @@ def render_school_homework_page():
             # 学校と学年でフィルターをかける
             filtered_df = df_students.copy()
             if selected_school != "すべて":
-                filtered_df = filtered_df[filtered_df['学校'] == selected_school]
+                filtered_df = filtered_df[filtered_df['学校名'] == selected_school]
             if selected_grade != "すべて":
                 filtered_df = filtered_df[filtered_df['学年'] == selected_grade]
 
