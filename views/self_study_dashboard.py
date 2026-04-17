@@ -165,23 +165,25 @@ def render_self_study_dashboard():
     merged = merged.sort_values(by='合計時間(分)', ascending=False)
     sorted_students = merged['生徒名'].tolist() 
 
-    # 💡 グラフの全体の高さを少し控えめに調整（45 -> 35）
-    chart_height = max(300, len(merged) * 35)
+    # 💡 変更点：全体の高さ計算をスリム化（45px → 30px）
+    chart_height = max(300, len(merged) * 30)
     
-    y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=14))
+    # 💡 変更点：生徒名のフォントサイズを14 → 12にしてスッキリさせる
+    y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=12))
 
     if mode == "自習時間 ＋ 授業時間":
         plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
         
-        # 💡 mark_bar の中身を height=25 から size=15 に変更して棒を細く
-        bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, size=15).encode(
+        # 💡 変更点：height=25 を削除し、size=14（棒の太さ）に変更
+        bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, size=14).encode(
             x=alt.X('時間:Q', title='学習時間 (分)'),
             y=y_encoding,
             color=alt.Color('時間の種類:N', scale=alt.Scale(domain=['自習時間(分)', '授業時間(分)'], range=['#ff7f0e', '#1f77b4']), legend=alt.Legend(title="学習の種類", orient="top")),
             tooltip=['生徒名', '時間の種類', '時間', '合計時間(分)']
         )
         
-        text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=14, fontWeight='bold', color='#333').encode(
+        # 💡 変更点：数値のフォントサイズも14 → 12へ
+        text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=12, fontWeight='bold', color='#333').encode(
             x='合計時間(分):Q',
             y=y_encoding,
             text=alt.Text('合計時間(分):Q', format='d')
@@ -190,15 +192,16 @@ def render_self_study_dashboard():
         chart = alt.layer(bars, text).properties(height=chart_height)
         
     else:
-        # 💡 こちらも同様に size=15 に変更
-        bars = alt.Chart(merged).mark_bar(cornerRadiusEnd=4, size=15).encode(
+        # 💡 変更点：同様にsize=14でスマートな棒グラフに
+        bars = alt.Chart(merged).mark_bar(cornerRadiusEnd=4, size=14).encode(
             x=alt.X('合計時間(分):Q', title='自習時間 (分)'),
             y=y_encoding,
             color=alt.Color('合計時間(分):Q', scale=alt.Scale(scheme='blues'), legend=None),
             tooltip=['生徒名', '合計時間(分)']
         )
         
-        text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=14, fontWeight='bold', color='#333').encode(
+        # 💡 変更点：数値のフォントサイズ変更
+        text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=12, fontWeight='bold', color='#333').encode(
             x='合計時間(分):Q',
             y=y_encoding,
             text=alt.Text('合計時間(分):Q', format='d')
