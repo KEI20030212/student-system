@@ -133,15 +133,28 @@ def render_multi_input_page(textbook_master):
 
                                     st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
 
-                                    # 💡 改善: 複数テキスト対応（multiselect）
-                                    # 🌟 さらに改善: 複数テキスト対応＆個別の進捗入力
+                                    # 🌟 さらに改善: 複数テキスト対応＆個別の進捗入力 ＋ 新規テキスト入力機能！
                                     st.write("📚 **使用テキストと進捗**")
-                                    # textbook_master から最新のリストを取得
-                                    #text_options = list(get_textbook_master().keys())
-                                    selected_texts = st.multiselect("使用テキスト (複数可)", text_options, key=f"texts_{i}")
+                                    usage_text_options = ["🆕 新規テキスト入力"] + text_options
+                                    selected_texts = st.multiselect("使用テキスト (複数可)", usage_text_options, key=f"texts_{i}")
                                     
+                                    # 🆕 「新規テキスト入力」が選ばれた場合の処理
+                                    if "🆕 新規テキスト入力" in selected_texts:
+                                        new_usage_text = st.text_input("📝 新しいテキスト名を入力 (授業使用)", key=f"new_usage_text_{i}")
+                                        if new_usage_text:
+                                            # マスターに登録
+                                            add_new_textbook(new_usage_text)
+                                            # リストから "🆕 新規テキスト入力" を外し、新しいテキスト名を追加
+                                            selected_texts.remove("🆕 新規テキスト入力")
+                                            if new_usage_text not in selected_texts:
+                                                selected_texts.append(new_usage_text)
+                                            
+                                            # キャッシュをクリアして、他の入力欄や次回以降の選択肢に反映させる
+                                            if "cached_text_options" in st.session_state:
+                                                del st.session_state["cached_text_options"]
+
                                     advanced_p_list = []
-                                    if selected_texts:
+                                    if selected_texts and "🆕 新規テキスト入力" not in selected_texts:
                                         text_name_str = "、".join(selected_texts)
                                         for t_idx, text_name in enumerate(selected_texts):
                                             st.caption(f"📘 {text_name} の進捗")
@@ -195,7 +208,6 @@ def render_multi_input_page(textbook_master):
                                     motivation_rank = calculate_motivation_rank(safe_hw_rate, current_quiz_pts)
 
                                     st.divider()
-                                    
                                     
                                     # 💡 改善: 集中力とミスへの反応の評価を追加！
                                     st.write("🧠 **授業中の様子・評価**")
@@ -317,7 +329,8 @@ def render_multi_input_page(textbook_master):
                             f"done_start_{i}", f"done_end_{i}", f"adv_start_{i}", f"adv_end_{i}", 
                             f"num_q_{i}", f"conc_{i}", f"reac_{i}",
                             f"hw_text_{i}", f"n_start_{i}", f"n_end_{i}",
-                            f"advc_{i}", f"p_msg_{i}", f"next_h_{i}"
+                            f"advc_{i}", f"p_msg_{i}", f"next_h_{i}",
+                            f"new_usage_text_{i}" # 👈 忘れずに新規入力用のキーもリセット！
                         ]
                         # 動的に増える小テストのキーもリセット
                         for q_idx in range(5):
