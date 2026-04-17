@@ -65,38 +65,36 @@ def render_school_homework_page():
     # ==========================================
     with tab2:
         st.subheader("➕ 学校・学年を指定して一括登録")
-        st.info("生徒を一人ずつ選ぶ必要はありません。指定した条件に合う生徒全員に一括で課題を追加します。")
+        st.info("課題内容を改行して入力すると、一度に複数の課題を登録できます。")
         
         df_students = get_all_student_grades()
         
         if df_students.empty:
             st.warning("生徒データが取得できません。設定_生徒情報シートを確認してください。")
         else:
-            # 🏫 フィルターの準備
+            # 🏫 「学校名」列を使用するように修正
             if '学校名' in df_students.columns:
                 valid_schools = sorted([s for s in df_students['学校名'].unique() if str(s).strip() != ""])
             else:
-                st.error("「設定_生徒情報」シートに「学校名」列がありません。")
+                st.error("「設定_生徒情報」シートに「学校名」列が見つかりません。")
                 return
 
             valid_grades = sorted([g for g in df_students['学年'].unique() if str(g).strip() != ""])
             
-            # --- 入力フォーム ---
             with st.form("simple_add_form"):
                 col_f1, col_f2 = st.columns(2)
                 with col_f1:
-                    target_school = st.selectbox("🏫 対象の学校", valid_schools)
+                    target_school = st.selectbox("🏫 対象の学校名", valid_schools)
                 with col_f2:
                     target_grade = st.selectbox("🎯 対象の学年", valid_grades)
                 
-                # この時点で該当する生徒を裏でリストアップ
+                # 該当生徒の抽出
                 target_student_list = df_students[
                     (df_students['学校名'] == target_school) & 
                     (df_students['学年'] == target_grade)
                 ]['生徒名'].tolist()
                 
                 st.write(f"💡 **対象生徒:** {', '.join(target_student_list) if target_student_list else '該当者なし'}")
-                
                 st.divider()
                 
                 col1, col2 = st.columns(2)
@@ -104,24 +102,33 @@ def render_school_homework_page():
                     subject = st.selectbox("教科", ["英語", "数学", "国語", "理科", "社会", "音楽", "美術", "保体", "技家", "その他"])
                 with col2:
                     deadline = st.date_input("提出期限", date.today())
-                    
-                content = st.text_input("課題内容 (例: 学校ワーク P10〜P25)")
-                memo = st.text_area("メモ (LINEでの補足情報など)")
                 
-                submitted = st.form_submit_button("この学校・学年の全員に登録！", use_container_width=True)
+                # 🌟 ここを text_area に変更
+                content_text = st.text_area(
+                    "課題内容 (1行に1つずつ入力してください)",
+                    placeholder="数学ワーク P10-P20\n計算プリント No.5\n英単語テストの練習",
+                    help="改行すると、それぞれの内容が別々の課題として登録されます。"
+                )
+                
+                memo = st.text_area("メモ (全課題に共通して保存されます)")
+                
+                submitted = st.form_submit_button("一括登録する！", use_container_width=True)
                 
                 if submitted:
+                    # 🌟 改行で分割してリスト化、空行は無視
+                    task_list = [t.strip() for t in content_text.split("\n") if t.strip()]
+                    
                     if not target_student_list:
                         st.error(f"{target_school}の{target_grade}に該当する生徒がいません。")
-                    elif not content:
-                        st.error("課題内容は必須です！")
+                    elif not task_list:
+                        st.error("課題内容を1つ以上入力してください！")
                     else:
                         with st.spinner("一括登録中..."):
                             is_success, error_msg = add_school_homework_multi(
-                                target_student_list, subject, content, deadline, memo
+                                target_student_list, subject, task_list, deadline, memo
                             )
                             if is_success:
-                                st.success(f"【{target_school} {target_grade}】の{len(target_student_list)}名に登録完了！")
+                                st.success(f"【{target_school} {target_grade}】の{len(target_student_list)}名に、{len(task_list)}個の課題を登録しました！")
                                 time.sleep(1)
                                 st.rerun()
                             else:
