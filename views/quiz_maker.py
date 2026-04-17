@@ -169,8 +169,13 @@ def render_quiz_maker_page():
                         
                         st.success(f"✅ 【{target_sheet_name}】のセットPDF生成が完了しました！")
                     except Exception as e:
-                        st.error(f"❌ エラーが発生しました。詳細: {e}")
-
+                        # 🌟 どこでエラーが起きたかもう少し詳しく表示するように変更
+                        st.error(f"❌ エラーが発生しました。")
+                        st.warning(f"詳細メッセージ: {e}")
+                        if 'sheet_id' in locals():
+                            st.info(f"使用しようとしたID: {sheet_id}")
+                        if 'target_sheet_name' in locals():
+                            st.info(f"探そうとしたシート名: {target_sheet_name}")
     # ==========================================
     # ダウンロードUI
     # ==========================================
