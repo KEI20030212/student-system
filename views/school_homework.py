@@ -10,8 +10,6 @@ from utils.g_sheets import (
 )
 
 def render_school_homework_page():
-    st.header("🎒 学校課題管理（内申点対策）")
-    
     col_h, col_r = st.columns([0.8, 0.2])
     with col_h:
         st.header("🎒 学校課題管理")
