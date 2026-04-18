@@ -1074,9 +1074,6 @@ def delete_account(user_id):
     except Exception as e:
         print(f"アカウント削除エラー: {e}")
         return False
-
-# utils/g_sheets.py に追加
-
 def load_quiz_records():
     """
     全員共通の「小テスト記録」シートから全データを読み込む
@@ -1089,8 +1086,6 @@ def load_quiz_records():
     except Exception as e:
         print(f"Error loading quiz records: {e}")
         return pd.DataFrame()
-
-# utils/g_sheets.py に追加
 
 @st.cache_data(ttl=60) # 短めのキャッシュでリアルタイム性を確保
 def load_school_homework_data():
@@ -1203,3 +1198,93 @@ def get_all_student_grades():
         except Exception:
             time.sleep(2)
     return pd.DataFrame()
+
+def get_student_self_study_points(student_name):
+    """「自習記録」シートから、指定した生徒の累計獲得ポイントを取得する"""
+    try:
+        # ※もしファイル内で get_gc_client ではなく他の変数名で認証している場合は、先生の環境に合わせてください
+        gc = get_gc_client() 
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("自習記録")
+        
+        all_records = worksheet.get_all_values()
+        total_points = 0
+        
+        for row in all_records[1:]:
+            if len(row) >= 8 and row[1] == student_name:
+                try:
+                    total_points += int(row[7])
+                except ValueError:
+                    continue
+                    
+        return total_points
+        
+    except Exception as e:
+        print(f"自習ポイントの読み込みエラー: {e}")
+        return 0
+
+# utils/g_sheets.py の一番下に追加
+
+def get_student_quiz_records(student_name):
+    """
+    スプレッドシートの「小テスト記録」シートから、指定した生徒の記録を取得する
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("小テスト記録") 
+        
+        all_records = worksheet.get_all_values()
+        quiz_records = []
+        
+        # 列の構成 (Pythonは0から数えます)
+        # 0:日時, 1:名前, 2:テキスト, 3:単元, 4:点数, 5:ミス問題番号, 6:実施形態
+        
+        # 1行目（ヘッダー）を飛ばして2行目からループ
+        for row in all_records[1:]:
+            # データが5列以上あり、かつ「名前(row[1])」が選択した生徒と一致するかチェック
+            if len(row) >= 5 and row[1] == student_name:
+                
+                # 「テキスト」と「単元」を組み合わせてテスト名にする（例: "英単語ターゲット_Unit1"）
+                quiz_name = f"{row[2]}_{row[3]}" 
+                score = row[4]
+                
+                quiz_records.append({"quiz_name": quiz_name, "score": score})
+                
+        return quiz_records
+        
+    except Exception as e:
+        print(f"小テスト記録の読み込みエラー: {e}")
+        return [] # エラー時は空のリストを返す
+
+# utils/g_sheets.py の一番下に追加
+
+def get_quiz_master_dict():
+    """
+    「設定_小テスト一覧」シートから、テスト名と満点の対応表を取得する
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("設定_小テスト一覧")
+        
+        all_records = worksheet.get_all_values()
+        master_dict = {}
+        
+        # 1行目（ヘッダー）を飛ばしてループ
+        # A列:テキスト名, B列:単元名, C列:満点 と仮定
+        for row in all_records[1:]:
+            if len(row) >= 3:
+                # 記録シート側の quiz_name と合わせるため「テキスト_単元」をキーにする
+                quiz_key = f"{row[0]}_{row[1]}"
+                try:
+                    full_marks = float(row[2])
+                except ValueError:
+                    full_marks = 100 # 数字でない場合はデフォルト100点
+                
+                master_dict[quiz_key] = {"full_marks": full_marks}
+                
+        return master_dict
+    except Exception as e:
+        print(f"小テスト設定の読み込みエラー: {e}")
+        return {}

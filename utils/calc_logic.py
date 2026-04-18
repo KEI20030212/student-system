@@ -45,15 +45,16 @@ def calculate_hw_rate(assigned_pages, completed_pages):
     except:
         return 0.0
 
-def calculate_motivation_rank(hw_rate, quiz_pts):
-    """
-    宿題履行率(%)と小テストポイントからやる気(1〜5)を算出。
-    ※ quiz_pts はこれまでの累計や平均など、先生の運用に合わせて渡します。
-    """
-    if hw_rate >= 100 and quiz_pts >= 120: return 5
-    elif hw_rate >= 90 and quiz_pts >= 100: return 4
-    elif hw_rate >= 75 and quiz_pts >= 80: return 3
-    elif hw_rate >= 50 and quiz_pts >= 40: return 2
+# utils/calc_logic.py にある古い calculate_motivation_rank をこれに差し替え
+
+def calculate_motivation_rank(hw_rate, quiz_pts, self_study_pts=0):
+    """宿題履行率(%)と、総合ポイント（小テストpt ＋ 自習pt）からやる気(1〜5)を算出"""
+    total_pts = quiz_pts + self_study_pts
+
+    if hw_rate >= 100 and total_pts >= 120: return 5
+    elif hw_rate >= 90 and total_pts >= 100: return 4
+    elif hw_rate >= 75 and total_pts >= 80: return 3
+    elif hw_rate >= 50 and total_pts >= 40: return 2
     else: return 1
 def calculate_ability_rank(naishin, dev_score):
     """内申点と偏差値から能力(1〜5)を算出"""
