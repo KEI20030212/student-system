@@ -12,10 +12,11 @@ from utils.g_sheets import (
 def render_school_homework_page():
     st.header("🎒 学校課題管理（内申点対策）")
     
-    tab1, tab2 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録（学校・学年指定）"])
+    # 🌟 タブを3つに増やしました！
+    tab1, tab2, tab3 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録", "📊 進捗ダッシュボード"])
 
     # ==========================================
-    # タブ1：アラート・進捗更新（生徒ごとの状況確認）
+    # タブ1：アラート・進捗更新
     # ==========================================
     with tab1:
         st.write("「完了（終わった）」と「提出済（学校に出した）」を分けて管理します。")
@@ -25,7 +26,6 @@ def render_school_homework_page():
             st.info("現在、登録されている学校の課題はありません。")
         else:
             df_active = df[df["ステータス"] != "提出済"].copy()
-            # 日付変換のエラー対策
             df_active["提出期限"] = pd.to_datetime(df_active["提出期限"], errors='coerce').dt.date
             df_active = df_active.dropna(subset=["提出期限"]).sort_values("提出期限")
 
@@ -61,7 +61,7 @@ def render_school_homework_page():
                             st.rerun()
 
     # ==========================================
-    # タブ2：学校 × 学年 での超シンプル一括登録
+    # タブ2：学校 × 学年 での一括登録
     # ==========================================
     with tab2:
         st.subheader("➕ 学校・学年を指定して一括登録")
@@ -72,7 +72,6 @@ def render_school_homework_page():
         if df_students.empty:
             st.warning("生徒データが取得できません。設定_生徒情報シートを確認してください。")
         else:
-            # 🏫 「学校名」列を使用するように修正
             if '学校名' in df_students.columns:
                 valid_schools = sorted([s for s in df_students['学校名'].unique() if str(s).strip() != ""])
             else:
@@ -88,7 +87,6 @@ def render_school_homework_page():
                 with col_f2:
                     target_grade = st.selectbox("🎯 対象の学年", valid_grades)
                 
-                # 該当生徒の抽出
                 target_student_list = df_students[
                     (df_students['学校名'] == target_school) & 
                     (df_students['学年'] == target_grade)
@@ -103,11 +101,9 @@ def render_school_homework_page():
                 with col2:
                     deadline = st.date_input("提出期限", date.today())
                 
-                # 🌟 ここを text_area に変更
                 content_text = st.text_area(
                     "課題内容 (1行に1つずつ入力してください)",
-                    placeholder="数学ワーク P10-P20\n計算プリント No.5\n英単語テストの練習",
-                    help="改行すると、それぞれの内容が別々の課題として登録されます。"
+                    placeholder="数学ワーク P10-P20\n計算プリント No.5\n英単語テストの練習"
                 )
                 
                 memo = st.text_area("メモ (全課題に共通して保存されます)")
@@ -115,7 +111,6 @@ def render_school_homework_page():
                 submitted = st.form_submit_button("一括登録する！", use_container_width=True)
                 
                 if submitted:
-                    # 🌟 改行で分割してリスト化、空行は無視
                     task_list = [t.strip() for t in content_text.split("\n") if t.strip()]
                     
                     if not target_student_list:
@@ -133,3 +128,56 @@ def render_school_homework_page():
                                 st.rerun()
                             else:
                                 st.error(f"登録失敗: {error_msg}")
+
+    # ==========================================
+    # タブ3：📊 進捗ダッシュボード（New!）
+    # ==========================================
+    with tab3:
+        st.subheader("📊 生徒別の課題進捗状況")
+        st.write("各生徒の課題消化率を棒グラフで確認できます。")
+        
+        # ※データ読み込みはタブ1で読んだdfがあればそれを使うこともできますが、念のため再取得
+        df_dash = load_school_homework_data()
+        
+        if df_dash.empty:
+            st.info("現在、登録されている課題はありません。")
+        else:
+            # 課題が登録されている生徒の一覧を取得
+            students_with_hw = sorted(df_dash['生徒名'].unique())
+            
+            for student in students_with_hw:
+                student_hw = df_dash[df_dash['生徒名'] == student]
+                
+                # 全課題数と、各ステータスの数をカウント
+                total_hw = len(student_hw)
+                completed_hw = len(student_hw[student_hw['ステータス'] == '完了'])
+                submitted_hw = len(student_hw[student_hw['ステータス'] == '提出済'])
+                
+                # 「完了」または「提出済」を達成としてカウント
+                done_hw = completed_hw + submitted_hw
+                
+                # 進捗率（0.0 〜 1.0）
+                progress_rate = done_hw / total_hw if total_hw > 0 else 0
+                progress_percent = int(progress_rate * 100)
+                
+                # 表示の工夫：100%なら星マークをつけて褒める
+                star = "✨ 完璧！" if progress_percent == 100 else ""
+                
+                st.write(f"#### 👤 {student} （{done_hw} / {total_hw} 完了） **{progress_percent}%** {star}")
+                st.progress(progress_rate) # これがプログレスバー（棒グラフ）！
+                
+                # まだ終わっていない課題があれば、折りたたみで表示
+                unfinished_hw = student_hw[~student_hw['ステータス'].isin(['完了', '提出済'])]
+                if not unfinished_hw.empty:
+                    with st.expander("📝 残りの課題を見る"):
+                        for _, row in unfinished_hw.iterrows():
+                            # 期限までの日数を計算
+                            try:
+                                dl_date = pd.to_datetime(row["提出期限"]).date()
+                                days_left = (dl_date - date.today()).days
+                                warning = f"🚨(期限まで{days_left}日)" if days_left <= 3 else ""
+                            except:
+                                warning = ""
+                            
+                            st.write(f"- 【{row['教科']}】 {row['課題内容']} {warning} （現在の状態: {row['ステータス']}）")
+                st.divider()
