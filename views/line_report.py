@@ -1,28 +1,21 @@
 import streamlit as st
 import datetime
 import pandas as pd
-
-# ==========================================
-# 🌟 utils/g_sheets.py から必要な関数を呼び出し
-# ==========================================
 from utils.g_sheets import (
     get_all_student_names,
     load_quiz_data_from_dedicated_sheet,
-    load_daily_class_record  # ⚠️ 新しく追加が必要な関数（指定日の授業記録を読み込む）
+    load_daily_class_record,
+    load_school_homework_data  # 🌟 追加：学校課題データを読み込む関数
 )
 
 def render_line_report_page():
     st.header("📱 LINE用 授業報告レポート生成")
-    st.write("生徒と日付を選択するだけで、LINE送信用のレポートを自動生成します✨")
+    st.write("授業記録・小テストに加え、**学校課題の提出アラート**も自動生成します✨")
 
-    # ==========================================
     # 1. 生徒と日付の選択エリア
-    # ==========================================
     col1, col2 = st.columns(2)
     student_names = get_all_student_names()
     selected_student = col1.selectbox("👤 生徒を選択", ["-- 選択 --"] + student_names)
-    
-    # 日付選択（デフォルトは今日）
     selected_date = col2.date_input("📅 授業日を選択", datetime.date.today())
 
     if selected_student == "-- 選択 --":
@@ -34,76 +27,76 @@ def render_line_report_page():
     with st.spinner("スプレッドシートからデータを取得中..."):
         date_str = selected_date.strftime("%Y/%m/%d")
 
-        # ==========================================
-        # 📊 ① 授業記録の自動取得（生徒別シートから）
-        # ==========================================
+        # --- ① 授業記録の取得 ---
         class_record = load_daily_class_record(selected_student, date_str)
-        
         if not class_record:
             st.warning(f"⚠️ {date_str} の {selected_student} さんの授業記録が見つかりません。")
-            teacher_name = "（不明）"
-            subject = "（未入力）"
-            period = "（未入力）"
-            progress = "（未入力）"
-            attitude = "（未入力）"
-            advice = "（未入力）"
-            parent_msg = "（未入力）"
+            teacher_name = "（不明）"; subject = "（未入力）"; period = "（未入力）"
+            progress = "（未入力）"; attitude = "（未入力）"; advice = "（特になし）"; parent_msg = "（特になし）"
         else:
-            # 💡 スプレッドシートの列名からデータを取得
             teacher_name = class_record.get("担当講師", "（未入力）")
             subject = class_record.get("科目", "（未入力）")
             period = class_record.get("授業コマ", "（未入力）")
-            
-            # テキスト・単元・終了ページを合体させて、綺麗な「進捗」の文章にする
-            text_name = class_record.get("テキスト", "")
-            unit = class_record.get("単元", "")
-            end_page = class_record.get("終了ページ", "")
-            progress = f"{text_name} {unit}（〜{end_page}ページまで）" if text_name else "（未入力）"
-            
-            # 集中力と反応を合体させる
-            concentration = class_record.get("集中力", "")
-            reaction = class_record.get("反応", "")
-            attitude = f"集中力: {concentration} / ミスへの反応: {reaction}" if concentration or reaction else "（未入力）"
-            
+            text_name = class_record.get("テキスト", ""); unit = class_record.get("単元", ""); end_page = class_record.get("終了ページ", "")
+            progress = f"{text_name} {unit}（〜{end_page}P）" if text_name else "（未入力）"
+            concentration = class_record.get("集中力", ""); reaction = class_record.get("反応", "")
+            attitude = f"集中力: {concentration} / 反応: {reaction}" if concentration or reaction else "（未入力）"
             advice = class_record.get("アドバイス", "（特になし）")
             parent_msg = class_record.get("保護者への連絡", "（特になし）")
 
-        # ==========================================
-        # 📝 ② 小テスト結果の自動取得と判定
-        # ==========================================
+        # --- ② 小テスト結果の取得 ---
         df_quiz = load_quiz_data_from_dedicated_sheet(selected_student)
-        quiz_text = "小テストは実施していません" # デフォルト値
-
+        quiz_text = "小テストは実施していません"
         if not df_quiz.empty:
-            # 日時列を日付型に変換して比較する
             df_quiz['日時'] = pd.to_datetime(df_quiz['日時'], format='mixed', errors='coerce')
             target_date = pd.to_datetime(selected_date).date()
-            
-            # 選択した日付と完全に一致する小テストデータを抽出
             daily_quiz = df_quiz[df_quiz['日時'].dt.date == target_date]
-            
             if not daily_quiz.empty:
                 quiz_results = []
                 for _, row in daily_quiz.iterrows():
-                    # 💡 もし「授業内でやったものだけ」に絞りたい場合は
-                    # if row.get("実施形態") == "授業内": などで分岐させます
-                    text_name = row.get('テキスト', '不明')
-                    chap_name = row.get('単元', '不明') # 既存のquiz_dashboardに合わせて'単元'としています
-                    score = row.get('点数', '不明')
-                    miss_nums = row.get('ミス問題番号', '')
-                    
-                    miss_text = f"（ミス: {miss_nums}）" if miss_nums else "（ミスなし💮）"
-                    quiz_results.append(f"【{text_name} {chap_name}】: {score}点 {miss_text}")
+                    quiz_results.append(f"【{row.get('テキスト', '不明')} {row.get('単元', '不明')}】: {row.get('点数', '不明')}点")
+                quiz_text = "\n・".join(quiz_results)
+
+        # --- 🌟 ③ 【New!】学校課題アラートの自動生成 ---
+        df_hw = load_school_homework_data()
+        hw_alert_text = ""
+        
+        if not df_hw.empty:
+            # 選択された生徒の「提出済」以外の課題を抽出
+            student_hw = df_hw[(df_hw['生徒名'] == selected_student) & (df_hw['ステータス'] != '提出済')].copy()
+            
+            if not student_hw.empty:
+                # 期限を日付型に変換してソート
+                student_hw['提出期限'] = pd.to_datetime(student_hw['提出期限']).dt.date
+                student_hw = student_hw.sort_values('提出期限')
                 
-                # 複数のテストがあった場合にも対応できるように改行でつなぐ
-                if quiz_results:
-                    quiz_text = "\n・".join(quiz_results)
+                alerts = []
+                today = datetime.date.today()
+                
+                for _, row in student_hw.iterrows():
+                    days_left = (row['提出期限'] - today).days
+                    
+                    # 期限切れ、または期限まで7日以内のものだけアラートに載せる
+                    if days_left < 0:
+                        alerts.append(f"❌【期限超過！】{row['教科']}: {row['課題内容']}（{row['提出期限']}）")
+                    elif days_left <= 3:
+                        alerts.append(f"🚨【期限直前！】{row['教科']}: {row['課題内容']}（あと{days_left}日）")
+                    elif days_left <= 7:
+                        alerts.append(f"📅【期限間近】{row['教科']}: {row['課題内容']}（{row['提出期限']}）")
+                
+                if alerts:
+                    hw_alert_text = "\n" + "\n".join(alerts)
 
         # ==========================================
-        # 📱 LINEメッセージの自動出力
+        # 📱 LINEメッセージの組み立て
         # ==========================================
         st.subheader("📋 完成したLINEメッセージ")
         
+        # 学校課題がある場合だけ、項目を表示する
+        hw_section = ""
+        if hw_alert_text:
+            hw_section = f"\n⚠️ 【学校課題の提出アラート】{hw_alert_text}\n"
+
         line_message = f"""保護者様
 
 お世話になっております。本日の {selected_student} さんの授業報告をいたします。
@@ -116,7 +109,7 @@ def render_line_report_page():
 
 💯 【小テスト結果】
 ・{quiz_text}
-
+{hw_section}
 🗣️ 【担当講師より（アドバイス等）】
 {advice}
 
@@ -126,6 +119,5 @@ def render_line_report_page():
 ご不明な点がございましたら、お気軽にご連絡ください。
 引き続きよろしくお願いいたします。"""
 
-        # そのままコピーできるようにコードブロックで表示
         st.code(line_message, language="text")
-        st.caption("👆 右上のコピーボタンを押して、そのままLINEに貼り付けて送信できます！")
+        st.caption("👆 右上のコピーボタンを押してLINEへ！")
