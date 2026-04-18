@@ -169,7 +169,7 @@ def render_dashboard_page():
             # 💡 自習ポイントの取得
             self_study_pts = get_student_self_study_points(s_name)
 
-            final_total_points = total_points + self_study_pts
+            final_total_points = total_quiz_pts + self_study_pts
 
             # --- 進捗の計算 (個別シートを使用) ---
             if not df_personal.empty:
