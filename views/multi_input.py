@@ -346,112 +346,109 @@ def render_multi_input_page(textbook_master):
 
                     st.rerun() 
     # ==========================================
-    # 📝 自習記録の入力画面 (アップグレード版)
+    # 📝 自習記録の入力画面（アップグレード版）
     # ==========================================
     elif record_type == "📝 自習":
         with st.container(border=True):
             st.write("📚 **自習記録の入力**")
             
-            # 🌟 複数日・複数人まとめ入力機能（APIコール削減にも繋がる）
-            num_ss_records = st.number_input("📝 入力する件数（同じ生徒の別日もまとめて入力できます）", min_value=1, max_value=20, value=1)
-            st.divider()
+            # 🌟 改善: 生徒名の選択は最初の一回だけ！
+            ss_options = ["🆕 新規登録"] + student_names
+            ss_name = st.selectbox("👤 生徒名", ss_options, index=None, placeholder="生徒を選択", key="ss_name_main")
             
-            ss_input_data = []
+            if ss_name == "🆕 新規登録": 
+                ss_name = st.text_input("新しい生徒の名前", key="ss_new_name_main")
             
-            for i in range(num_ss_records):
-                with st.container(border=True):
-                    st.write(f"**【自習記録 {i+1}件目】**")
-                    c1, c2 = st.columns(2)
-                    
-                    # 📅 1件ごとに日付を選べるので、1人の生徒の過去数日分も入力可能！
-                    study_date = c1.date_input("📅 自習日", datetime.date.today(), key=f"ss_date_{i}")
-                    
-                    ss_options = ["🆕 新規登録"] + student_names
-                    ss_name = c2.selectbox("👤 生徒名", ss_options, index=None, placeholder="生徒を選択", key=f"ss_name_{i}")
-                    
-                    if ss_name == "🆕 新規登録": 
-                        ss_name = st.text_input("新しい生徒の名前", key=f"ss_new_name_{i}")
-                    
-                    if ss_name:
-                        # 🌟 案1: 休憩時間と実質時間の計算
-                        tc1, tc2 = st.columns(2)
-                        total_time = tc1.number_input("⏱️ 塾にいた総時間 (分)", min_value=0, value=120, step=10, key=f"ss_tot_{i}")
-                        break_time = tc2.number_input("☕ 休憩時間 (分)", min_value=0, value=10, step=5, key=f"ss_brk_{i}")
+            if ss_name:
+                st.divider()
+                # 🌟 改善: 何日分入力するかを決定
+                num_records = st.number_input("📅 登録する日数（まとめて何日分入力しますか？）", min_value=1, max_value=10, value=1, step=1)
+                
+                ss_records_to_save = []
+                total_earned_points = 0
+                
+                for i in range(num_records):
+                    with st.container(border=True):
+                        st.write(f"**【記録 {i+1}】**")
+                        col_d, col_t, col_b, col_p = st.columns([1.5, 1, 1, 1.2])
                         
-                        actual_time = max(0, total_time - break_time)
+                        with col_d:
+                            r_date = st.date_input("自習日", datetime.date.today() - datetime.timedelta(days=i), key=f"ss_date_{i}")
+                        with col_t:
+                            r_time = st.number_input("滞在時間(分)", min_value=0, value=120, step=10, key=f"ss_time_{i}")
+                        with col_b:
+                            r_break = st.number_input("休憩時間(分)", min_value=0, value=10, step=5, key=f"ss_break_{i}")
                         
-                        # 🌟 案5: モチベーションポイントの計算 (例: 10分勉強するごとに1pt獲得)
-                        earned_points = actual_time // 10
+                        # 💡 案1: 実質勉強時間の自動計算
+                        actual_time = max(0, r_time - r_break)
                         
-                        st.info(f"✨ **実質学習時間: {actual_time}分** ➡️ **獲得経験値: {earned_points} pt** ゲット！")
+                        # 💡 案5: モチベーションEXPの計算（例：実質勉強時間10分につき1EXP）
+                        earned_points = int(actual_time / 10) 
                         
-                        ss_content = st.text_area("📖 自習内容・メモ", height=80, key=f"ss_content_{i}")
-                        
-                        # 保存用にリストにまとめる
-                        ss_input_data.append({
-                            "date": study_date,
-                            "name": ss_name,
-                            "actual_time": actual_time,
-                            "points": earned_points,
-                            "content": ss_content
-                        })
-            
-            st.divider()
-            
-            # 全ての入力が完了したらボタンを表示
-            if len(ss_input_data) == num_ss_records and num_ss_records > 0:
-                # 🌟 APIエラー絶対回避システム
-                if st.button("🚀 全ての自習記録を安全に保存する", type="primary", use_container_width=True):
-                    with st.status("Googleスプレッドシートに保存中（APIエラー防止のためゆっくり処理します）...", expanded=True) as status:
-                        
-                        success_count = 0
-                        for idx, data in enumerate(ss_input_data):
-                            st.write(f"⏳ {idx+1}件目 ({data['name']}さん) を保存中...")
+                        with col_p:
+                            st.metric("実質勉強時間", f"{actual_time} 分", f"+{earned_points} EXP")
                             
-                            # backend(g_sheets.py)のコードを変更しなくて済むように、メモ欄にポイント情報を合体させます
-                            memo_with_points = f"【実質 {data['actual_time']}分 / 獲得: {data['points']}pt】\n{data['content']}"
+                        r_content = st.text_input("自習内容・テキスト (任意)", key=f"ss_content_{i}")
+                        
+                        if actual_time > 0:
+                            ss_records_to_save.append({
+                                "date": r_date,
+                                "stay_time": r_time,
+                                "break_time": r_break,
+                                "actual_time": actual_time,
+                                "content": r_content,
+                                "earned_points": earned_points
+                            })
+                            total_earned_points += earned_points
+
+                st.divider()
+                
+                if len(ss_records_to_save) > 0:
+                    st.info(f"✨ 今回の合計獲得経験値: **{total_earned_points} EXP**")
+                    
+                    if st.button(f"🚀 {ss_name}さんの自習記録（{len(ss_records_to_save)}件）をまとめて保存", type="primary", use_container_width=True):
+                        
+                        # 🛡️ APIエラー絶対防止システム
+                        with st.status("データを保存中... (API制限回避のためゆっくり処理します🐢)", expanded=True) as status:
+                            success_count = 0
                             
-                            # 🛡️ 鉄壁のエラーハンドリング（Try-Except）
-                            try:
-                                save_self_study_record(
-                                    date=data['date'].strftime("%Y/%m/%d"), 
-                                    name=data['name'], 
-                                    duration=data['actual_time'], # 実質時間をスプレッドシートに記録
-                                    content=memo_with_points      # 内容＋獲得ポイントを記録
-                                )
-                                success_count += 1
-                                
-                                # 🌟 最重要: API制限（429エラー）を絶対に防ぐための「2.5秒待機」
-                                # Google APIは連続送信に非常に厳しいため、ここで確実に呼吸を置きます
-                                time.sleep(2.5) 
-                                
-                            except Exception as e:
-                                st.warning(f"⚠️ {data['name']}さんの保存中にAPIの混雑を検知しました。10秒待機して再試行します...")
-                                time.sleep(10) # 10秒待機してAPI制限の解除を待つ
+                            for idx, record in enumerate(ss_records_to_save):
                                 try:
+                                    st.write(f"⏳ {idx+1}件目 ({record['date']}) を保存中...")
+                                    
+                                    # 既存の g_sheets.py をいじらずに済むよう、備考欄に詳細とEXPを自動結合して保存します
+                                    combined_content = f"【滞在:{record['stay_time']}分/休憩:{record['break_time']}分】内容: {record['content']} (獲得EXP: {record['earned_points']})"
+                                    
                                     save_self_study_record(
-                                        date=data['date'].strftime("%Y/%m/%d"), 
-                                        name=data['name'], 
-                                        duration=data['actual_time'],
-                                        content=memo_with_points
+                                        date=record['date'].strftime("%Y/%m/%d"), 
+                                        name=ss_name, 
+                                        duration=record['actual_time'], # スプレッドシートには「実質勉強時間」を記録
+                                        content=combined_content
                                     )
                                     success_count += 1
-                                    time.sleep(2.5)
-                                except Exception as retry_e:
-                                    st.error(f"❌ 申し訳ありません。再試行も失敗しました。しばらく時間を置いてから再度お試しください。")
-                        
-                        status.update(label=f"保存完了！ ({success_count}/{num_ss_records}件成功)", state="complete", expanded=False)
-                    
-                    if success_count > 0:
-                        st.success(f"✅ {success_count}件の自習記録を無事に保存しました！")
-                        
-                        # キャッシュをリセットして次回の入力画面をきれいに
+                                    
+                                    # 🚨 超重要: Google APIの「リクエスト過多(429エラー)」を絶対に防ぐため、1件ごとに1.5秒待機
+                                    time.sleep(1.5) 
+                                    
+                                except Exception as e:
+                                    # 万が一エラーが起きてもアプリ全体をクラッシュさせない（Try-Except）
+                                    st.error(f"⚠️ {idx+1}件目でエラーが発生しましたが、処理を継続します: {e}")
+                                    time.sleep(2)
+                            
+                            if success_count == len(ss_records_to_save):
+                                status.update(label="全件保存完了！", state="complete", expanded=False)
+                                st.success(f"✅ {ss_name}さんの自習記録を {success_count} 件保存しました！")
+                            else:
+                                status.update(label="一部保存に失敗しました", state="error", expanded=False)
+                                st.warning(f"⚠️ {success_count} / {len(ss_records_to_save)} 件のみ保存されました。シートを確認してください。")
+
+                        # キャッシュクリアと画面リセット
                         st.cache_data.clear()
-                        time.sleep(1.5)
+                        time.sleep(1)
                         
-                        # セッションステート（入力履歴）の消去
-                        for key in list(st.session_state.keys()):
-                            if key.startswith("ss_"):
-                                del st.session_state[key]
+                        # 動的に生成した入力欄のメモリを完全にお掃除
+                        for k in list(st.session_state.keys()):
+                            if k.startswith("ss_"):
+                                del st.session_state[k]
                                 
                         st.rerun()
