@@ -31,12 +31,11 @@ def calc_pages_from_text(text):
     return total
 
 def render_dashboard_page():
-    st.subheader("🌐 クラス全体ダッシュボード") # 親にヘッダーがあるので少し小さく変更
+    st.subheader("🌐 クラス全体ダッシュボード") 
 
     today = datetime.date.today()
     month_options = [(today - datetime.timedelta(days=i*30)).strftime("%Y年%m月") for i in range(12)]
-    month_options.insert(0, "全期間") # 「全期間」という選択肢も追加
-    selected_period = st.selectbox("📅 集計期間を選択", month_options)
+    month_options.insert(0, "全期間") 
 
     student_names = get_all_student_names()
     if not student_names: return
@@ -44,6 +43,7 @@ def render_dashboard_page():
     all_grades = ["すべて"]
     all_subjects = ["すべて"]
     
+    # 💡 基本データの読み込みはプルダウンの選択肢を作るために必要なので、最初に1回だけやります
     with st.spinner("☁️ 生徒基本データを一括読み込み中...（通信は1回だけ！一瞬で終わります🚀）"):
         student_info_dict = get_all_student_info_dict() 
         
@@ -61,11 +61,23 @@ def render_dashboard_page():
                     if sub and sub not in all_subjects:
                         all_subjects.append(sub)
             
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_grade = st.selectbox("🎯 学年で絞り込み", all_grades)
-    with col2:
-        selected_subject = st.selectbox("📚 科目で絞り込み", all_subjects)
+    # 🌟 ここを「フォーム」で囲みます！
+    with st.form("dashboard_filter_form"):
+        selected_period = st.selectbox("📅 集計期間を選択", month_options)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_grade = st.selectbox("🎯 学年で絞り込み", all_grades)
+        with col2:
+            selected_subject = st.selectbox("📚 科目で絞り込み", all_subjects)
+            
+        # 集計開始ボタン（これを押すまでフォーム内の変更は確定されません）
+        submit_button = st.form_submit_button("🚀 この条件で集計を開始する")
+
+    # 👇 ボタンが押されていない場合は、ここで処理をストップして待機！
+    if not submit_button:
+        st.info("👆 上のメニューから条件を選んで、「集計を開始する」ボタンを押してください。")
+        return
     
     target_students = []
     for s in student_names:
