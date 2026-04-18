@@ -510,33 +510,34 @@ def save_board_message(message):
 # ==========================================
 # 📝 自習記録を保存する機能
 # ==========================================
-def save_self_study_record(date, name, start_time, end_time, break_time, actual_minutes):
-    """自習の記録を「自習記録」シートに保存する"""
-    try:
-        # 👇👇 🚨 鍵を取り付けました！！ 🚨 👇👇
-        gc = get_gc_client()
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        
-        # 「自習記録」という名前のシートを開く
-        worksheet = sh.worksheet("自習記録")
-        
-        # 保存するデータのリストを作る
-        row_data = [
-            str(date),          # 日付
-            name,               # 生徒名
-            str(start_time),    # 開始時間
-            str(end_time),      # 終了時間
-            break_time,         # 休憩時間
-            actual_minutes      # 自習時間(分)
-        ]
-        
-        # スプレッドシートの空いている一番下の行に追記！
-        worksheet.append_row(row_data)
-        return True, "成功"  # 👈 成功したよ！と報告
-    except Exception as e:
-        print(f"自習記録の保存エラー: {e}")
-        return False, str(e)
-
+def save_self_study_record(date, name, start_time, end_time, break_time, actual_minutes, content, points):
+    """自習の記録を「自習記録」シートに保存する（APIエラー対策版）"""
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            gc = get_gc_client()
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            worksheet = sh.worksheet("自習記録")
+            
+            row_data = [
+                str(date),
+                name,
+                str(start_time),
+                str(end_time),
+                break_time,
+                actual_minutes,
+                content,
+                points
+            ]
+            
+            worksheet.append_row(row_data)
+            return True, "成功"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(2) # 失敗したら2秒待って再試行
+                continue
+            return False, str(e)
 def load_self_study_data():
     """自習記録シートから全データを取得してシステム用の表（データフレーム）にして返す"""
     try:
