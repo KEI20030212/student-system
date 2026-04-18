@@ -16,7 +16,7 @@ def render_school_homework_page():
     tab1, tab2, tab3 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録", "📊 進捗ダッシュボード"])
 
     # ==========================================
-    # タブ1：アラート・進捗更新
+    # タブ1：アラート・進捗更新（🔥ヤバさ優先ソート版）
     # ==========================================
     with tab1:
         st.write("「完了（終わった）」と「提出済（学校に出した）」を分けて管理します。")
@@ -27,10 +27,28 @@ def render_school_homework_page():
         else:
             df_active = df[df["ステータス"] != "提出済"].copy()
             df_active["提出期限"] = pd.to_datetime(df_active["提出期限"], errors='coerce').dt.date
-            df_active = df_active.dropna(subset=["提出期限"]).sort_values("提出期限")
+            df_active = df_active.dropna(subset=["提出期限"])
 
             today = date.today()
 
+            # 🌟 新機能：優先度（ヤバさ）を計算するロジック
+            def get_priority(row):
+                if row["ステータス"] == "完了":
+                    return 4  # すでに終わっているものは一番下（あとは出すだけ）
+                
+                days_left = (row["提出期限"] - today).days
+                if days_left < 0:
+                    return 1  # 🔥 期限超過（最優先で対応！）
+                elif days_left <= 2:
+                    return 2  # 🚨 期限直前（今日・明日・明後日）
+                else:
+                    return 3  # 🟢 まだ余裕あり
+
+            # 優先度列を追加して、優先度 ＞ 提出期限 の順番で並び替え！
+            df_active["優先度"] = df_active.apply(get_priority, axis=1)
+            df_active = df_active.sort_values(["優先度", "提出期限"])
+
+            # 画面への表示
             for idx, row in df_active.iterrows():
                 days_left = (row["提出期限"] - today).days
                 
@@ -56,8 +74,17 @@ def render_school_homework_page():
                     )
                     
                     if st.button("更新を保存", key=f"btn_{idx}"):
-                        if update_homework_status(idx + 2, new_status):
+                        if update_homework_status(row.name + 2, new_status):
                             st.success(f"{row['生徒名']}さんの状況を更新しました！")
+                            
+                            # 🌟 ここが超重要！システムの記憶（キャッシュ）を消去して強制リセット
+                            load_school_homework_data.clear()
+                            
+                            # Googleスプレッドシート側が書き込みを終えるのをほんの少しだけ待つ
+                            import time
+                            time.sleep(0.5) 
+                            
+                            # 画面をリロードして最新状態にする（ここで順番も入れ替わります！）
                             st.rerun()
 
     # ==========================================
