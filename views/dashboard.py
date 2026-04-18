@@ -149,7 +149,7 @@ def render_dashboard_page():
                     valid_scores = []
                     for index, row in q_filtered.iterrows():
                         score_val = row['点数']
-                        quiz_name = row.get('テスト名', '') # テスト名も取得する！
+                        quiz_name = row.get('テキスト', '') # テスト名も取得する！
 
                         if pd.isna(score_val) or str(score_val).strip() == "":
                             continue
@@ -167,7 +167,9 @@ def render_dashboard_page():
                     if valid_scores:
                         avg_score = sum(valid_scores) / len(valid_scores)
             # 💡 自習ポイントの取得
-            self_study_pts = get_student_self_study_points(s_name)    
+            self_study_pts = get_student_self_study_points(s_name)
+
+            final_total_points = total_points + self_study_pts
 
             # --- 進捗の計算 (個別シートを使用) ---
             if not df_personal.empty:
@@ -232,7 +234,7 @@ def render_dashboard_page():
             except ValueError: hw_rate = 0.0
             
             # 💡 さっき計算した total_points と 宿題履行率 を関数に渡す！
-            motivation_y = calculate_motivation_rank(hw_rate, total_quiz_pts, self_study_pts)
+            motivation_y = calculate_motivation_rank(hw_rate, final_total_points, self_study_pts)
 
             # ③ マトリクス用のリストに追加
             matrix_data.append({
@@ -245,7 +247,7 @@ def render_dashboard_page():
                 "生徒名": s_name, 
                 "選択期間の進捗(ページ)": adv_pages, 
                 "選択期間の平均点": round(avg_score, 1) if pd.notna(avg_score) else None, 
-                "選択期間の獲得ポイント": total_points 
+                "選択期間の獲得ポイント": final_total_points 
             })
             
             time.sleep(0.5) # 元からある息継ぎ
