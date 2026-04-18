@@ -344,4 +344,47 @@ def render_multi_input_page(textbook_master):
                         if key.startswith("prev_data_"):
                             del st.session_state[key]
 
-                    st.rerun()
+                    st.rerun() 
+    # ==========================================
+    # 📝 自習記録の入力画面
+    # ==========================================
+    elif record_type == "📝 自習":
+        with st.container(border=True):
+            st.write("📚 **自習記録の入力**")
+            
+            c1, c2 = st.columns(2)
+            study_date = c1.date_input("📅 自習日", datetime.date.today(), key="ss_date")
+            
+            ss_options = ["🆕 新規登録"] + student_names
+            ss_name = c2.selectbox("👤 生徒名", ss_options, index=None, placeholder="生徒を選択", key="ss_name")
+            
+            if ss_name == "🆕 新規登録": 
+                ss_name = st.text_input("新しい生徒の名前", key="ss_new_name")
+            
+            if ss_name:
+                study_time = st.number_input("⏱️ 自習時間 (分)", min_value=0, value=60, step=10, key="ss_time")
+                ss_content = st.text_area("📖 自習内容・メモ", height=100, key="ss_content")
+                
+                if st.button("💾 自習記録を保存", type="primary", use_container_width=True):
+                    with st.spinner("スプレッドシートに保存中..."):
+                        # ※ もし utils/g_sheets.py の save_self_study_record の引数名が違う場合は、ここを修正してください
+                        save_self_study_record(
+                            date=study_date.strftime("%Y/%m/%d"), 
+                            name=ss_name, 
+                            duration=study_time, 
+                            content=ss_content
+                        )
+                        
+                        st.success(f"✅ {ss_name}さんの自習記録（{study_time}分）を保存しました！")
+                        
+                        # キャッシュをクリアして最新状態に
+                        st.cache_data.clear()
+                        time.sleep(1.5)
+                        
+                        # 入力欄をリセットするためにセッションステートを消去
+                        keys_to_clear = ["ss_name", "ss_new_name", "ss_time", "ss_content"]
+                        for k in keys_to_clear:
+                            if k in st.session_state:
+                                del st.session_state[k]
+                                
+                        st.rerun()
