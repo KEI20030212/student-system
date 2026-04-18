@@ -126,7 +126,7 @@ def render_student_details_page(selected_student):
             self_study_pts = get_student_self_study_points(selected_student)
             
             # 💡 STEP2で作った計算関数に、宿題・小テスト・自習ポイントを入れて「やる気」を算出！
-            current_motivation = calculate_motivation_rank(current_hw_rate, quiz_pts, self_study_pts)
+            current_motivation = calculate_motivation_rank(current_hw_rate, total_quiz_pts, self_study_pts)
             
             # せっかくなので、画面にも「獲得ポイント」を表示してあげましょう
             st.caption(f"🔥 獲得ポイント ｜ 小テスト: **{total_quiz_pts} pt** / 自習: **{self_study_pts} pt**")
