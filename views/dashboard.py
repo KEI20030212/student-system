@@ -21,6 +21,13 @@ from utils.calc_logic import (
     calculate_ability_rank,
     calculate_motivation_rank
 )
+def calc_pages_from_text(text):
+    if pd.isna(text): return 0
+    matches = re.findall(r'(\d+)\s*[~〜\-ー]\s*(\d+)', str(text))
+    total = 0
+    for start_str, end_str in matches:
+        total += abs(int(end_str) - int(start_str)) + 1
+    return total
 
 def render_dashboard_page():
     st.subheader("🌐 クラス全体ダッシュボード") # 親にヘッダーがあるので少し小さく変更
@@ -100,8 +107,8 @@ def render_dashboard_page():
         df_all_tests = pd.DataFrame()
         try:
             df_all_tests = load_test_scores()
-        except Exception:
-            pass
+        except Exception as e:
+        print(f"⚠️ 模試データの読み込みでエラー発生: {e}")
 
     with st.spinner(f'☁️ {current_month_str} のデータを集計中...（※途中でAPIが混み合っても自動復帰します）'):
         progress_bar_data = st.progress(0)
@@ -134,10 +141,10 @@ def render_dashboard_page():
             else:
                 df_student_quizzes = pd.DataFrame()
             
-            adv_pages, avg_score, total_points = 0, None, 0
-            
-            # --- ポイント・平均点の計算 (共通シートから抜き出したデータを使用) ---
+            adv_pages = 0
+            avg_score = None
             total_quiz_pts = 0
+
             if not df_student_quizzes.empty:
                 # 期間絞り込み
                 if selected_period == "全期間":
@@ -190,16 +197,6 @@ def render_dashboard_page():
                 # 🌟 4. 進捗（ページ数）の計算（複数行・範囲指定対応バージョン！）
                 try:
                     if '終了ページ' in df_p_filtered.columns:
-                        # 各行のテキストから進捗を計算する専用の関数をその場で作る
-                        def calc_pages_from_text(text):
-                            if pd.isna(text): return 0
-                            # 「数字」+「〜 や - など」+「数字」 のペアをすべて見つけ出す
-                            matches = re.findall(r'(\d+)\s*[~〜\-ー]\s*(\d+)', str(text))
-                            total = 0
-                            for start_str, end_str in matches:
-                                # 右の数字 - 左の数字 を計算（逆に書いてあっても大丈夫なように絶対値をとる）
-                                total += abs(int(end_str) - int(start_str)) + 1
-                            return total
 
                         # 各行の「終了ページ」に上の関数を適用して、「今回の進捗」というデータを作る
                         df_p_filtered['今回の進捗'] = df_p_filtered['終了ページ'].apply(calc_pages_from_text)
