@@ -12,6 +12,13 @@ from utils.g_sheets import (
 def render_school_homework_page():
     st.header("🎒 学校課題管理（内申点対策）")
     
+    col_h, col_r = st.columns([0.8, 0.2])
+    with col_h:
+        st.header("🎒 学校課題管理")
+    with col_r:
+        if st.button("🔄 情報を更新"):
+            load_school_homework_data.clear()
+            st.rerun()
     # 🌟 タブを3つに増やしました！
     tab1, tab2, tab3 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録", "📊 進捗ダッシュボード"])
 
@@ -74,18 +81,17 @@ def render_school_homework_page():
                     )
                     
                     if st.button("更新を保存", key=f"btn_{idx}"):
-                        if update_homework_status(row.name + 2, new_status):
-                            st.success(f"{row['生徒名']}さんの状況を更新しました！")
-                            
-                            # 🌟 ここが超重要！システムの記憶（キャッシュ）を消去して強制リセット
-                            load_school_homework_data.clear()
-                            
-                            # Googleスプレッドシート側が書き込みを終えるのをほんの少しだけ待つ
-                            import time
-                            time.sleep(0.5) 
-                            
-                            # 画面をリロードして最新状態にする（ここで順番も入れ替わります！）
-                            st.rerun()
+                        with st.spinner("スプレッドシートに反映中..."):
+                            if update_homework_status(row.name + 2, new_status):
+                                # 🌟 1. まずキャッシュを明示的にクリア
+                                load_school_homework_data.clear()
+                                
+                                # 🌟 2. Google側の反映を待つ（0.5秒だと短い場合があるので1.5秒に）
+                                time.sleep(1.5)
+                                
+                                # 🌟 3. 再読み込みして最新データを強制取得
+                                st.success(f"{row['生徒名']}さんの状況を更新しました！")
+                                st.rerun()
 
     # ==========================================
     # タブ2：学校 × 学年 での一括登録
