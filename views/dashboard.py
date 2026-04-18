@@ -13,6 +13,7 @@ from utils.g_sheets import (
     load_all_data,
     load_quiz_records,
     get_quiz_maker_sheets,
+    get_student_self_study_points,
     load_test_scores
 )
 from utils.calc_logic import (
@@ -136,6 +137,7 @@ def render_dashboard_page():
             adv_pages, avg_score, total_points = 0, None, 0
             
             # --- ポイント・平均点の計算 (共通シートから抜き出したデータを使用) ---
+            total_quiz_pts = 0
             if not df_student_quizzes.empty:
                 # 期間絞り込み
                 if selected_period == "全期間":
@@ -145,13 +147,10 @@ def render_dashboard_page():
 
                 if not q_filtered.empty and '点数' in q_filtered.columns:
                     valid_scores = []
-                    
-                    # 1行ずつ（1回のテストごとに）データを取り出して処理する
                     for index, row in q_filtered.iterrows():
                         score_val = row['点数']
                         quiz_name = row.get('テスト名', '') # テスト名も取得する！
-                        
-                        # 空欄ならスキップ
+
                         if pd.isna(score_val) or str(score_val).strip() == "":
                             continue
                             
@@ -161,12 +160,14 @@ def render_dashboard_page():
                             valid_scores.append(numeric_score)
                             
                             # 🌟 新しい計算関数に「点数」「テスト名」「満点リスト」の3つを渡す！
-                            total_points += calculate_quiz_points(numeric_score, quiz_name, quiz_master_dict)
+                            total_quiz_pts += calculate_quiz_points(numeric_score, quiz_name, quiz_master_dict)
                         except ValueError:
                             pass # 数字に変換できない文字は無視
 
                     if valid_scores:
                         avg_score = sum(valid_scores) / len(valid_scores)
+            # 💡 自習ポイントの取得
+            self_study_pts = get_student_self_study_points(s_name)    
 
             # --- 進捗の計算 (個別シートを使用) ---
             if not df_personal.empty:
@@ -231,7 +232,7 @@ def render_dashboard_page():
             except ValueError: hw_rate = 0.0
             
             # 💡 さっき計算した total_points と 宿題履行率 を関数に渡す！
-            motivation_y = calculate_motivation_rank(hw_rate, total_points) 
+            motivation_y = calculate_motivation_rank(hw_rate, total_quiz_pts, self_study_pts)
 
             # ③ マトリクス用のリストに追加
             matrix_data.append({
