@@ -21,6 +21,7 @@ from utils.calc_logic import (
     calculate_ability_rank,
     calculate_motivation_rank
 )
+
 def calc_pages_from_text(text):
     if pd.isna(text): return 0
     matches = re.findall(r'(\d+)\s*[~〜\-ー]\s*(\d+)', str(text))
@@ -108,7 +109,7 @@ def render_dashboard_page():
         try:
             df_all_tests = load_test_scores()
         except Exception as e:
-        print(f"⚠️ 模試データの読み込みでエラー発生: {e}")
+            print(f"⚠️ 模試データの読み込みでエラー発生: {e}")
 
     with st.spinner(f'☁️ {current_month_str} のデータを集計中...（※途中でAPIが混み合っても自動復帰します）'):
         progress_bar_data = st.progress(0)
