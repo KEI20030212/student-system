@@ -49,20 +49,71 @@ def render_self_study_dashboard():
         </style>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([4, 1])
+    col1, col2 = st.columns([3, 2])
     with col1:
         st.subheader("📊 学習時間ダッシュボード")
     with col2:
-        if st.button("🖨️ グラフを印刷"):
-            components.html("<script>window.parent.print();</script>", height=0)
+        # 🌟 リロードボタンを追加！
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("🔄 最新データに更新"):
+                get_all_student_grades.clear() # キャッシュを消去
+                st.rerun() # 画面をリロード
+        with btn_col2:
+            if st.button("🖨️ グラフを印刷"):
+                components.html("<script>window.parent.print();</script>", height=0)
         st.caption("※スマホはブラウザの「共有」メニューからプリントしてください")
     
     st.write("自習時間と授業時間を合算したり、学年ごとに絞り込んだりできる究極のグラフです🔥")
 
     # ==========================================
-    # 1. データの読み込み (スピナー内に配置)
+    # 1. UI（コントローラー）の作成 
     # ==========================================
+    # 🌟 データを読み込む前に月を選べるよう、過去12ヶ月のリストを自動作成
+    today = pd.Timestamp.today()
+    month_list = [(today - pd.DateOffset(months=i)).strftime('%Y年%m月') for i in range(12)]
+    
+    # 学年データは軽いので先に取得
+    df_grades = get_all_student_grades()
+
+    # 🌟 フォームを追加して、ボタンを押すまで読み込まないようにする
+    with st.form("self_study_filter_form"):
+        st.markdown("### 🎛️ 表示設定")
+        c1, c2, c3 = st.columns(3)
+        
+        with c1:
+            selected_month = st.selectbox("📅 月を選択", ["すべての期間（累計）"] + month_list)
+        
+        with c2:
+            mode = st.radio("⏱️ 表示モード", ["自習時間のみ", "自習時間 ＋ 授業時間"])
+            
+        with c3:
+            valid_grades = []
+            if not df_grades.empty and '学年' in df_grades.columns:
+                valid_grades = sorted([g for g in df_grades['学年'].unique() if str(g).strip() != ""])
+            
+            if not valid_grades:
+                st.warning("⚠️ 学年データの取得に一時的に失敗しました。リロードしてください。")
+                st.form_submit_button("ダミーボタン") # フォームエラー回避用
+                st.stop()
+                
+            selected_grades = st.multiselect("🎓 学年で絞り込み (複数選択可)", options=valid_grades, default=valid_grades)
+
+        submit_btn = st.form_submit_button("🚀 この条件で集計を開始する")
+
+    # 🌟 ボタンが押されていなければここでストップ
+    if not submit_btn:
+        st.info("👆 上のメニューから条件を選んで、「集計を開始する」ボタンを押してください。")
+        return
+
+    # ==========================================
+    # 2. データの読み込み (プログレスバー付き！)
+    # ==========================================
+    progress_bar = st.progress(0, text="🚀 データの集計を準備中...")
+    
     with st.spinner("あらゆる学習データをかき集めています..."):
+        # プログレスバー更新：20%
+        progress_bar.progress(20, text="☁️ 自習データを取得中...")
         df_self_study = load_self_study_data()
         if not df_self_study.empty:
             df_self_study['日付'] = pd.to_datetime(df_self_study['日付'], errors='coerce')
@@ -70,44 +121,21 @@ def render_self_study_dashboard():
             df_self_study['年月'] = df_self_study['日付'].dt.strftime('%Y年%m月')
             df_self_study['自習時間(分)'] = pd.to_numeric(df_self_study['自習時間(分)'], errors='coerce').fillna(0)
         
+        # プログレスバー更新：60%
+        progress_bar.progress(60, text="☁️ 授業データを取得中...")
         df_classes = load_entire_log_data()
         if not df_classes.empty and '日時' in df_classes.columns:
             df_classes['日時'] = pd.to_datetime(df_classes['日時'], format='mixed', errors='coerce')
             df_classes = df_classes.dropna(subset=['日時'])
             df_classes['年月'] = df_classes['日時'].dt.strftime('%Y年%m月')
 
-        df_grades = get_all_student_grades()
+        # プログレスバー更新：90%
+        progress_bar.progress(90, text="⚙️ データを合算・計算中...")
 
     if df_self_study.empty and df_classes.empty:
+        progress_bar.empty()
         st.info("学習記録がまだありません。")
         return
-
-    # ==========================================
-    # 2. UI（コントローラー）の作成
-    # ==========================================
-    st.markdown("### 🎛️ 表示設定")
-    c1, c2, c3 = st.columns(3)
-    
-    months_ss = df_self_study['年月'].unique().tolist() if not df_self_study.empty else []
-    months_cl = df_classes['年月'].unique().tolist() if not df_classes.empty else []
-    month_list = sorted(list(set(months_ss + months_cl)), reverse=True)
-    
-    with c1:
-        selected_month = st.selectbox("📅 月を選択", ["すべての期間（累計）"] + month_list)
-    
-    with c2:
-        mode = st.radio("⏱️ 表示モード", ["自習時間のみ", "自習時間 ＋ 授業時間"])
-        
-    with c3:
-        valid_grades = []
-        if not df_grades.empty and '学年' in df_grades.columns:
-            valid_grades = sorted([g for g in df_grades['学年'].unique() if str(g).strip() != ""])
-        
-        if not valid_grades:
-            st.warning("⚠️ 学年データの取得に一時的に失敗しました。リロードしてください。")
-            st.stop()
-            
-        selected_grades = st.multiselect("🎓 学年で絞り込み (複数選択可)", options=valid_grades, default=valid_grades)
 
     # ==========================================
     # 3. データの絞り込みと合算
@@ -144,8 +172,14 @@ def render_self_study_dashboard():
     if selected_grades:
         merged = merged[merged['学年'].isin(selected_grades)]
     else:
+        progress_bar.empty()
         st.warning("学年が1つも選択されていません。表示したい学年を選んでください！")
         return
+
+    # プログレスバー更新：100%（完了したら消す）
+    progress_bar.progress(100, text="✨ 集計完了！グラフを描画します")
+    time.sleep(0.5)
+    progress_bar.empty()
 
     # ==========================================
     # 4. グラフの描画
@@ -165,16 +199,12 @@ def render_self_study_dashboard():
     merged = merged.sort_values(by='合計時間(分)', ascending=False)
     sorted_students = merged['生徒名'].tolist() 
 
-    # 💡 変更点：全体の高さ計算をスリム化（45px → 30px）
     chart_height = max(300, len(merged) * 30)
-    
-    # 💡 変更点：生徒名のフォントサイズを14 → 12にしてスッキリさせる
     y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=12))
 
     if mode == "自習時間 ＋ 授業時間":
         plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
         
-        # 💡 変更点：height=25 を削除し、size=14（棒の太さ）に変更
         bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, size=14).encode(
             x=alt.X('時間:Q', title='学習時間 (分)'),
             y=y_encoding,
@@ -182,7 +212,6 @@ def render_self_study_dashboard():
             tooltip=['生徒名', '時間の種類', '時間', '合計時間(分)']
         )
         
-        # 💡 変更点：数値のフォントサイズも14 → 12へ
         text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=12, fontWeight='bold', color='#333').encode(
             x='合計時間(分):Q',
             y=y_encoding,
@@ -192,7 +221,6 @@ def render_self_study_dashboard():
         chart = alt.layer(bars, text).properties(height=chart_height)
         
     else:
-        # 💡 変更点：同様にsize=14でスマートな棒グラフに
         bars = alt.Chart(merged).mark_bar(cornerRadiusEnd=4, size=14).encode(
             x=alt.X('合計時間(分):Q', title='自習時間 (分)'),
             y=y_encoding,
@@ -200,7 +228,6 @@ def render_self_study_dashboard():
             tooltip=['生徒名', '合計時間(分)']
         )
         
-        # 💡 変更点：数値のフォントサイズ変更
         text = alt.Chart(merged).mark_text(align='left', baseline='middle', dx=5, fontSize=12, fontWeight='bold', color='#333').encode(
             x='合計時間(分):Q',
             y=y_encoding,
