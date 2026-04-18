@@ -9,11 +9,15 @@ from utils.g_sheets import (
     get_student_info,
     update_student_info,
     save_test_score,
-    load_test_scores
+    load_test_scores,
+    get_student_self_study_points,
+    get_student_quiz_records,
+    get_quiz_master_dict
 )
 from utils.calc_logic import (
     calculate_ability_rank,
-    calculate_motivation_rank
+    calculate_motivation_rank,
+    calculate_quiz_points
 )
 
 def render_student_details_page(selected_student):
@@ -103,12 +107,30 @@ def render_student_details_page(selected_student):
             except ValueError: 
                 current_hw_rate = 0.0
                 
-            raw_motivation = str(info.get('やる気', '1')).strip()
-            try: 
-                current_motivation = int(float(raw_motivation))
-            except ValueError: 
-                current_motivation = 1
+            quiz_master = get_quiz_master_dict()
+            # 💡 ① 小テストの記録を取得し、先生の関数でポイント化して合計する！
+            quiz_records = get_student_quiz_records(selected_student)
+            total_quiz_pts = 0
             
+            for record in quiz_records:
+                # 💡 3. 先生の関数に「点数」「テスト名」「満点リスト」を渡す！
+                # これで、内部的に自動で正しい満点を参照して百分率を出してくれます。
+                pts = calculate_quiz_points(
+                    score=record["score"], 
+                    quiz_name=record["quiz_name"], 
+                    quiz_master_dict=quiz_master
+                )
+                total_quiz_pts += pts
+            
+            # 💡 STEP1で作った関数を呼び出して、自習ポイントを取得！
+            self_study_pts = get_student_self_study_points(selected_student)
+            
+            # 💡 STEP2で作った計算関数に、宿題・小テスト・自習ポイントを入れて「やる気」を算出！
+            current_motivation = calculate_motivation_rank(current_hw_rate, quiz_pts, self_study_pts)
+            
+            # せっかくなので、画面にも「獲得ポイント」を表示してあげましょう
+            st.caption(f"🔥 獲得ポイント ｜ 小テスト: **{total_quiz_pts} pt** / 自習: **{self_study_pts} pt**")
+            # 能力の計算
             ability = calculate_ability_rank(latest_naishin, latest_dev)
             
             df_coord = pd.DataFrame({"生徒": [selected_student], "能力 (X)": [ability], "やる気 (Y)": [current_motivation]})
