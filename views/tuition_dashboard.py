@@ -1,3 +1,7 @@
+import streamlit as st
+import pandas as pd
+from utils.g_sheets import get_all_student_names, load_all_data
+
 def render_tuition_dashboard_page():
     st.header("💴 月謝（請求額）管理ダッシュボード")
     student_names = get_all_student_names()
