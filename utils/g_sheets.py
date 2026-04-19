@@ -1353,15 +1353,28 @@ def save_billing_data(year_month, edited_df):
         st.error(f"保存エラー: {e}")
         return False
 def load_price_master():
-    """料金マスタ（学年・コマ数ごとの料金）を読み込む"""
+    """料金マスタを読み込み、追加単価も取得する"""
     try:
+        import pandas as pd
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         worksheet = sh.worksheet("料金マスタ")
-        return pd.DataFrame(worksheet.get_all_records())
-    except:
+        df = pd.DataFrame(worksheet.get_all_records())
+        
+        if not df.empty:
+            df['学年'] = df['学年'].astype(str).str.strip()
+            df['コマ数'] = pd.to_numeric(df['コマ数'], errors='coerce')
+            df['料金'] = pd.to_numeric(df['料金'], errors='coerce')
+            # 🌟 追加単価を読み込む（列がなければ0にする）
+            if '追加単価' in df.columns:
+                df['追加単価'] = pd.to_numeric(df['追加単価'], errors='coerce').fillna(0)
+            else:
+                df['追加単価'] = 0
+            
+        return df
+    except Exception as e:
+        print(f"料金マスタ読み込みエラー: {e}")
         return pd.DataFrame()
-
 def get_student_master_data():
     """生徒名簿から学年とデフォルトの契約コースを取得する"""
     try:
