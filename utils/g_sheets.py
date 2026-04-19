@@ -1376,25 +1376,32 @@ def load_price_master():
         print(f"料金マスタ読み込みエラー: {e}")
         return pd.DataFrame()
 def get_student_master_data():
-    """生徒名簿から学年とデフォルトの契約コースを取得する"""
+    """設定_生徒情報から割引情報も含めて取得"""
     try:
+        import pandas as pd
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         worksheet = sh.worksheet("設定_生徒情報")
         df = pd.DataFrame(worksheet.get_all_records())
         
-        # 列名に揺れ（絵文字の有無など）があってもいいように探す
-        name_col = next((c for c in df.columns if "生徒名" in c), "生徒名")
-        grade_col = next((c for c in df.columns if "学年" in c), "学年")
-        course_col = next((c for c in df.columns if "契約コース" in c), "契約コース")
-        
         master_dict = {}
         for _, row in df.iterrows():
-            master_dict[row[name_col]] = {
-                "学年": row[grade_col],
-                "契約コース": row.get(course_col, "未設定")
+            master_dict[row["生徒名"]] = {
+                "学年": row["学年"],
+                "契約コース": row.get("契約コース", "未設定"),
+                "特別割引コマ": row.get("特別割引(コマ)", 0) # 🌟追加
             }
         return master_dict
-    except Exception as e:
-        print(f"生徒名簿取得エラー: {e}")
+    except:
         return {}
+
+def load_fixed_costs():
+    """固定費（家賃など）を読み込む"""
+    try:
+        import pandas as pd
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("固定費設定")
+        return pd.DataFrame(worksheet.get_all_records())
+    except:
+        return pd.DataFrame(columns=["項目", "金額"])
