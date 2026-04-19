@@ -78,11 +78,16 @@ def render_tuition_dashboard_page():
     table_data = []
     for student in student_names:
         actual_koma = actual_koma_dict.get(student, 0)
-        # 特別割引コマもマスターから取得（初期値は0）
+        
+        # マスターデータの取得
         m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定", "特別割引コマ": 0})
         grade = str(m_info["学年"]).strip()
         master_course = str(m_info["契約コース"]).strip()
-        discount_koma = int(m_info.get("特別割引コマ", 0)) 
+        
+        # 🌟 【修正箇所】空欄や「1コマ」などの文字にも対応する安全な変換処理
+        raw_discount = str(m_info.get("特別割引コマ", "0")).strip()
+        discount_nums = re.findall(r'\d+', raw_discount)
+        discount_koma = int(discount_nums[0]) if discount_nums else 0
         
         # 保存済みデータがある場合
         if not saved_billing_df.empty and student in saved_billing_df['👤 生徒名'].values:
@@ -90,7 +95,13 @@ def render_tuition_dashboard_page():
             course = next((row[c] for c in saved_billing_df.columns if "契約コース" in c), master_course)
             price = next((row[c] for c in saved_billing_df.columns if "請求額" in c), 0)
             extra_count = next((row[c] for c in saved_billing_df.columns if "追加コマ" in c), 0)
-            discount_koma = next((row[c] for c in saved_billing_df.columns if "割引コマ" in c), discount_koma)
+            
+            # 保存済みの割引コマも安全に取得
+            saved_discount = next((row[c] for c in saved_billing_df.columns if "割引コマ" in c), discount_koma)
+            try:
+                discount_koma = int(saved_discount)
+            except:
+                pass
         
         # 保存データがない（新規計算）の場合
         else:
@@ -127,7 +138,7 @@ def render_tuition_dashboard_page():
             "📚 契約コース": course,
             "📝 実際の受講数": actual_koma,
             "➕ 追加コマ": extra_count,
-            "🉐 割引コマ": discount_koma, # 🌟 割引コマも表示！
+            "🉐 割引コマ": discount_koma, 
             "💴 今月の請求額 (円)": int(price)
         })
     
@@ -138,7 +149,7 @@ def render_tuition_dashboard_page():
             display_df,
             hide_index=True,
             use_container_width=True,
-            disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数", "➕ 追加コマ", "🉐 割引コマ"] # 自動計算項目は編集不可に
+            disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数", "➕ 追加コマ", "🉐 割引コマ"] 
         )
         submitted = st.form_submit_button("💾 確定して保存", use_container_width=True)
                 
@@ -163,7 +174,6 @@ def render_tuition_dashboard_page():
     target_student = st.selectbox("請求書を発行する生徒を選択してください", student_names)
     
     if target_student:
-        # 選択された生徒のデータを辞書型で取り出す
         pdf_data = edited_df[edited_df["👤 生徒名"] == target_student].to_dict('records')[0]
         
         try:
