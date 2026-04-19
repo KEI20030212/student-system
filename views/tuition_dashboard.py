@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import re
+import unicodedata # 🌟全角半角の文字揺れを直すための標準機能
 from utils.g_sheets import (
     get_all_student_names, 
     load_all_data, 
@@ -23,6 +24,11 @@ def render_tuition_dashboard_page():
     if not student_names: 
         st.warning("生徒データが見つかりません。")
         return
+
+    # 🌟【重要】マスタデータの「ゆらぎ（全角半角、文字と数字の違い）」をここで強制的に統一！
+    if not price_master.empty:
+        price_master['学年'] = price_master['学年'].astype(str).apply(lambda x: unicodedata.normalize('NFKC', x).strip())
+        price_master['コマ数'] = pd.to_numeric(price_master['コマ数'], errors='coerce').fillna(0).astype(int)
 
     # プログレスバーで授業データを集計
     all_data_list = []
@@ -66,27 +72,32 @@ def render_tuition_dashboard_page():
     st.divider()
     st.subheader(f"👤 {selected_month} の請求設定")
 
+    # 🌟【新機能】マスタ変更時などに、強制的に最新のマスタ料金で計算し直すスイッチ
+    force_recalc = st.checkbox("🔄 過去の保存データを無視して、現在の料金マスタで強制的に再計算する")
+
     actual_koma_dict = {s: len(df_month[df_month['生徒名'] == s]) for s in student_names}
     saved_billing_df = load_billing_data(selected_month)
 
     table_data = []
+    missing_master_warnings = [] # マスタに見つからなかった生徒の警告用
+
     for student in student_names:
         actual_koma = actual_koma_dict.get(student, 0)
         
         m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定", "特別割引コマ": 0})
-        grade = str(m_info["学年"]).strip()
-        master_course = str(m_info["契約コース"]).strip()
+        # 検索キーも全角半角を統一する
+        grade = unicodedata.normalize('NFKC', str(m_info["学年"])).strip()
+        master_course = unicodedata.normalize('NFKC', str(m_info["契約コース"])).strip()
         
         raw_discount = str(m_info.get("特別割引コマ", "0")).strip()
         discount_nums = re.findall(r'\d+', raw_discount)
         discount_koma = int(discount_nums[0]) if discount_nums else 0
 
-        # --- 🌟ここから修正：必ず最新の追加コマを再計算するロジック ---
         course = master_course
         saved_price = None
         saved_extra_count = 0
         
-        # ① もし保存データがあれば、以前の金額や設定を一旦読み込む
+        # ① 保存データの読み込み
         if not saved_billing_df.empty and student in saved_billing_df['👤 生徒名'].values:
             row = saved_billing_df[saved_billing_df['👤 生徒名'] == student].iloc[0]
             course = next((row[c] for c in saved_billing_df.columns if "契約コース" in c), master_course)
@@ -102,7 +113,7 @@ def render_tuition_dashboard_page():
             except:
                 pass
 
-        # ② 最新の「実際の受講数」をもとに、ベースコマと追加コマを常に計算し直す
+        # ② 最新のベースコマと追加コマの計算
         try:
             koma_nums = re.findall(r'\d+', course)
             base_koma = int(koma_nums[0]) if koma_nums else 0
@@ -111,34 +122,45 @@ def render_tuition_dashboard_page():
             
         actual_extra_count = max(0, actual_koma - base_koma)
         
-        # ③ マスタから料金を取得し、最新の理論価格を計算する
+        # ③ マスタからの料金取得（型を完全に合わせて検索）
         match = price_master[(price_master['学年'] == grade) & (price_master['コマ数'] == base_koma)]
+        
         if not match.empty:
             base_price = int(match.iloc[0]['料金'])
             unit_extra_price = int(match.iloc[0]['追加単価'])
         else:
-            base_price = 15000 
-            unit_extra_price = 3000 
+            # 🌟 マスタに見つからない場合は警告リストに追加し、金額を0にする
+            missing_master_warnings.append(f"{student} さん (学年: {grade}, コマ数: {base_koma})")
+            base_price = 0 
+            unit_extra_price = 0 
             
         discount_amount = discount_koma * unit_extra_price
         calculated_price = max(0, base_price + (actual_extra_count * unit_extra_price) - discount_amount)
 
-        # ④ 最終金額の決定：もし保存時から追加コマ数に変動があれば最新の計算結果を強制適用！
-        if saved_price is not None and actual_extra_count == saved_extra_count:
-            price = saved_price # 変動がなければ、手入力修正されているかもしれない保存金額をキープ
+        # ④ 最終金額の決定（強制再計算のチェックが入っていれば、マスタ価格を最優先）
+        if force_recalc:
+            price = calculated_price
+        elif saved_price is not None and actual_extra_count == saved_extra_count:
+            price = saved_price
         else:
-            price = calculated_price # 追加コマ数が増えていたら再計算！
+            price = calculated_price 
 
         table_data.append({
             "👤 生徒名": student,
             "🎓 学年": grade,
             "📚 契約コース": course,
             "📝 実際の受講数": actual_koma,
-            "➕ 追加コマ": actual_extra_count, # 🌟常に最新！
+            "➕ 追加コマ": actual_extra_count,
             "🉐 割引コマ": discount_koma, 
             "💴 今月の請求額 (円)": int(price)
         })
     
+    # ⚠️ もし料金マスタに該当しないデータがあれば画面に警告を表示！
+    if missing_master_warnings:
+        st.error("以下の生徒の料金設定が「料金マスタ」に見つかりません。マスタの設定（学年・コマ数）を確認してください。")
+        for w in missing_master_warnings:
+            st.write(f"- {w}")
+
     display_df = pd.DataFrame(table_data)
 
     with st.form("billing_form"):
