@@ -376,12 +376,20 @@ def get_quiz_maker_sheets():
     for row in records:
         name = str(row.get('テスト名', ''))
         if name:
+            # 💡 空文字や文字列対策：確実に「数値」に変換する！
+            raw_marks = row.get('満点', 100)
+            try:
+                # 文字列の "20" などもここで数値(float)になる
+                full_marks = float(raw_marks)
+            except ValueError:
+                # 空文字 "" などで変換に失敗した場合は100点とする
+                full_marks = 100.0 
+                
             quiz_data[name] = {
                 "id": str(row.get('スプレッドシートID', '')),
-                "full_marks": row.get('満点', 100)  # もし空ならデフォルト100点とする
+                "full_marks": full_marks # 数値化したものをセット
             }
     return quiz_data
-
 def add_quiz_maker_sheet(test_name, sheet_id, full_marks): # 🌟 ここに full_marks を追加！
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
@@ -1288,3 +1296,55 @@ def get_quiz_master_dict():
     except Exception as e:
         print(f"小テスト設定の読み込みエラー: {e}")
         return {}
+
+def load_billing_data(year_month):
+    """指定した年月の請求データを取得する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("請求管理")
+        
+        records = worksheet.get_all_records()
+        df = pd.DataFrame(records)
+        
+        if not df.empty and '年月' in df.columns:
+            # 対象の月のデータだけを返す
+            return df[df['年月'] == year_month]
+        return pd.DataFrame()
+    except Exception as e:
+        # シートがない、または空の場合は空のDataFrameを返す
+        return pd.DataFrame()
+
+def save_billing_data(year_month, edited_df):
+    """請求データを保存（上書き）する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("請求管理")
+        
+        # 既存の全データを取得
+        all_data = worksheet.get_all_records()
+        df_all = pd.DataFrame(all_data)
+        
+        # 保存するデータに「年月」列を追加
+        edited_df = edited_df.copy()
+        edited_df.insert(0, '年月', year_month)
+        
+        if not df_all.empty and '年月' in df_all.columns:
+            # 今回保存する月「以外」のデータを残す（＝該当月は上書きするため消す）
+            df_keep = df_all[df_all['年月'] != year_month]
+            # 残した過去データと、今回の新しいデータを合体
+            df_final = pd.concat([df_keep, edited_df], ignore_index=True)
+        else:
+            # まだ何もデータがない場合はそのまま保存
+            df_final = edited_df
+            
+        # スプレッドシートを一旦クリアして、新しいデータを全件書き込み
+        worksheet.clear()
+        # カラム名（ヘッダー）とデータをリスト化して更新
+        worksheet.update([df_final.columns.values.tolist()] + df_final.values.tolist())
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"保存エラー: {e}")
+        return False
