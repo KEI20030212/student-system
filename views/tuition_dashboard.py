@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import time
+from fpdf import FPDF
+import io
 import re
 from utils.g_sheets import (
     get_all_student_names, 
@@ -11,7 +13,28 @@ from utils.g_sheets import (
     load_price_master
 )
 
-# (上略：import部分はそのまま)
+def generate_invoice_pdf(student_name, month, amount, course, extra, discount_koma):
+    """請求書PDFをバイナリで生成する"""
+    pdf = FPDF()
+    pdf.add_page()
+    # 日本語フォントの設定（環境に合わせてパスを指定してください）
+    # pdf.add_font("IPAexG", "", "font/ipaexg.ttf") 
+    # pdf.set_font("IPAexG", size=16)
+    
+    pdf.cell(200, 10, txt=f"{month}分 授業料請求書", ln=True, align='C')
+    pdf.set_font("Arial", size=12)
+    pdf.ln(10)
+    pdf.cell(200, 10, txt=f"Guest: {student_name} 様", ln=True)
+    pdf.cell(200, 10, txt=f"Total Amount: {amount:,} yen", ln=True)
+    pdf.ln(5)
+    pdf.cell(200, 10, txt=f"Details:", ln=True)
+    pdf.cell(200, 10, txt=f"- Course: {course}", ln=True)
+    if extra > 0:
+        pdf.cell(200, 10, txt=f"- Extra Lessons: {extra}", ln=True)
+    if discount_koma > 0:
+        pdf.cell(200, 10, txt=f"- Free Lessons: -{discount_koma}", ln=True)
+        
+    return pdf.output()
 
 def render_tuition_dashboard_page():
     st.header("💴 月謝（請求額）管理ダッシュボード")
@@ -114,9 +137,11 @@ def render_tuition_dashboard_page():
             # 3. 追加コマ数の計算 (実際の受講数 - 契約コマ数) ※マイナスにはしない
             extra_count = max(0, actual_koma - base_koma)
             
-            # 4. 合計額 = 基本料金 + (追加コマ × 追加単価)
-            price = base_price + (extra_count * unit_extra_price)
-
+            discount_koma = m_info.get("特別割引コマ", 0)
+            discount_amount = discount_koma * unit_extra_price
+            
+            # 合計額 = 基本料金 + (追加コマ × 追加単価) - (割引コマ × 追加単価)
+            price = max(0, base_price + (extra_count * unit_extra_price) - discount_amount)
         table_data.append({
             "👤 生徒名": student,
             "🎓 学年": grade,
