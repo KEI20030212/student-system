@@ -82,8 +82,8 @@ def render_tuition_dashboard_page():
         actual_koma = actual_koma_dict.get(student, 0)
         
         m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定"})
-        grade = m_info["学年"]
-        master_course = m_info["契約コース"]
+        grade = str(m_info["学年"]).strip()
+        master_course = str(m_info["契約コース"]).strip()
         
         if not saved_billing_df.empty and student in saved_billing_df['👤 生徒名'].values:
             row = saved_billing_df[saved_billing_df['👤 生徒名'] == student].iloc[0]
@@ -93,11 +93,15 @@ def render_tuition_dashboard_page():
             course = master_course
             try:
                 import re
-                koma_num = int(re.sub(r'\D', '', str(course)))
+                koma_nums = re.findall(r'\d+', course)
+                koma_num = int(koma_nums[0]) if koma_nums else actual_koma
             except:
                 koma_num = actual_koma
             
-            match = price_master[(price_master['学年'] == grade) & (price_master['コマ数'] == koma_num)]
+            match = price_master[
+                (price_master['学年'] == grade) & 
+                (price_master['コマ数'] == koma_num)
+            ]
             if not match.empty:
                 price = int(match.iloc[0]['料金'])
             else:
