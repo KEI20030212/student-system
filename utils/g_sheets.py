@@ -1367,7 +1367,7 @@ def get_student_master_data():
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
-        worksheet = sh.worksheet("生徒名簿")
+        worksheet = sh.worksheet("設定_生徒情報")
         df = pd.DataFrame(worksheet.get_all_records())
         
         # 列名に揺れ（絵文字の有無など）があってもいいように探す
