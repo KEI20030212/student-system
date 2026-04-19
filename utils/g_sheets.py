@@ -1367,7 +1367,7 @@ def get_student_grades():
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
-        worksheet = sh.worksheet("生徒名簿") # シート名は適宜合わせてください
+        worksheet = sh.worksheet("設定_生徒情報") # シート名は適宜合わせてください
         df = pd.DataFrame(worksheet.get_all_records())
         # {生徒名: 学年} の辞書を作る
         return dict(zip(df['生徒名'], df['学年']))
