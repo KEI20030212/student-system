@@ -1,40 +1,17 @@
 import streamlit as st
 import pandas as pd
 import time
-from fpdf import FPDF
-import io
 import re
 from utils.g_sheets import (
     get_all_student_names, 
     load_all_data, 
     load_billing_data, 
     save_billing_data,
-    get_student_master_data, # 名前を変更
+    get_student_master_data,
     load_price_master
 )
-
-def generate_invoice_pdf(student_name, month, amount, course, extra, discount_koma):
-    """請求書PDFをバイナリで生成する"""
-    pdf = FPDF()
-    pdf.add_page()
-    # 日本語フォントの設定（環境に合わせてパスを指定してください）
-    # pdf.add_font("IPAexG", "", "font/ipaexg.ttf") 
-    # pdf.set_font("IPAexG", size=16)
-    
-    pdf.cell(200, 10, txt=f"{month}分 授業料請求書", ln=True, align='C')
-    pdf.set_font("Arial", size=12)
-    pdf.ln(10)
-    pdf.cell(200, 10, txt=f"Guest: {student_name} 様", ln=True)
-    pdf.cell(200, 10, txt=f"Total Amount: {amount:,} yen", ln=True)
-    pdf.ln(5)
-    pdf.cell(200, 10, txt=f"Details:", ln=True)
-    pdf.cell(200, 10, txt=f"- Course: {course}", ln=True)
-    if extra > 0:
-        pdf.cell(200, 10, txt=f"- Extra Lessons: {extra}", ln=True)
-    if discount_koma > 0:
-        pdf.cell(200, 10, txt=f"- Free Lessons: -{discount_koma}", ln=True)
-        
-    return pdf.output()
+# PDF生成ツールをインポート
+from utils.pdf_generator import generate_invoice_pdf
 
 def render_tuition_dashboard_page():
     st.header("💴 月謝（請求額）管理ダッシュボード")
@@ -78,7 +55,6 @@ def render_tuition_dashboard_page():
         df_all['年月'] = df_all['日時'].dt.strftime("%Y年%m月")
         month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
     else:
-        # 授業データが1件もない場合の予備
         from datetime import datetime
         month_options = [datetime.now().strftime("%Y年%m月")]
 
@@ -102,9 +78,11 @@ def render_tuition_dashboard_page():
     table_data = []
     for student in student_names:
         actual_koma = actual_koma_dict.get(student, 0)
-        m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定"})
+        # 特別割引コマもマスターから取得（初期値は0）
+        m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定", "特別割引コマ": 0})
         grade = str(m_info["学年"]).strip()
         master_course = str(m_info["契約コース"]).strip()
+        discount_koma = int(m_info.get("特別割引コマ", 0)) 
         
         # 保存済みデータがある場合
         if not saved_billing_df.empty and student in saved_billing_df['👤 生徒名'].values:
@@ -112,13 +90,13 @@ def render_tuition_dashboard_page():
             course = next((row[c] for c in saved_billing_df.columns if "契約コース" in c), master_course)
             price = next((row[c] for c in saved_billing_df.columns if "請求額" in c), 0)
             extra_count = next((row[c] for c in saved_billing_df.columns if "追加コマ" in c), 0)
+            discount_koma = next((row[c] for c in saved_billing_df.columns if "割引コマ" in c), discount_koma)
         
         # 保存データがない（新規計算）の場合
         else:
             course = master_course
             # 1. 契約コマ数を取得 (例: "月8回" -> 8)
             try:
-                import re
                 koma_nums = re.findall(r'\d+', course)
                 base_koma = int(koma_nums[0]) if koma_nums else 0
             except:
@@ -134,20 +112,22 @@ def render_tuition_dashboard_page():
                 base_price = 15000 # マスタにない場合のデフォルト
                 unit_extra_price = 3000 # 追加単価のデフォルト
             
-            # 3. 追加コマ数の計算 (実際の受講数 - 契約コマ数) ※マイナスにはしない
+            # 3. 追加コマ数の計算 (実際の受講数 - 契約コマ数)
             extra_count = max(0, actual_koma - base_koma)
             
-            discount_koma = m_info.get("特別割引コマ", 0)
+            # 4. 特別割引の金額を計算
             discount_amount = discount_koma * unit_extra_price
             
-            # 合計額 = 基本料金 + (追加コマ × 追加単価) - (割引コマ × 追加単価)
+            # 5. 合計額 = 基本料金 + (追加コマ × 追加単価) - (割引コマ × 追加単価)
             price = max(0, base_price + (extra_count * unit_extra_price) - discount_amount)
+
         table_data.append({
             "👤 生徒名": student,
             "🎓 学年": grade,
             "📚 契約コース": course,
             "📝 実際の受講数": actual_koma,
-            "➕ 追加コマ": extra_count, # 🌟 これを表示に追加！
+            "➕ 追加コマ": extra_count,
+            "🉐 割引コマ": discount_koma, # 🌟 割引コマも表示！
             "💴 今月の請求額 (円)": int(price)
         })
     
@@ -158,13 +138,13 @@ def render_tuition_dashboard_page():
             display_df,
             hide_index=True,
             use_container_width=True,
-            disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数", "➕ 追加コマ"] # 追加コマも自動計算なので固定
+            disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数", "➕ 追加コマ", "🉐 割引コマ"] # 自動計算項目は編集不可に
         )
         submitted = st.form_submit_button("💾 確定して保存", use_container_width=True)
                 
         if submitted:
             with st.spinner("保存中..."):
-                # 📝 「実際の受講数」は保存しない（計算用なので）
+                # 実際の受講数は計算用なので保存から外す
                 save_df = edited_df.drop(columns=["📝 実際の受講数"])
                 if save_billing_data(selected_month, save_df):
                     st.success("✅ 保存しました！")
@@ -176,3 +156,23 @@ def render_tuition_dashboard_page():
     st.divider()
     total = edited_df["💴 今月の請求額 (円)"].sum()
     st.metric(label=f"🌟 {selected_month} の合計請求額", value=f"{total:,} 円")
+
+    # --- 📄 PDF発行セクション ---
+    st.divider()
+    st.subheader("📄 請求書PDFの発行")
+    target_student = st.selectbox("請求書を発行する生徒を選択してください", student_names)
+    
+    if target_student:
+        # 選択された生徒のデータを辞書型で取り出す
+        pdf_data = edited_df[edited_df["👤 生徒名"] == target_student].to_dict('records')[0]
+        
+        try:
+            pdf_file = generate_invoice_pdf(pdf_data, selected_month)
+            st.download_button(
+                label=f"📥 {target_student} 様の請求書をダウンロード",
+                data=pdf_file,
+                file_name=f"請求書_{selected_month}_{target_student}.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"PDF生成エラー: {e}")
