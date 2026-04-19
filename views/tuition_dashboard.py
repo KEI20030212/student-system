@@ -77,42 +77,53 @@ def render_tuition_dashboard_page():
     saved_billing_df = load_billing_data(selected_month)
 
     table_data = []
-    # 🌟 授業の有無に関わらず「名簿にいる全員(student_names)」を表示！
     for student in student_names:
         actual_koma = actual_koma_dict.get(student, 0)
-        
         m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定"})
         grade = str(m_info["学年"]).strip()
         master_course = str(m_info["契約コース"]).strip()
         
+        # 保存済みデータがある場合
         if not saved_billing_df.empty and student in saved_billing_df['👤 生徒名'].values:
             row = saved_billing_df[saved_billing_df['👤 生徒名'] == student].iloc[0]
             course = next((row[c] for c in saved_billing_df.columns if "契約コース" in c), master_course)
             price = next((row[c] for c in saved_billing_df.columns if "請求額" in c), 0)
+            extra_count = next((row[c] for c in saved_billing_df.columns if "追加コマ" in c), 0)
+        
+        # 保存データがない（新規計算）の場合
         else:
             course = master_course
+            # 1. 契約コマ数を取得 (例: "月8回" -> 8)
             try:
                 import re
                 koma_nums = re.findall(r'\d+', course)
-                koma_num = int(koma_nums[0]) if koma_nums else actual_koma
+                base_koma = int(koma_nums[0]) if koma_nums else 0
             except:
-                koma_num = actual_koma
+                base_koma = 0
             
-            match = price_master[
-                (price_master['学年'] == grade) & 
-                (price_master['コマ数'] == koma_num)
-            ]
+            # 2. 基本料金と追加単価をマスタから取得
+            match = price_master[(price_master['学年'] == grade) & (price_master['コマ数'] == base_koma)]
+            
             if not match.empty:
-                price = int(match.iloc[0]['料金'])
+                base_price = int(match.iloc[0]['料金'])
+                unit_extra_price = int(match.iloc[0]['追加単価'])
             else:
-                price = 15000
-        
+                base_price = 15000 # マスタにない場合のデフォルト
+                unit_extra_price = 3000 # 追加単価のデフォルト
+            
+            # 3. 追加コマ数の計算 (実際の受講数 - 契約コマ数) ※マイナスにはしない
+            extra_count = max(0, actual_koma - base_koma)
+            
+            # 4. 合計額 = 基本料金 + (追加コマ × 追加単価)
+            price = base_price + (extra_count * unit_extra_price)
+
         table_data.append({
             "👤 生徒名": student,
             "🎓 学年": grade,
             "📚 契約コース": course,
-            "💴 今月の請求額 (円)": int(price),
-            "📝 実際の受講数": actual_koma
+            "📝 実際の受講数": actual_koma,
+            "➕ 追加コマ": extra_count, # 🌟 これを表示に追加！
+            "💴 今月の請求額 (円)": int(price)
         })
     
     display_df = pd.DataFrame(table_data)
@@ -122,15 +133,16 @@ def render_tuition_dashboard_page():
             display_df,
             hide_index=True,
             use_container_width=True,
-            disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数"]
+            disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数", "➕ 追加コマ"] # 追加コマも自動計算なので固定
         )
         submitted = st.form_submit_button("💾 確定して保存", use_container_width=True)
                 
         if submitted:
-            with st.spinner("スプレッドシートに保存中..."):
+            with st.spinner("保存中..."):
+                # 📝 「実際の受講数」は保存しない（計算用なので）
                 save_df = edited_df.drop(columns=["📝 実際の受講数"])
                 if save_billing_data(selected_month, save_df):
-                    st.success(f"✅ {selected_month} のデータを保存しました！")
+                    st.success("✅ 保存しました！")
                     time.sleep(1)
                     st.rerun()
                 else:
