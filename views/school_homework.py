@@ -17,11 +17,11 @@ def render_school_homework_page():
         if st.button("🔄 情報を更新"):
             load_school_homework_data.clear()
             st.rerun()
-    # 🌟 タブを3つに増やしました！
+            
     tab1, tab2, tab3 = st.tabs(["📋 提出アラート・進捗更新", "➕ 課題の一括登録", "📊 進捗ダッシュボード"])
 
     # ==========================================
-    # タブ1：アラート・進捗更新（🔥ヤバさ優先ソート版）
+    # タブ1：アラート・進捗更新（🔥生徒ごとにまとめる版）
     # ==========================================
     with tab1:
         st.write("「完了（終わった）」と「提出済（学校に出した）」を分けて管理します。")
@@ -36,7 +36,7 @@ def render_school_homework_page():
 
             today = date.today()
 
-            # 🌟 新機能：優先度（ヤバさ）を計算するロジック
+            # 優先度（ヤバさ）を計算するロジック
             def get_priority(row):
                 if row["ステータス"] == "完了":
                     return 4  # すでに終わっているものは一番下（あとは出すだけ）
@@ -49,47 +49,70 @@ def render_school_homework_page():
                 else:
                     return 3  # 🟢 まだ余裕あり
 
-            # 優先度列を追加して、優先度 ＞ 提出期限 の順番で並び替え！
             df_active["優先度"] = df_active.apply(get_priority, axis=1)
+            # まず全課題をヤバい順に並び替え
             df_active = df_active.sort_values(["優先度", "提出期限"])
 
-            # 画面への表示
-            for idx, row in df_active.iterrows():
-                days_left = (row["提出期限"] - today).days
-                
-                if row["ステータス"] == "完了":
-                    label, icon = "【提出確認】学校に出しましたか？", "🟦"
-                elif days_left < 0:
-                    label, icon = f"【期限超過！】 {abs(days_left)}日経過", "🔴"
-                elif days_left <= 2:
-                    label, icon = f"【期限直前】 あと{days_left}日", "🟡"
-                else:
-                    label, icon = f"あと{days_left}日", "🟢"
+            # 🌟 新機能：生徒ごとにグループ化するためのリストを作成
+            # （すでにヤバい順に並んでいるので、ここで上から順に生徒名を拾えば「一番ヤバい課題を抱えている生徒」が上に来ます）
+            students_ordered = df_active["生徒名"].drop_duplicates().tolist()
 
-                with st.expander(f"{icon} {row['生徒名']} : {row['教科']} ({label})"):
-                    st.write(f"**課題内容:** {row['課題内容']}")
-                    st.write(f"**提出期限:** {row['提出期限']}")
-                    st.write(f"**メモ:** {row['メモ']}")
-                    
-                    new_status = st.selectbox(
-                        "ステータスを更新", 
-                        ["未着手", "進行中", "完了", "提出済"],
-                        index=["未着手", "進行中", "完了", "提出済"].index(row["ステータス"]),
-                        key=f"status_{idx}"
-                    )
-                    
-                    if st.button("更新を保存", key=f"btn_{idx}"):
-                        with st.spinner("スプレッドシートに反映中..."):
-                            if update_homework_status(row.name + 2, new_status):
-                                # 🌟 1. まずキャッシュを明示的にクリア
-                                load_school_homework_data.clear()
-                                
-                                # 🌟 2. Google側の反映を待つ（0.5秒だと短い場合があるので1.5秒に）
-                                time.sleep(1.5)
-                                
-                                # 🌟 3. 再読み込みして最新データを強制取得
-                                st.success(f"{row['生徒名']}さんの状況を更新しました！")
-                                st.rerun()
+            # 生徒ごとに折りたたみ（Expander）を作成
+            for student in students_ordered:
+                # その生徒の課題だけを抽出
+                student_tasks = df_active[df_active["生徒名"] == student]
+                
+                # その生徒が抱えている一番ヤバい優先度を取得して、タイトルのアイコンを決定
+                worst_priority = student_tasks["優先度"].min()
+                if worst_priority == 1:
+                    header_icon = "🔴 期限超過あり！"
+                elif worst_priority == 2:
+                    header_icon = "🟡 期限直前あり"
+                elif worst_priority == 4:
+                    header_icon = "🟦 提出待ち(すべて完了)"
+                else:
+                    header_icon = "🟢 進行中"
+
+                with st.expander(f"👤 {student} （未提出: {len(student_tasks)}件） - {header_icon}"):
+                    # その生徒の各課題を表示
+                    for idx, row in student_tasks.iterrows():
+                        days_left = (row["提出期限"] - today).days
+                        
+                        # 個別課題のラベル設定
+                        if row["ステータス"] == "完了":
+                            status_label = "🟦 【提出確認】学校に出しましたか？"
+                        elif days_left < 0:
+                            status_label = f"🔴 【期限超過！】 {abs(days_left)}日経過"
+                        elif days_left <= 2:
+                            status_label = f"🟡 【期限直前】 あと{days_left}日"
+                        else:
+                            status_label = f"🟢 あと{days_left}日"
+
+                        # 見た目をスッキリさせるためのレイアウト
+                        st.markdown(f"**【{row['教科']}】 {row['課題内容']}**")
+                        st.caption(f"📅 期限: {row['提出期限']} | 📝 メモ: {row['メモ']} | {status_label}")
+                        
+                        col_s, col_b = st.columns([0.7, 0.3])
+                        with col_s:
+                            new_status = st.selectbox(
+                                "ステータス", 
+                                ["未着手", "進行中", "完了", "提出済"],
+                                index=["未着手", "進行中", "完了", "提出済"].index(row["ステータス"]),
+                                key=f"status_{idx}",
+                                label_visibility="collapsed" # ラベルを隠してスッキリ見せる
+                            )
+                        with col_b:
+                            if st.button("💾 更新", key=f"btn_{idx}", use_container_width=True):
+                                with st.spinner("反映中..."):
+                                    if update_homework_status(row.name + 2, new_status):
+                                        load_school_homework_data.clear()
+                                        time.sleep(1.5)
+                                        st.success(f"{row['教科']}の状況を更新しました！")
+                                        st.rerun()
+                        
+                        # 最後の課題以外は区切り線を引く
+                        if row.name != student_tasks.index[-1]:
+                            st.divider()
 
     # ==========================================
     # タブ2：学校 × 学年 での一括登録
@@ -161,48 +184,40 @@ def render_school_homework_page():
                                 st.error(f"登録失敗: {error_msg}")
 
     # ==========================================
-    # タブ3：📊 進捗ダッシュボード（New!）
+    # タブ3：📊 進捗ダッシュボード
     # ==========================================
     with tab3:
         st.subheader("📊 生徒別の課題進捗状況")
         st.write("各生徒の課題消化率を棒グラフで確認できます。")
         
-        # ※データ読み込みはタブ1で読んだdfがあればそれを使うこともできますが、念のため再取得
         df_dash = load_school_homework_data()
         
         if df_dash.empty:
             st.info("現在、登録されている課題はありません。")
         else:
-            # 課題が登録されている生徒の一覧を取得
             students_with_hw = sorted(df_dash['生徒名'].unique())
             
             for student in students_with_hw:
                 student_hw = df_dash[df_dash['生徒名'] == student]
                 
-                # 全課題数と、各ステータスの数をカウント
                 total_hw = len(student_hw)
                 completed_hw = len(student_hw[student_hw['ステータス'] == '完了'])
                 submitted_hw = len(student_hw[student_hw['ステータス'] == '提出済'])
                 
-                # 「完了」または「提出済」を達成としてカウント
                 done_hw = completed_hw + submitted_hw
                 
-                # 進捗率（0.0 〜 1.0）
                 progress_rate = done_hw / total_hw if total_hw > 0 else 0
                 progress_percent = int(progress_rate * 100)
                 
-                # 表示の工夫：100%なら星マークをつけて褒める
                 star = "✨ 完璧！" if progress_percent == 100 else ""
                 
                 st.write(f"#### 👤 {student} （{done_hw} / {total_hw} 完了） **{progress_percent}%** {star}")
-                st.progress(progress_rate) # これがプログレスバー（棒グラフ）！
+                st.progress(progress_rate)
                 
-                # まだ終わっていない課題があれば、折りたたみで表示
                 unfinished_hw = student_hw[~student_hw['ステータス'].isin(['完了', '提出済'])]
                 if not unfinished_hw.empty:
                     with st.expander("📝 残りの課題を見る"):
                         for _, row in unfinished_hw.iterrows():
-                            # 期限までの日数を計算
                             try:
                                 dl_date = pd.to_datetime(row["提出期限"]).date()
                                 days_left = (dl_date - date.today()).days
