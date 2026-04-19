@@ -1348,3 +1348,24 @@ def save_billing_data(year_month, edited_df):
         import streamlit as st
         st.error(f"保存エラー: {e}")
         return False
+    def load_price_master():
+    """料金マスタ（学年・コマ数ごとの料金）を読み込む"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("料金マスタ")
+        return pd.DataFrame(worksheet.get_all_records())
+    except:
+        return pd.DataFrame()
+
+def get_student_grades():
+    """生徒名と学年の対応表を取得する（生徒名簿シートがある想定）"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("生徒名簿") # シート名は適宜合わせてください
+        df = pd.DataFrame(worksheet.get_all_records())
+        # {生徒名: 学年} の辞書を作る
+        return dict(zip(df['生徒名'], df['学年']))
+    except:
+        return {}
