@@ -1362,14 +1362,26 @@ def load_price_master():
     except:
         return pd.DataFrame()
 
-def get_student_grades():
-    """生徒名と学年の対応表を取得する（生徒名簿シートがある想定）"""
+def get_student_master_data():
+    """生徒名簿から学年とデフォルトの契約コースを取得する"""
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
-        worksheet = sh.worksheet("設定_生徒情報") # シート名は適宜合わせてください
+        worksheet = sh.worksheet("生徒名簿")
         df = pd.DataFrame(worksheet.get_all_records())
-        # {生徒名: 学年} の辞書を作る
-        return dict(zip(df['生徒名'], df['学年']))
-    except:
+        
+        # 列名に揺れ（絵文字の有無など）があってもいいように探す
+        name_col = next((c for c in df.columns if "生徒名" in c), "生徒名")
+        grade_col = next((c for c in df.columns if "学年" in c), "学年")
+        course_col = next((c for c in df.columns if "契約コース" in c), "契約コース")
+        
+        master_dict = {}
+        for _, row in df.iterrows():
+            master_dict[row[name_col]] = {
+                "学年": row[grade_col],
+                "契約コース": row.get(course_col, "未設定")
+            }
+        return master_dict
+    except Exception as e:
+        print(f"生徒名簿取得エラー: {e}")
         return {}
