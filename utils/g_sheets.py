@@ -38,7 +38,7 @@ def get_all_student_names():
     try:
         sh = gc.open_by_key(SPREADSHEET_ID)
         ensure_global_sheets(sh)
-        exclude = ["自習記録", "テキスト情報一覧", "設定_掲示板", "成績_定期テスト", "設定_小テスト一覧", "設定_生徒情報", "設定_座席表", "講師マスタ", "設定_アカウント", "給与公開用データ", "連絡_メッセージ", "小テスト記録"]
+        exclude = ["自習記録", "テキスト情報一覧", "設定_掲示板", "成績_定期テスト", "設定_小テスト一覧", "設定_生徒情報", "設定_座席表", "講師マスタ", "設定_アカウント", "給与公開用データ", "連絡_メッセージ", "小テスト記録", "学校課題管理", "請求管理", "料金マスタ"]
         return [ws.title for ws in sh.worksheets() if ws.title not in exclude]
     except:
         return []
