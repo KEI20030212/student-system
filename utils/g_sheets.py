@@ -56,8 +56,8 @@ def get_student_info(name):
 def load_seating_data():
     """スプレッドシートから最新の座席情報を取得する"""
     gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID)
     try:
+        sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("設定_座席表")
     except:
         ws = sh.add_worksheet(title="設定_座席表", rows="20", cols="5")
