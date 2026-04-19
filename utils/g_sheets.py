@@ -1348,7 +1348,7 @@ def save_billing_data(year_month, edited_df):
         import streamlit as st
         st.error(f"保存エラー: {e}")
         return False
-    def load_price_master():
+def load_price_master():
     """料金マスタ（学年・コマ数ごとの料金）を読み込む"""
     try:
         gc = get_gc_client()
