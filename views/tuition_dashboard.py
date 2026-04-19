@@ -17,17 +17,41 @@ def render_tuition_dashboard_page():
     student_names = get_all_student_names()
     student_grades = get_student_grades() # 学年データを取得
     price_master = load_price_master()
+    
     if not student_names: 
         st.warning("生徒データが見つかりません。")
         return
 
+    # 🌟 プログレスバーとAPIエラー対策の実装 🌟
     all_data_list = []
-    with st.spinner('授業データを集計中...'):
-        for s_name in student_names:
+    total_students = len(student_names)
+    
+    st.caption("🔄 最新の授業データをスプレッドシートから取得しています...")
+    # プログレスバーとテキスト表示用の空枠を作る
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    for i, s_name in enumerate(student_names):
+        # 現在誰のデータを取っているか表示
+        status_text.text(f"集計中 ({i+1}/{total_students}) : {s_name}")
+        
+        try:
             df = load_all_data(s_name)
             if not df.empty:
                 df['生徒名'] = s_name
                 all_data_list.append(df)
+        except Exception as e:
+            st.warning(f"⚠️ {s_name} のデータ取得中にエラーが発生しました。")
+        
+        # プログレスバーを少しずつ進める
+        progress_bar.progress((i + 1) / total_students)
+        
+        # 🛡️【超重要】API制限（429エラー）を回避するため、0.5秒お休みする
+        time.sleep(0.5) 
+
+    # 読み込みが終わったらプログレスバーとテキストを消す
+    progress_bar.empty()
+    status_text.empty()
     
     if not all_data_list: 
         st.info("集計できる授業記録がありません。")
@@ -91,8 +115,8 @@ def render_tuition_dashboard_page():
                 
         if submitted:
             with st.spinner("スプレッドシートに保存中..."):
-                # 不要な（参考）列を除いて保存
-                save_df = edited_df.drop(columns=["📝 (参考) 実際の受講数"])
+                # 🐛 修正箇所：「📝 実際の受講数」の列名指定を直しました
+                save_df = edited_df.drop(columns=["📝 実際の受講数"])
                 if save_billing_data(selected_month, save_df):
                     st.success(f"✅ {selected_month} のデータを保存しました！")
                     time.sleep(1)
