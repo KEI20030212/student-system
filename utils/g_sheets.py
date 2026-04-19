@@ -857,8 +857,11 @@ def load_published_salary():
         return pd.DataFrame(ws.get_all_records())
     except:
         return pd.DataFrame() # まだ公開データがない場合        
-
-        # utils/g_sheets.py の下の方に追加
+    
+    except Exception as e:
+        # 🌟 もしAPIエラーなどが起きても、アプリを落とさずに警告だけ出して空のデータを返す！
+        st.error("⚠️ 給与データの読み込みに失敗しました。スプレッドシートのIDや共有設定を確認してください。")
+        return pd.DataFrame()
 
 def add_new_account(user_id, password, teacher_name, role):
     """新しいアカウントをスプレッドシートに追加する"""
