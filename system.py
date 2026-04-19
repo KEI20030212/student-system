@@ -17,7 +17,7 @@ from views.analysis import render_analysis_page
 from views.search_page import render_search_page
 #from views.salary_dashboard import render_salary_dashboard_page
 from views.analytics_dashboard import render_analytics_dashboard_page
-from views.tuition import render_tuition_dashboard_page
+from views.tuition_dashboard import render_tuition_dashboard_page
 #from views.my_salary import render_my_salary_page
 from views.account_manager import render_account_manager_page
 from views.message_sender import render_message_sender_page
