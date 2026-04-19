@@ -850,18 +850,17 @@ def publish_salary_data(month_str, df_summary):
 @st.cache_data(ttl=600)
 def load_published_salary():
     """先生用のページで公開済みの給与データを読み込む"""
-    gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID) # 👈 ご自身の環境のsheet_idに合わせてください
     try:
+        gc = get_gc_client()
+        # 👇 読み込み処理をすべて try の中に入れるのが最大のポイント！
+        sh = gc.open_by_key(SPREADSHEET_ID) 
         ws = sh.worksheet("給与公開用データ")
         return pd.DataFrame(ws.get_all_records())
-    except:
-        return pd.DataFrame() # まだ公開データがない場合        
-    
+        
     except Exception as e:
-        # 🌟 もしAPIエラーなどが起きても、アプリを落とさずに警告だけ出して空のデータを返す！
+        # 🌟 もしシートが無い、APIエラーが起きたなどの場合はすべてここで受け止める
         st.error("⚠️ 給与データの読み込みに失敗しました。スプレッドシートのIDや共有設定を確認してください。")
-        return pd.DataFrame()
+        return pd.DataFrame() # 空のデータを返して連鎖エラーを防ぐ
 
 def add_new_account(user_id, password, teacher_name, role):
     """新しいアカウントをスプレッドシートに追加する"""
