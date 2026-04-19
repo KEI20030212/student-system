@@ -11,19 +11,21 @@ from utils.g_sheets import (
     load_price_master
 )
 
+# (上略：import部分はそのまま)
+
 def render_tuition_dashboard_page():
     st.header("💴 月謝（請求額）管理ダッシュボード")
     
     # --- データ準備 ---
     student_names = get_all_student_names()
-    student_master = get_student_master_data() # 名簿マスター（学年・コース）を取得
+    student_master = get_student_master_data()
     price_master = load_price_master()
     
     if not student_names: 
         st.warning("生徒データが見つかりません。")
         return
 
-    # プログレスバー
+    # プログレスバーで授業データを集計
     all_data_list = []
     total_students = len(student_names)
     st.caption("🔄 最新の授業データを取得中...")
@@ -40,67 +42,66 @@ def render_tuition_dashboard_page():
         except:
             pass
         progress_bar.progress((i + 1) / total_students)
-        time.sleep(0.3) # API負荷軽減
+        time.sleep(0.3)
 
     progress_bar.empty()
     status_text.empty()
     
-    if not all_data_list: 
-        st.info("集計できる授業記録がありません。")
-        return
-        
-    df_all = pd.concat(all_data_list, ignore_index=True)
-    df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
-    df_all = df_all.dropna(subset=['日時'])
-    df_all['年月'] = df_all['日時'].dt.strftime("%Y年%m月")
+    # 授業データが全くない場合でも、空のDFを作って進めるように修正
+    if all_data_list:
+        df_all = pd.concat(all_data_list, ignore_index=True)
+        df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
+        df_all = df_all.dropna(subset=['日時'])
+        df_all['年月'] = df_all['日時'].dt.strftime("%Y年%m月")
+        month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
+    else:
+        # 授業データが1件もない場合の予備
+        from datetime import datetime
+        month_options = [datetime.now().strftime("%Y年%m月")]
 
-    month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
     selected_month = st.selectbox("📅 請求月を選択", month_options)
-    df_month = df_all[df_all['年月'] == selected_month]
+    
+    # 選択された月の授業データだけに絞り込む
+    if all_data_list:
+        df_month = df_all[df_all['年月'] == selected_month]
+    else:
+        df_month = pd.DataFrame(columns=['生徒名'])
 
     st.divider()
     st.subheader(f"👤 {selected_month} の請求設定")
 
     # 実受講数のカウント
-    active_students = df_month['生徒名'].dropna().unique()
-    actual_koma_dict = {s: len(df_month[df_month['生徒名'] == s]) for s in active_students}
+    actual_koma_dict = {s: len(df_month[df_month['生徒名'] == s]) for s in student_names}
     
     # 既存の保存済みデータ
     saved_billing_df = load_billing_data(selected_month)
 
     table_data = []
-    for student in active_students:
-        actual_koma = actual_koma_dict[student]
+    # 🌟 授業の有無に関わらず「名簿にいる全員(student_names)」を表示！
+    for student in student_names:
+        actual_koma = actual_koma_dict.get(student, 0)
         
-        # 名簿（マスター）から情報を取得
         m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定"})
         grade = m_info["学年"]
         master_course = m_info["契約コース"]
         
-        # --- 表示データの決定 ---
-        # 1. 保存済みデータがある場合（編集・確定済み）はそれを優先
         if not saved_billing_df.empty and student in saved_billing_df['👤 生徒名'].values:
             row = saved_billing_df[saved_billing_df['👤 生徒名'] == student].iloc[0]
-            # コース列を探す
             course = next((row[c] for c in saved_billing_df.columns if "契約コース" in c), master_course)
-            # 金額列を探す
             price = next((row[c] for c in saved_billing_df.columns if "請求額" in c), 0)
-        
-        # 2. 保存データがない場合は名簿からデフォルト作成
         else:
             course = master_course
-            # 「月8回」などの文字列から数字の「8」を取り出す
             try:
+                import re
                 koma_num = int(re.sub(r'\D', '', str(course)))
             except:
-                koma_num = actual_koma # 数字が取れなければ実受講数
+                koma_num = actual_koma
             
-            # 料金マスタから検索
             match = price_master[(price_master['学年'] == grade) & (price_master['コマ数'] == koma_num)]
             if not match.empty:
                 price = int(match.iloc[0]['料金'])
             else:
-                price = 15000 # デフォルト
+                price = 15000
         
         table_data.append({
             "👤 生徒名": student,
