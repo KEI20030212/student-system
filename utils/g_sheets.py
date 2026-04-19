@@ -1318,6 +1318,7 @@ def load_billing_data(year_month):
 def save_billing_data(year_month, edited_df):
     """請求データを保存（上書き）する"""
     try:
+        import pandas as pd
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         worksheet = sh.worksheet("請求管理")
@@ -1338,6 +1339,9 @@ def save_billing_data(year_month, edited_df):
         else:
             # まだ何もデータがない場合はそのまま保存
             df_final = edited_df
+            
+        # 🌟 【ここを追加！】 nan（欠損値）をスプレッドシートが読めるように空文字("")に変換 🌟
+        df_final = df_final.fillna("")
             
         # スプレッドシートを一旦クリアして、新しいデータを全件書き込み
         worksheet.clear()
