@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from utils.g_sheets import load_billing_data, load_fixed_costs
 
-def render_profit_loss_dashboard():
+def render_profit_loss_dashboard_page():
     st.header("📈 経営ダッシュボード (純利益管理)")
     
     # 月の選択（とりあえず最新月）
