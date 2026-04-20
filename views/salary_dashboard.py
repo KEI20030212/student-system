@@ -4,6 +4,7 @@ import math
 import time
 import zipfile
 import io
+import unicodedata # 🌟 必須！全角半角の表記ゆれを矯正する魔法
 
 from utils.g_sheets import get_all_student_names, load_all_data, load_instructor_master, update_instructor_master
 from utils.pdf_generator import generate_payslip_pdf
@@ -12,14 +13,12 @@ from utils.g_sheets import publish_salary_data
 def render_salary_dashboard_page():
     st.header("💰 給与・交通費ダッシュボード")
     
-    # 🔄 最新データ再読み込みボタン
     if st.button("🔄 最新の授業データを読み込み直す"):
         if 'salary_df_all' in st.session_state:
             del st.session_state['salary_df_all']
-        st.cache_data.clear() # マスタの記憶もリセット
+        st.cache_data.clear() 
         st.rerun()
         
-    # 1. データのロード（マスタ読み込みも防御）
     try:
         student_names = get_all_student_names()
     except Exception as e:
@@ -29,7 +28,6 @@ def render_salary_dashboard_page():
     if not student_names: return
 
     try:
-        # 🌟 マスタデータを取得
         df_instructors = load_instructor_master()
     except Exception as e:
         st.warning(f"⚠️ 講師マスタが読み込めませんでした。空の状態で開始します。: {e}")
@@ -41,18 +39,16 @@ def render_salary_dashboard_page():
         base_price_1on2 = c2.number_input("1:2 基本単価 (円)", value=1800, step=100)
         base_price_1on3 = c3.number_input("1:3 基本単価 (円)", value=2000, step=100)
 
-    # --- 📊 授業データの集計（プログレスバー＋APIエラー防御版） ---
+    # --- 📊 授業データの集計 ---
     if 'salary_df_all' not in st.session_state:
         all_data_list = []
         st.subheader("☁️ データ集計状況")
         progress_text = st.empty()
         progress_bar = st.progress(0)
-        
         total_students = len(student_names)
         
         for i, s_name in enumerate(student_names):
             progress_text.text(f"📥 {s_name} さんのデータを読み込み中... ({i+1}/{total_students})")
-            
             success = False
             for retry in range(3):
                 try:
@@ -65,10 +61,8 @@ def render_salary_dashboard_page():
                 except Exception as e:
                     time.sleep(2) 
                     continue
-            
             if not success:
-                st.warning(f"❌ {s_name} さんのデータ読み込みに失敗しました（スキップします）")
-            
+                st.warning(f"❌ {s_name} さんのデータ読み込みに失敗しました")
             time.sleep(0.3) 
             progress_bar.progress((i + 1) / total_students)
             
@@ -96,17 +90,20 @@ def render_salary_dashboard_page():
 
     st.divider()
 
-    # --- 🌟 ここが神修正！セル内の改行（複数人）を分割して別々のデータにする ---
+    # --- セル内の改行（複数人）を分割 ---
     df_month['担当講師'] = df_month['担当講師'].astype(str)
-    # 改行(\n)やカンマ(,)で文字を区切り、explodeで行を分裂させる
     df_month_exploded = df_month.assign(担当講師=df_month['担当講師'].str.split(r'[\n,、]')).explode('担当講師')
-    df_month_exploded['担当講師'] = df_month_exploded['担当講師'].str.strip() # 前後の余計な空白を消す
+    df_month_exploded['担当講師'] = df_month_exploded['担当講師'].str.strip()
+
+    # 🌟 罠① 防御：授業形態の表記ゆれ（「１：２」や「1: 2」など）を完全に半角「1:2」に統一
+    if '授業形態' in df_month_exploded.columns:
+        df_month_exploded['授業形態'] = df_month_exploded['授業形態'].astype(str).apply(
+            lambda x: unicodedata.normalize('NFKC', x).replace(' ', '')
+        )
 
     teachers = df_month_exploded['担当講師'].dropna().unique()
     valid_teachers = [t for t in teachers if t not in ["未入力", "", "nan", "None"]]
-    # -------------------------------------------------------------------------
 
-    # --- 講師マスタ設定 ---
     master_teacher_names = df_instructors['講師名'].tolist() if not df_instructors.empty else []
     new_rows = []
     for t in valid_teachers:
@@ -119,33 +116,52 @@ def render_salary_dashboard_page():
     if new_rows:
         df_instructors = pd.concat([df_instructors, pd.DataFrame(new_rows)], ignore_index=True)
 
+    # --- 👨‍🏫 講師マスタ設定（変更保存ロジック） ---
     st.subheader("👨‍🏫 講師ごとの単価・設定")
-    st.info("💡 単価を変更した場合は、必ず下の「保存する」ボタンを押してください。（保存するまで下の給与計算には反映されません）")
     
-    # 🌟 st.form を外し、バグの温床を解消！
-    edited_prices = st.data_editor(df_instructors, hide_index=True, use_container_width=True, num_rows="dynamic", key="instructor_editor")
-    
-    # 🌟 保存ボタンを独立させる
-    if st.button("💾 変更をスプレッドシート（マスタ）に保存する", type="primary"):
+    # 🌟 with st.form で囲むことで、入力中の通信（再読み込み）を完全にブロック！
+    with st.form("master_edit_form"):
+        st.info("💡 表を直接編集できます。編集後は必ず下の「保存する」ボタンを押してください。")
+        edited_prices = st.data_editor(
+            df_instructors, 
+            hide_index=True, 
+            use_container_width=True, 
+            num_rows="dynamic", 
+            key="instructor_editor" # エディタの記憶キー
+        )
+        submit_btn = st.form_submit_button("💾 変更をスプレッドシート（マスタ）に保存する", type="primary")
+
+    if submit_btn:
         try:
             with st.spinner("☁️ マスタを保存中..."):
                 update_instructor_master(edited_prices)
                 time.sleep(1)
-                st.cache_data.clear() # キャッシュを完全にリセット
+                st.cache_data.clear() 
+                
+                # 🌟 直った！エディタの「古い記憶」を強制的に消去して先祖返りを防ぐ
+                if "instructor_editor" in st.session_state:
+                    del st.session_state["instructor_editor"]
+                    
             st.success("✅ 講師マスタを更新しました！")
-            time.sleep(1)
-            st.rerun() # リロードして最新状態にする
+            time.sleep(0.5)
+            st.rerun() 
         except Exception as e:
-            st.error(f"⚠️ 保存に失敗しました。もう一度お試しください。: {e}")
+            st.error(f"⚠️ 保存に失敗しました。: {e}")
 
-    # --- 給与計算ロジック ---
+    # --- 給与・コマ数計算ロジック（鉄壁版） ---
     summary_list = []
     for teacher in valid_teachers:
-        # 🌟 分割済み（explode後）のデータを使って計算する！
         df_teacher = df_month_exploded[df_month_exploded['担当講師'] == teacher].copy()
         df_teacher['日付'] = df_teacher['日時'].dt.date
         
-        # 🌟 【重要】計算には必ず「保存済みのマスタ (df_instructors)」を使用する！
+        # 🌟 罠② 防御：空欄による集計漏れ（行の消滅）を防ぐ
+        df_teacher['日付'] = df_teacher['日付'].fillna("日付不明")
+        df_teacher['授業コマ'] = df_teacher['授業コマ'].fillna("コマ不明")
+        
+        # 🌟 罠③ 防御：同じ生徒・日付・コマの「重複（二重入力）」を排除し、コマ数の過剰カウントを防ぐ！
+        if '生徒名' in df_teacher.columns:
+            df_teacher = df_teacher.drop_duplicates(subset=['生徒名', '日付', '授業コマ'])
+
         t_row_df = df_instructors[df_instructors["講師名"] == teacher]
         if t_row_df.empty: continue
         t_row = t_row_df.iloc[0]
@@ -169,7 +185,11 @@ def render_salary_dashboard_page():
 
         total_koma = koma_11 + koma_12 + koma_13
         koma_salary = (koma_11 * p11) + (koma_12 * p12) + (koma_13 * p13)
-        working_days = df_teacher['日付'].nunique()
+        
+        # 出勤日数は「日付不明」を除いてカウント
+        valid_dates = [d for d in df_teacher['日付'].unique() if str(d) != "日付不明"]
+        working_days = len(valid_dates)
+        
         transport_total = working_days * trans
         final_salary = koma_salary + transport_total + allowance
 
@@ -219,4 +239,4 @@ def render_salary_dashboard_page():
                     time.sleep(1)
                 st.success(f"✅ {selected_month} のデータを公開しました！")
             except Exception as e:
-                st.error(f"⚠️ 公開に失敗しました。もう一度ボタンを押してください。: {e}")
+                st.error(f"⚠️ 公開に失敗しました。: {e}")
