@@ -1267,8 +1267,6 @@ def get_student_quiz_records(student_name):
         print(f"小テスト記録の読み込みエラー: {e}")
         return [] # エラー時は空のリストを返す
 
-# utils/g_sheets.py の一番下に追加
-
 def get_quiz_master_dict():
     """
     「設定_小テスト一覧」シートから、テスト名と満点の対応表を取得する
@@ -1298,7 +1296,7 @@ def get_quiz_master_dict():
     except Exception as e:
         print(f"小テスト設定の読み込みエラー: {e}")
         return {}
-
+@st.cache_data(ttl=3600)
 def load_billing_data(year_month):
     """指定した年月の請求データを取得する"""
     try:
@@ -1354,29 +1352,53 @@ def save_billing_data(year_month, edited_df):
         import streamlit as st
         st.error(f"保存エラー: {e}")
         return False
+@st.cache_data(ttl=3600) # 🌟 1時間記憶してAPI節約＆高速化！
 def load_price_master():
-    """料金マスタを読み込み、追加単価も取得する"""
-    try:
-        import pandas as pd
-        gc = get_gc_client()
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        worksheet = sh.worksheet("料金マスタ")
-        df = pd.DataFrame(worksheet.get_all_records())
-        
-        if not df.empty:
-            df['学年'] = df['学年'].astype(str).str.strip()
-            df['コマ数'] = pd.to_numeric(df['コマ数'], errors='coerce')
-            df['料金'] = pd.to_numeric(df['料金'], errors='coerce')
-            # 🌟 追加単価を読み込む（列がなければ0にする）
-            if '追加単価' in df.columns:
-                df['追加単価'] = pd.to_numeric(df['追加単価'], errors='coerce').fillna(0)
-            else:
-                df['追加単価'] = 0
+    """料金マスタを読み込み、データの型を整えて取得する"""
+    df = pd.DataFrame() # 最初は空の箱を用意しておく
+    
+    # 🌟 魔法1：3回リトライ（粘り強さ）
+    for attempt in range(3): 
+        try:
+            gc = get_gc_client()
+            sh = gc.open_by_key(SPREADSHEET_ID)
+            ws = sh.worksheet("料金マスタ")
             
-        return df
-    except Exception as e:
-        print(f"料金マスタ読み込みエラー: {e}")
-        return pd.DataFrame()
+            # いったん生データを読み込む
+            data = ws.get_all_records()
+            df = pd.DataFrame(data)
+            
+            # データが取れたら、ループを抜けて次の「加工処理」へ進む
+            if not df.empty:
+                break 
+                
+        except Exception as e:
+            if attempt < 2: # 3回目じゃなければ息継ぎしてリトライ
+                time.sleep(2)
+            else:
+                # 3回ダメだった時だけエラーを表示
+                st.error(f"⚠️ 料金マスタの読み込みに失敗しました。通信状況を確認してください。: {e}")
+                return pd.DataFrame()
+
+    # 🌟 魔法2：データ加工（ここを丁寧にするのが「未設定」を防ぐコツ！）
+    if not df.empty:
+        try:
+            # 文字列の余計な空白を消す（「学年 」などを見逃さない！）
+            if '学年' in df.columns:
+                df['学年'] = df['学年'].astype(str).str.strip()
+            
+            # 数字に変換（変な文字が入っていてもエラーにせず、計算できるようにする）
+            for col in ['コマ数', '料金', '追加単価']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                else:
+                    # もし列自体がなかったら、0で埋めた列を作ってあげる（エラー防止）
+                    df[col] = 0
+                    
+        except Exception as e:
+            st.warning(f"⚠️ データの整形中にエラーが発生しました: {e}")
+
+    return df
 def get_student_master_data():
     """設定_生徒情報から割引情報も含めて取得"""
     try:
@@ -1396,7 +1418,7 @@ def get_student_master_data():
         return master_dict
     except:
         return {}
-
+@st.cache_data(ttl=3600)
 def load_fixed_costs():
     """固定費（家賃など）を読み込む"""
     try:
