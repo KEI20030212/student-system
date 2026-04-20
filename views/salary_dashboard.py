@@ -10,6 +10,24 @@ from utils.g_sheets import get_all_student_names, load_all_data, load_instructor
 from utils.pdf_generator import generate_payslip_pdf
 from utils.g_sheets import publish_salary_data
 
+# 🌟【追加】絶対に失敗させないための「自動リトライ」関数
+def robust_api_call(func, *args, retries=3, fallback_value=None, **kwargs):
+    """
+    Googleスプレッドシートの通信エラーを自動で再試行するラッパー関数
+    失敗するたびに 1秒 → 2秒 → 4秒 と待機時間を延ばして再アタックします。
+    """
+    for attempt in range(retries):
+        try:
+            result = func(*args, **kwargs)
+            # 関数が戻り値を持たない(None)場合は、成功の証としてTrueを返す
+            return True if result is None else result 
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)  # 指数的バックオフ
+            else:
+                st.toast(f"⚠️ 通信に失敗しました。再読み込みをお試しください。")
+                return fallback_value
+
 def render_salary_dashboard_page():
     st.header("💰 給与・交通費ダッシュボード")
     
@@ -19,14 +37,11 @@ def render_salary_dashboard_page():
         st.cache_data.clear() 
         st.rerun()
 
-    # --- 1. マスタ読み込み（KeyError 完全防御版） ---
-    try:
-        df_instructors = load_instructor_master()
-        # 🌟 エラーの元凶対策：シートが完全に空だったり、カラム名がおかしい場合は強制的に枠組みを作る
-        if type(df_instructors) != pd.DataFrame or df_instructors.empty or "講師名" not in df_instructors.columns:
-            df_instructors = pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
-    except Exception as e:
-        # 読み込み自体が失敗した場合も、エラーを出さずに空の表を作る
+    # --- 1. マスタ読み込み（自動リトライ＆KeyError 完全防御版） ---
+    df_instructors = robust_api_call(load_instructor_master, fallback_value=pd.DataFrame())
+    
+    # 🌟 エラーの元凶対策：シートが完全に空だったり、カラム名がおかしい場合は強制的に枠組みを作る
+    if type(df_instructors) != pd.DataFrame or df_instructors.empty or "講師名" not in df_instructors.columns:
         df_instructors = pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
 
     with st.expander("🏢 新規講師用の「基本」コマ単価設定", expanded=False):
@@ -41,11 +56,10 @@ def render_salary_dashboard_page():
     valid_teachers = []
     selected_month = None
 
-    student_names = []
-    try:
-        student_names = get_all_student_names()
-    except Exception as e:
-        st.warning(f"⚠️ 生徒データの取得で一時的なエラーが発生しました。: {e}")
+    # 🌟 自動リトライで生徒名を取得
+    student_names = robust_api_call(get_all_student_names, fallback_value=[])
+    if not student_names:
+        st.warning("⚠️ 生徒データの取得で一時的なエラーが発生しました。時間を置いて再読み込みしてください。")
 
     if student_names:
         if 'salary_df_all' not in st.session_state:
@@ -56,14 +70,16 @@ def render_salary_dashboard_page():
             
             for i, s_name in enumerate(student_names):
                 t_status.text(f"📥 {s_name} さんのデータを読み込み中... ({i+1}/{len(student_names)})")
-                try:
-                    df = load_all_data(s_name)
-                    if not df.empty:
-                        df['生徒名'] = s_name
-                        all_data_list.append(df)
-                except:
-                    pass
+                
+                # 🌟 各生徒のデータ取得も自動リトライで保護
+                df = robust_api_call(load_all_data, s_name, fallback_value=pd.DataFrame())
+                
+                if not df.empty:
+                    df['生徒名'] = s_name
+                    all_data_list.append(df)
+                    
                 p_bar.progress((i + 1) / len(student_names))
+                time.sleep(0.1) # API制限を避けるための微小な待機
             
             t_status.empty()
             p_bar.empty()
@@ -95,7 +111,7 @@ def render_salary_dashboard_page():
 
                     valid_teachers = [t for t in df_month_exploded['担当講師'].unique() if t not in ["未入力", "", "nan", "None"]]
 
-                    # 🌟 復活：新しい先生をマスタに自動追加する処理
+                    # 新しい先生をマスタに自動追加する処理
                     master_teacher_names = df_instructors['講師名'].astype(str).tolist() if not df_instructors.empty else []
                     new_rows = []
                     for t in valid_teachers:
@@ -123,15 +139,17 @@ def render_salary_dashboard_page():
         submit_btn = st.form_submit_button("💾 変更をスプレッドシート（マスタ）に保存する", type="primary")
 
     if submit_btn:
-        try:
-            with st.spinner("☁️ スプレッドシートに保存中..."):
-                update_instructor_master(current_editor_df)
+        with st.spinner("☁️ スプレッドシートに保存中...（通信状況により数秒かかります）"):
+            # 🌟 保存処理も自動リトライで保護
+            success = robust_api_call(update_instructor_master, current_editor_df, fallback_value=False)
+            
+            if success is not False:
                 st.cache_data.clear() 
                 time.sleep(1)
-            st.success("✅ スプレッドシートを更新しました！")
-            st.rerun() 
-        except Exception as e:
-            st.error(f"⚠️ 保存に失敗しました。: {e}")
+                st.success("✅ スプレッドシートを更新しました！")
+                st.rerun() 
+            else:
+                st.error("⚠️ 通信エラーにより保存に失敗しました。時間をおいて再度お試しください。")
 
     st.divider()
 
@@ -146,7 +164,6 @@ def render_salary_dashboard_page():
             if '生徒名' in df_teacher.columns:
                 df_teacher = df_teacher.drop_duplicates(subset=['生徒名', '日付', '授業コマ'])
 
-            # 🌟 ここでKeyErrorが起きていました（現在は上で完全防御済み）
             t_row_df = df_instructors[df_instructors["講師名"] == teacher]
             if t_row_df.empty: continue
             t_row = t_row_df.iloc[0]
@@ -209,10 +226,12 @@ def render_salary_dashboard_page():
             st.divider()
             st.subheader("📢 先生のページへ給与データを公開")
             if st.button(f"🚀 {selected_month} の給与を確定して公開する", use_container_width=True):
-                try:
-                    with st.spinner("☁️ データを送信中..."):
-                        publish_salary_data(selected_month, df_summary)
+                with st.spinner("☁️ データを送信中...（通信状況により数秒かかります）"):
+                    # 🌟 公開処理も自動リトライで保護
+                    success = robust_api_call(publish_salary_data, selected_month, df_summary, fallback_value=False)
+                    
+                    if success is not False:
                         time.sleep(1)
-                    st.success(f"✅ {selected_month} のデータを公開しました！")
-                except Exception as e:
-                    st.error(f"⚠️ 公開に失敗しました。: {e}")
+                        st.success(f"✅ {selected_month} のデータを公開しました！")
+                    else:
+                        st.error("⚠️ 通信エラーにより公開に失敗しました。時間をおいて再度お試しください。")
