@@ -123,7 +123,12 @@ def render_tuition_dashboard_page():
         actual_extra_count = max(0, actual_koma - base_koma)
         
         # ③ マスタからの料金取得（型を完全に合わせて検索）
-        match = price_master[(price_master['学年'] == grade) & (price_master['コマ数'] == base_koma)]
+        if not price_master.empty and '学年' in price_master.columns and 'コマ数' in price_master.columns:
+            match = price_master[(price_master['学年'] == grade) & (price_master['コマ数'] == base_koma)]
+        else:
+            # データがない、または列名がおかしい場合は空のデータとして扱う（アプリは落とさない）
+            match = pd.DataFrame() 
+            st.warning("⚠️ 料金マスタの「学年」や「コマ数」列が見つかりません。スプレッドシートの列名や通信状況を確認してください。")
         
         if not match.empty:
             base_price = int(match.iloc[0]['料金'])
