@@ -16,6 +16,7 @@ def render_salary_dashboard_page():
     if st.button("🔄 最新の授業データを読み込み直す"):
         if 'salary_df_all' in st.session_state:
             del st.session_state['salary_df_all']
+        st.cache_data.clear() # マスタの記憶もリセット
         st.rerun()
         
     # 1. データのロード（マスタ読み込みも防御）
@@ -28,6 +29,7 @@ def render_salary_dashboard_page():
     if not student_names: return
 
     try:
+        # 🌟 マスタデータを取得
         df_instructors = load_instructor_master()
     except Exception as e:
         st.warning(f"⚠️ 講師マスタが読み込めませんでした。空の状態で開始します。: {e}")
@@ -51,24 +53,22 @@ def render_salary_dashboard_page():
         for i, s_name in enumerate(student_names):
             progress_text.text(f"📥 {s_name} さんのデータを読み込み中... ({i+1}/{total_students})")
             
-            # 🛡️ 読み込みリトライ機能付きの防御
             success = False
-            for retry in range(3): # 最大3回リトライ
+            for retry in range(3):
                 try:
                     df = load_all_data(s_name)
                     if not df.empty:
                         df['生徒名'] = s_name
                         all_data_list.append(df)
                     success = True
-                    break # 成功したらリトライループを抜ける
+                    break 
                 except Exception as e:
-                    time.sleep(2) # エラーが出たら2秒待機して再試行
+                    time.sleep(2) 
                     continue
             
             if not success:
                 st.warning(f"❌ {s_name} さんのデータ読み込みに失敗しました（スキップします）")
             
-            # APIへの負荷を分散しつつ、プログレスを更新
             time.sleep(0.3) 
             progress_bar.progress((i + 1) / total_students)
             
@@ -84,7 +84,7 @@ def render_salary_dashboard_page():
     else:
         df_all = st.session_state['salary_df_all']
     
-    # --- データ処理（ここはメモリ内操作なので爆速） ---
+    # --- データ処理 ---
     if '担当講師' not in df_all.columns: return
     df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
     df_all = df_all.dropna(subset=['日時'])
@@ -92,14 +92,21 @@ def render_salary_dashboard_page():
 
     month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
     selected_month = st.selectbox("📅 集計する月を選択", month_options)
-    df_month = df_all[df_all['年月'] == selected_month]
+    df_month = df_all[df_all['年月'] == selected_month].copy()
 
     st.divider()
 
-    # --- 講師マスタ設定 ---
-    teachers = df_month['担当講師'].dropna().unique()
-    valid_teachers = [t for t in teachers if t not in ["未入力", ""]]
+    # --- 🌟 ここが神修正！セル内の改行（複数人）を分割して別々のデータにする ---
+    df_month['担当講師'] = df_month['担当講師'].astype(str)
+    # 改行(\n)やカンマ(,)で文字を区切り、explodeで行を分裂させる
+    df_month_exploded = df_month.assign(担当講師=df_month['担当講師'].str.split(r'[\n,、]')).explode('担当講師')
+    df_month_exploded['担当講師'] = df_month_exploded['担当講師'].str.strip() # 前後の余計な空白を消す
 
+    teachers = df_month_exploded['担当講師'].dropna().unique()
+    valid_teachers = [t for t in teachers if t not in ["未入力", "", "nan", "None"]]
+    # -------------------------------------------------------------------------
+
+    # --- 講師マスタ設定 ---
     master_teacher_names = df_instructors['講師名'].tolist() if not df_instructors.empty else []
     new_rows = []
     for t in valid_teachers:
@@ -113,28 +120,33 @@ def render_salary_dashboard_page():
         df_instructors = pd.concat([df_instructors, pd.DataFrame(new_rows)], ignore_index=True)
 
     st.subheader("👨‍🏫 講師ごとの単価・設定")
-    with st.form("master_edit_form"):
-        edited_prices = st.data_editor(df_instructors, hide_index=True, use_container_width=True, num_rows="dynamic")
-        submit_btn = st.form_submit_button("💾 変更をスプレッドシート（マスタ）に保存する")
-
-    if submit_btn:
+    st.info("💡 単価を変更した場合は、必ず下の「保存する」ボタンを押してください。（保存するまで下の給与計算には反映されません）")
+    
+    # 🌟 st.form を外し、バグの温床を解消！
+    edited_prices = st.data_editor(df_instructors, hide_index=True, use_container_width=True, num_rows="dynamic", key="instructor_editor")
+    
+    # 🌟 保存ボタンを独立させる
+    if st.button("💾 変更をスプレッドシート（マスタ）に保存する", type="primary"):
         try:
             with st.spinner("☁️ マスタを保存中..."):
                 update_instructor_master(edited_prices)
                 time.sleep(1)
-                st.cache_data.clear()
+                st.cache_data.clear() # キャッシュを完全にリセット
             st.success("✅ 講師マスタを更新しました！")
             time.sleep(1)
-            st.rerun()
+            st.rerun() # リロードして最新状態にする
         except Exception as e:
             st.error(f"⚠️ 保存に失敗しました。もう一度お試しください。: {e}")
 
     # --- 給与計算ロジック ---
     summary_list = []
     for teacher in valid_teachers:
-        df_teacher = df_month[df_month['担当講師'] == teacher].copy()
+        # 🌟 分割済み（explode後）のデータを使って計算する！
+        df_teacher = df_month_exploded[df_month_exploded['担当講師'] == teacher].copy()
         df_teacher['日付'] = df_teacher['日時'].dt.date
-        t_row_df = edited_prices[edited_prices["講師名"] == teacher]
+        
+        # 🌟 【重要】計算には必ず「保存済みのマスタ (df_instructors)」を使用する！
+        t_row_df = df_instructors[df_instructors["講師名"] == teacher]
         if t_row_df.empty: continue
         t_row = t_row_df.iloc[0]
 
@@ -177,7 +189,6 @@ def render_salary_dashboard_page():
         st.divider()
         st.subheader("📄 給与明細PDFの一括作成")
         
-        # 🌟 ZIP作成にもプログレスバーを導入
         if st.button(f"📦 全員分の明細をZIPで作成する", use_container_width=True):
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
@@ -204,7 +215,6 @@ def render_salary_dashboard_page():
         if st.button(f"🚀 {selected_month} の給与を確定して公開する", use_container_width=True):
             try:
                 with st.spinner("☁️ データを送信中..."):
-                    # 公開処理を防御
                     publish_salary_data(selected_month, df_summary)
                     time.sleep(1)
                 st.success(f"✅ {selected_month} のデータを公開しました！")
