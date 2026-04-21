@@ -2,23 +2,15 @@ import time
 import random
 import logging
 import streamlit as st
+import pandas as pd
 
-# 内部のログ出力用設定（コンソールでエラーの正体を確認しやすくします）
+# 内部のログ出力用設定
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def robust_api_call(func, *args, retries=4, base_delay=1.5, fallback_value=None, notify=True, **kwargs):
     """
-    外部通信（Google Sheets APIなど）のエラーを完全に防ぎ、安全に再試行するための強化版関数。
-    
-    引数:
-        func: 実行したい関数
-        *args: 関数に渡す引数
-        retries: 最大再試行回数（デフォルト: 4回に少し増強）
-        base_delay: 最初の待機時間（秒）。
-        fallback_value: すべての再試行が失敗した場合に返す安全な値
-        notify: 完全に失敗した際に Streamlit の toast でユーザーに通知するかどうか
-        **kwargs: 関数に渡すキーワード引数
+    外部通信のエラーを防ぎつつ、失敗した場合はその「原因」を画面に表示する強化版
     """
     func_name = getattr(func, '__name__', 'データ通信')
     
@@ -31,23 +23,21 @@ def robust_api_call(func, *args, retries=4, base_delay=1.5, fallback_value=None,
         except Exception as e:
             # 最後の試行以外なら、待機して再挑戦
             if attempt < retries - 1:
-                # 🌟 強化ポイント1: 指数関数的バックオフ ＋ ジッター（ランダムな揺らぎ）
-                # 単純に 2秒→4秒→8秒 と待つと、複数アクセスが同時にリトライして再び弾かれやすいです。
-                # そこに 0〜1秒の「ランダムなズレ」を加えることで、アクセスのタイミングを分散させます。
-                sleep_time = base_delay * (1.5 ** attempt) + random.uniform(0.1, 1.0)
-                
-                # 🌟 強化ポイント2: コンソールに警告を出して、裏で何が起きているか把握できるようにする
+                # ジッター（ランダムな揺らぎ）を入れてリクエストを分散
+                sleep_time = base_delay * (1.5 ** attempt) + random.uniform(0.5, 1.5)
                 logger.warning(f"⚠️ {func_name} でエラー発生。{sleep_time:.2f}秒後に再試行します ({attempt+1}/{retries}) | エラー詳細: {e}")
-                
                 time.sleep(sleep_time)
                 
             # 規定回数すべて失敗した場合
             else:
-                logger.error(f"🚨 {func_name} が最大再試行回数に達しました。処理を中断します。 | エラー詳細: {e}")
+                logger.error(f"🚨 {func_name} が最大再試行回数に達しました。 | エラー詳細: {e}")
                 
                 if notify:
-                    # エラーでアプリを落とさず、画面右下に小さく通知を出す
-                    st.toast(f"⚠️ {func_name} の通信に失敗しました。時間をおいてお試しください。", icon="🚨")
+                    # 🌟 強化ポイント: トースト（右下の小さい通知）ではなく、画面に直接赤いエラーを出す！
+                    st.error(f"🚨 【通信エラー】 `{func_name}` のデータ取得に失敗しました。\n\n**原因:** {e}")
                 
-                # 安全な代替データ（フォールバック）を返して処理を続行させる
+                # エラーであることをダッシュボード側でも検知できるように、特殊なDataFrameを返す
+                if isinstance(fallback_value, pd.DataFrame):
+                    return pd.DataFrame({"APIエラー発生": [f"通信失敗: {e}"]})
+                
                 return fallback_value
