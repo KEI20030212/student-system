@@ -1299,21 +1299,30 @@ def get_quiz_master_dict():
 @st.cache_data(ttl=3600)
 def load_billing_data(year_month):
     """指定した年月の請求データを取得する"""
+    # ⚠️ try...except での「エラーの握りつぶし」をやめ、
+    # 通信エラーは api_guard に任せてリトライさせます！
+    
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
     try:
-        gc = get_gc_client()
-        sh = gc.open_by_key(SPREADSHEET_ID)
         worksheet = sh.worksheet("請求管理")
-        
-        records = worksheet.get_all_records()
-        df = pd.DataFrame(records)
-        
-        if not df.empty and '年月' in df.columns:
-            # 対象の月のデータだけを返す
-            return df[df['年月'] == year_month]
+    except gspread.exceptions.WorksheetNotFound:
+        # 「シート自体がまだ作られていない場合」だけは、エラーではなく空データを返す
         return pd.DataFrame()
-    except Exception as e:
-        # シートがない、または空の場合は空のDataFrameを返す
-        return pd.DataFrame()
+        
+    records = worksheet.get_all_records()
+    df = pd.DataFrame(records)
+    
+    if not df.empty and '年月' in df.columns:
+        # 💡 月の表記ゆらぎを吸収（例："2026年04月" と "2026年4月" どちらでもマッチするようにする）
+        ym_no_zero = year_month.replace("年0", "年") # "2026年04月" -> "2026年4月"
+        
+        # ゼロ埋めあり・なし、どちらかに一致するデータを抽出
+        filtered_df = df[(df['年月'] == year_month) | (df['年月'] == ym_no_zero)]
+        return filtered_df
+        
+    return pd.DataFrame()
 
 def save_billing_data(year_month, edited_df):
     """請求データを保存（上書き）する"""
@@ -1418,14 +1427,15 @@ def get_student_master_data():
         return master_dict
     except:
         return {}
-@st.cache_data(ttl=3600)
+
 def load_fixed_costs():
     """固定費（家賃など）を読み込む"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
     try:
-        import pandas as pd
-        gc = get_gc_client()
-        sh = gc.open_by_key(SPREADSHEET_ID)
         worksheet = sh.worksheet("固定費設定")
-        return pd.DataFrame(worksheet.get_all_records())
-    except:
+    except gspread.exceptions.WorksheetNotFound:
         return pd.DataFrame(columns=["項目", "金額"])
+        
+    return pd.DataFrame(worksheet.get_all_records())
