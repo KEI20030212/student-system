@@ -7,12 +7,13 @@ from utils.api_guard import robust_api_call
 from utils.g_sheets import load_billing_data, load_fixed_costs
 
 # --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
-@st.cache_data(show_spinner=False)
+# 💡 show_spinner="メッセージ" を設定し、更新時に画面がフリーズしたように見えないよう改善！
+@st.cache_data(show_spinner="☁️ 月謝（売上）データを取得中...")
 def fetch_billing_data_cached(month):
     """月謝（売上）データを取得・キャッシュ・防御"""
     return robust_api_call(load_billing_data, month, fallback_value=pd.DataFrame())
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner="☁️ 固定費データを取得中...")
 def fetch_fixed_costs_cached():
     """固定費データを取得・キャッシュ・防御"""
     return robust_api_call(load_fixed_costs, fallback_value=pd.DataFrame())
@@ -21,11 +22,6 @@ def fetch_fixed_costs_cached():
 
 def render_profit_loss_dashboard_page():
     st.header("📈 経営ダッシュボード (純利益管理)")
-    
-    # --- 🛠 データ更新管理 ---
-    if st.sidebar.button("🔄 損益データを最新に更新"):
-        st.cache_data.clear() 
-        st.rerun()
     
     # --- 現在から過去12ヶ月分を動的に生成する ---
     today = datetime.datetime.now()
@@ -39,8 +35,22 @@ def render_profit_loss_dashboard_page():
             y -= 1
         month_options.append(f"{y}年{m:02d}月")
         
-    month = st.selectbox("📅 集計月", month_options)
+    # 🌟 操作パネル（月選択 ＆ 更新ボタン）を画面上部に横並びで配置
+    col_month, col_btn = st.columns([2, 1], vertical_alignment="bottom")
+    
+    with col_month:
+        month = st.selectbox("📅 集計月", month_options)
+        
+    with col_btn:
+        # type="primary" にしてボタンを目立たせる
+        if st.button("🔄 最新データに更新", type="primary", use_container_width=True):
+            # 💡 アプリ全体のキャッシュではなく、このページで使う関数のキャッシュだけを狙い撃ちで消す（他のページの動作を遅くしないため）
+            fetch_billing_data_cached.clear()
+            fetch_fixed_costs_cached.clear()
+            st.toast("最新データを取得します...", icon="⏳")
+            st.rerun()
     # --------------------------------------------------------
+    st.divider()
 
     # 1. 売上の取得 (🌟 キャッシュ＆防御経由)
     billing_df = fetch_billing_data_cached(month)
