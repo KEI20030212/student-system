@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 import datetime 
+import time  # 🌟 ボタンのフィードバック用にtimeを追加
 
 # 🌟 共通の防御関数をインポート
 from utils.api_guard import robust_api_call
 from utils.g_sheets import load_billing_data, load_fixed_costs
 
 # --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
-# 💡 show_spinner="メッセージ" を設定し、更新時に画面がフリーズしたように見えないよう改善！
 @st.cache_data(show_spinner="☁️ 月謝（売上）データを取得中...")
 def fetch_billing_data_cached(month):
     """月謝（売上）データを取得・キャッシュ・防御"""
@@ -17,8 +17,6 @@ def fetch_billing_data_cached(month):
 def fetch_fixed_costs_cached():
     """固定費データを取得・キャッシュ・防御"""
     return robust_api_call(load_fixed_costs, fallback_value=pd.DataFrame())
-
-# ※給与データ取得用の関数（load_salary_data等）ができた場合も、同様にキャッシュ関数を作ると完璧です！
 
 def render_profit_loss_dashboard_page():
     st.header("📈 経営ダッシュボード (純利益管理)")
@@ -42,36 +40,43 @@ def render_profit_loss_dashboard_page():
         month = st.selectbox("📅 集計月", month_options)
         
     with col_btn:
-        # type="primary" にしてボタンを目立たせる
         if st.button("🔄 最新データに更新", type="primary", use_container_width=True):
-            # 💡 アプリ全体のキャッシュではなく、このページで使う関数のキャッシュだけを狙い撃ちで消す（他のページの動作を遅くしないため）
-            fetch_billing_data_cached.clear()
-            fetch_fixed_costs_cached.clear()
-            st.toast("最新データを取得します...", icon="⏳")
+            # 🌟 改善ポイント1: 「押した感」を出すために少しだけ待機時間をいれる
+            with st.spinner("🔄 サーバーから最新データを取得中..."):
+                time.sleep(0.6)  # アニメーションを確実に見せるための意図的なタメ
+                fetch_billing_data_cached.clear()
+                fetch_fixed_costs_cached.clear()
             st.rerun()
-    # --------------------------------------------------------
+
     st.divider()
 
+    # ==========================================
+    # 📊 データ取得とエラーハンドリング
+    # ==========================================
+    
     # 1. 売上の取得 (🌟 キャッシュ＆防御経由)
     billing_df = fetch_billing_data_cached(month)
-    # カラム名が存在するかチェックして安全に合計を出す
-    if not billing_df.empty and "💴 今月の請求額 (円)" in billing_df.columns:
-        total_revenue = int(billing_df["💴 今月の請求額 (円)"].sum())
-    else:
-        total_revenue = 0
+    
+    total_revenue = 0
+    # 🌟 改善ポイント2: データが空だった場合に「なぜ表示されないか」をユーザーに明示する
+    if billing_df.empty:
+        st.warning(f"⚠️ {month} の売上データがありません。「月謝管理」でまだ保存されていないか、通信エラーの可能性があります。上の更新ボタンをお試しください。")
+    elif "💴 今月の請求額 (円)" in billing_df.columns:
+        total_revenue = int(pd.to_numeric(billing_df["💴 今月の請求額 (円)"], errors='coerce').fillna(0).sum())
 
     # 2. 支出（給与）の取得
-    # 💡 TODO: salary_dashboardから保存された給与データを読み込むAPIが完成したら、
-    # ここも fetch_salary_data_cached(month) のように置き換えます。
+    # 💡 TODO: salary_dashboardから保存された給与データを読み込むAPIが完成したら置き換え
     total_salary = 450000 # 仮のデータ
 
     # 3. 支出（固定費）の取得 (🌟 キャッシュ＆防御経由)
     fixed_df = fetch_fixed_costs_cached()
-    if not fixed_df.empty and "金額" in fixed_df.columns:
+    
+    total_fixed = 0
+    if fixed_df.empty:
+        st.info("💡 固定費データが登録されていないか、取得できませんでした。")
+    elif "金額" in fixed_df.columns:
         # 空白や文字列が混ざっていてもエラーにならないように数値変換
         total_fixed = int(pd.to_numeric(fixed_df["金額"], errors='coerce').fillna(0).sum())
-    else:
-        total_fixed = 0
 
     # 4. 利益計算
     total_expense = total_salary + total_fixed
@@ -126,7 +131,7 @@ def render_profit_loss_dashboard_page():
         if not fixed_df.empty:
             st.dataframe(fixed_df, hide_index=True, use_container_width=True)
         else:
-            st.info("今月の固定費データはありません。")
+            st.info("表示できる固定費データがありません。")
             
     with col_detail2:
         st.markdown("**💴 売上（生徒別 月謝）一覧**")
@@ -138,4 +143,4 @@ def render_profit_loss_dashboard_page():
             else:
                 st.dataframe(billing_df, hide_index=True, use_container_width=True) 
         else:
-            st.info("今月の売上データはありません。")
+            st.info("表示できる売上データがありません。")
