@@ -1,29 +1,39 @@
 import streamlit as st
 
-# 各ページの関数をインポート
+# 各画面の描画関数を直接読み込む
 from views.tuition_dashboard import render_tuition_dashboard_page
-from views.salary_combined import render_salary_combined_page  # ※実際の関数名に合わせてください
-from views.profit_loss_dashboard import render_profit_loss_dashboard_page # ※実際の関数名に合わせてください
+from views.salary_dashboard import render_salary_dashboard_page
+from views.my_salary import render_my_salary_page
+from views.profit_loss_dashboard import render_profit_loss_dashboard_page
 
 def render_finance_integrated_page():
-    st.title("💰 財務・請求ダッシュボード")
-    st.caption("月謝の請求、講師の給与計算、全体の収支を管理します。")
+    # --- サイドバーでメニューを作成 ---
+    st.sidebar.title("🧭 ナビゲーション")
     
-    # 🌟 3つのタブを作成
-    tab1, tab2, tab3 = st.tabs([
-        "💴 月謝（請求額）管理", 
-        "💸 給与計算", 
-        "📈 収支ダッシュボード"
-    ])
-    
-    # タブ1の中身
-    with tab1:
+    # st.radio（ラジオボタン）を使って、絶対に1画面しか選べないようにする
+    menu_selection = st.sidebar.radio(
+        "表示する画面を選択してください",
+        (
+            "💴 月謝管理ダッシュボード", 
+            "💰 給与・交通費ダッシュボード", 
+            "👩‍🏫 講師用マイページ", 
+            "📈 損益ダッシュボード"
+        )
+    )
+
+    # --- 選択された画面「だけ」を実行する（ここが超重要！） ---
+    if menu_selection == "💴 月謝管理ダッシュボード":
         render_tuition_dashboard_page()
         
-    # タブ2の中身
-    with tab2:
-        render_salary_combined_page()
+    elif menu_selection == "💰 給与・交通費ダッシュボード":
+        render_salary_dashboard_page()
         
-    # タブ3の中身
-    with tab3:
+    elif menu_selection == "👩‍🏫 講師用マイページ":
+        render_my_salary_page()
+        
+    elif menu_selection == "📈 損益ダッシュボード":
         render_profit_loss_dashboard_page()
+
+# もしこのファイルが直接実行された場合の処理（必要に応じて）
+if __name__ == "__main__":
+    render_finance_integrated_page()
