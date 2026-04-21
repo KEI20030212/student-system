@@ -139,12 +139,6 @@ def main():
         
     page = st.sidebar.radio("移動先", menu_options)
 
-    # ログアウトボタン
-    st.sidebar.divider()
-    if st.sidebar.button("🚪 ログアウト", use_container_width=True):
-        st.session_state.clear()
-        st.rerun()
-
     # 必要なマスターデータをロード
     textbook_master = load_textbook_master()
 
@@ -175,6 +169,12 @@ def main():
     #elif page == "💸 給与メニュー": render_salary_combined_page()
     elif page == "💌 メッセージ送信": render_message_sender_page()
     elif page == "⚙️ アカウント・システム設定": render_account_manager_page()
-
+    
+    # ログアウトボタン
+    st.sidebar.divider()
+    if st.sidebar.button("🚪 ログアウト", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+        
 if __name__ == "__main__":
     main()
