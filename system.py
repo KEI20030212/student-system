@@ -22,7 +22,7 @@ from views.my_salary import render_my_salary_page
 from views.account_manager import render_account_manager_page
 from views.message_sender import render_message_sender_page
 #from views.salary_combined import render_salary_combined_page
-from views.dashboard_combined import render_combined_dashboard_page
+#from views.dashboard_combined import render_combined_dashboard_page
 from views.student_portal import render_student_portal_page
 from views.quiz_management import render_quiz_management_page
 from views.line_report import render_line_report_page
