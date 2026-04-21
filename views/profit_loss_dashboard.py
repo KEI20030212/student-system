@@ -1,10 +1,31 @@
 import streamlit as st
 import pandas as pd
-import datetime # 🌟 日付を扱うための標準機能をインポート
+import datetime 
+
+# 🌟 共通の防御関数をインポート
+from utils.api_guard import robust_api_call
 from utils.g_sheets import load_billing_data, load_fixed_costs
+
+# --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
+@st.cache_data(show_spinner=False)
+def fetch_billing_data_cached(month):
+    """月謝（売上）データを取得・キャッシュ・防御"""
+    return robust_api_call(load_billing_data, month, fallback_value=pd.DataFrame())
+
+@st.cache_data(show_spinner=False)
+def fetch_fixed_costs_cached():
+    """固定費データを取得・キャッシュ・防御"""
+    return robust_api_call(load_fixed_costs, fallback_value=pd.DataFrame())
+
+# ※給与データ取得用の関数（load_salary_data等）ができた場合も、同様にキャッシュ関数を作ると完璧です！
 
 def render_profit_loss_dashboard_page():
     st.header("📈 経営ダッシュボード (純利益管理)")
+    
+    # --- 🛠 データ更新管理 ---
+    if st.sidebar.button("🔄 損益データを最新に更新"):
+        st.cache_data.clear() 
+        st.rerun()
     
     # --- 現在から過去12ヶ月分を動的に生成する ---
     today = datetime.datetime.now()
@@ -21,21 +42,26 @@ def render_profit_loss_dashboard_page():
     month = st.selectbox("📅 集計月", month_options)
     # --------------------------------------------------------
 
-    # 1. 売上の取得
-    billing_df = load_billing_data(month)
-    total_revenue = billing_df["💴 今月の請求額 (円)"].sum() if not billing_df.empty else 0
+    # 1. 売上の取得 (🌟 キャッシュ＆防御経由)
+    billing_df = fetch_billing_data_cached(month)
+    # カラム名が存在するかチェックして安全に合計を出す
+    if not billing_df.empty and "💴 今月の請求額 (円)" in billing_df.columns:
+        total_revenue = int(billing_df["💴 今月の請求額 (円)"].sum())
+    else:
+        total_revenue = 0
 
     # 2. 支出（給与）の取得
-    # salary_dashboardの集計ロジックをここに
-    total_salary = 450000 # 仮。実際はsalaryの保存データから取得
+    # 💡 TODO: salary_dashboardから保存された給与データを読み込むAPIが完成したら、
+    # ここも fetch_salary_data_cached(month) のように置き換えます。
+    total_salary = 450000 # 仮のデータ
 
-    # 3. 支出（固定費）の取得
-    try:
-        fixed_df = load_fixed_costs()
-        total_fixed = fixed_df["金額"].sum() if not fixed_df.empty else 0
-    except Exception:
-        fixed_df = pd.DataFrame() # 内訳表示用に空のデータフレームを用意
-        total_fixed = 0 # データがない場合のエラー回避
+    # 3. 支出（固定費）の取得 (🌟 キャッシュ＆防御経由)
+    fixed_df = fetch_fixed_costs_cached()
+    if not fixed_df.empty and "金額" in fixed_df.columns:
+        # 空白や文字列が混ざっていてもエラーにならないように数値変換
+        total_fixed = int(pd.to_numeric(fixed_df["金額"], errors='coerce').fillna(0).sum())
+    else:
+        total_fixed = 0
 
     # 4. 利益計算
     total_expense = total_salary + total_fixed
@@ -79,7 +105,6 @@ def render_profit_loss_dashboard_page():
         # hide_index=True でスッキリした表にする
         st.dataframe(pd.DataFrame(pnl_data), hide_index=True, use_container_width=True)
 
-
     # 🌟 下部：各データの内訳をドリルダウン
     st.divider()
     st.subheader("🔍 経費・売上の詳細内訳")
@@ -96,11 +121,11 @@ def render_profit_loss_dashboard_page():
     with col_detail2:
         st.markdown("**💴 売上（生徒別 月謝）一覧**")
         if not billing_df.empty:
-            # 全部表示すると見にくいので、名前と金額だけを抽出して表示
-            display_cols = [col for col in ["生徒名", "💴 今月の請求額 (円)"] if col in billing_df.columns]
+            # カラムが存在するかチェックしてから表示する（エラー回避）
+            display_cols = [col for col in ["👤 生徒名", "生徒名", "💴 今月の請求額 (円)"] if col in billing_df.columns]
             if display_cols:
                 st.dataframe(billing_df[display_cols], hide_index=True, use_container_width=True)
             else:
-                st.dataframe(billing_df, hide_index=True, use_container_width=True) # 列名が違う場合はそのまま表示
+                st.dataframe(billing_df, hide_index=True, use_container_width=True) 
         else:
             st.info("今月の売上データはありません。")

@@ -6,41 +6,59 @@ import zipfile
 import io
 import unicodedata
 
-from utils.g_sheets import get_all_student_names, load_all_data, load_instructor_master, update_instructor_master
+# 🌟 共通の防御関数をインポート
+from utils.api_guard import robust_api_call
+from utils.g_sheets import (
+    get_all_student_names, 
+    load_all_data, 
+    load_instructor_master, 
+    update_instructor_master,
+    publish_salary_data
+)
 from utils.pdf_generator import generate_payslip_pdf
-from utils.g_sheets import publish_salary_data
 
-# 🌟【追加】絶対に失敗させないための「自動リトライ」関数
-def robust_api_call(func, *args, retries=3, fallback_value=None, **kwargs):
+# --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
+@st.cache_data(show_spinner=False)
+def fetch_salary_student_data_cached(student_names):
     """
-    Googleスプレッドシートの通信エラーを自動で再試行するラッパー関数
-    失敗するたびに 1秒 → 2秒 → 4秒 と待機時間を延ばして再アタックします。
+    全生徒の授業データを一括取得してキャッシュする関数。
     """
-    for attempt in range(retries):
-        try:
-            result = func(*args, **kwargs)
-            # 関数が戻り値を持たない(None)場合は、成功の証としてTrueを返す
-            return True if result is None else result 
-        except Exception as e:
-            if attempt < retries - 1:
-                time.sleep(2 ** attempt)  # 指数的バックオフ
-            else:
-                st.toast(f"⚠️ 通信に失敗しました。再読み込みをお試しください。")
-                return fallback_value
+    all_data_list = []
+    total_students = len(student_names)
+    
+    st.subheader("☁️ データ集計状況")
+    p_bar = st.progress(0)
+    t_status = st.empty()
+    
+    for i, s_name in enumerate(student_names):
+        t_status.text(f"📥 {s_name} さんのデータを読み込み中... ({i+1}/{total_students})")
+        
+        # 🌟 各生徒のデータ取得を自動リトライで保護
+        df = robust_api_call(load_all_data, s_name, fallback_value=pd.DataFrame())
+        
+        if not df.empty:
+            df['生徒名'] = s_name
+            all_data_list.append(df)
+            
+        p_bar.progress((i + 1) / total_students)
+        time.sleep(0.1) # API制限を避けるための微小な待機
+    
+    t_status.empty()
+    p_bar.empty()
+    return all_data_list
 
 def render_salary_dashboard_page():
     st.header("💰 給与・交通費ダッシュボード")
     
-    if st.button("🔄 最新の授業データを読み込み直す"):
-        if 'salary_df_all' in st.session_state:
-            del st.session_state['salary_df_all']
+    # --- 🛠 データ更新管理 ---
+    if st.sidebar.button("🔄 給与データを最新に更新"):
         st.cache_data.clear() 
         st.rerun()
 
     # --- 1. マスタ読み込み（自動リトライ＆KeyError 完全防御版） ---
     df_instructors = robust_api_call(load_instructor_master, fallback_value=pd.DataFrame())
     
-    # 🌟 エラーの元凶対策：シートが完全に空だったり、カラム名がおかしい場合は強制的に枠組みを作る
+    # エラーの元凶対策：シートが完全に空だったり、カラム名がおかしい場合は強制的に枠組みを作る
     if type(df_instructors) != pd.DataFrame or df_instructors.empty or "講師名" not in df_instructors.columns:
         df_instructors = pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
 
@@ -51,81 +69,58 @@ def render_salary_dashboard_page():
         base_price_1on3 = c3.number_input("1:3 基本単価 (円)", value=2000, step=100)
 
     # --- 2. 授業データ読み込みと先生の抽出 ---
-    # 読み込みに失敗してもエディタは表示させるために、一旦変数を初期化しておく
     df_month_exploded = None
     valid_teachers = []
     selected_month = None
 
-    # 🌟 自動リトライで生徒名を取得
+    # 生徒名を取得
     student_names = robust_api_call(get_all_student_names, fallback_value=[])
     if not student_names:
-        st.warning("⚠️ 生徒データの取得で一時的なエラーが発生しました。時間を置いて再読み込みしてください。")
+        st.warning("⚠️ 生徒データの取得で一時的なエラーが発生しました。左側のボタンで更新してください。")
+        return
 
-    if student_names:
-        if 'salary_df_all' not in st.session_state:
-            all_data_list = []
-            st.subheader("☁️ データ集計状況")
-            p_bar = st.progress(0)
-            t_status = st.empty()
-            
-            for i, s_name in enumerate(student_names):
-                t_status.text(f"📥 {s_name} さんのデータを読み込み中... ({i+1}/{len(student_names)})")
+    # キャッシュ関数を使って全データを一括取得
+    all_data_list = fetch_salary_student_data_cached(student_names)
+
+    if all_data_list:
+        df_all = pd.concat(all_data_list, ignore_index=True)
+        if '日時' in df_all.columns and '担当講師' in df_all.columns:
+            df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
+            df_all = df_all.dropna(subset=['日時'])
+            df_all['年月'] = df_all['日時'].dt.strftime("%Y年%m月")
+
+            month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
+            if month_options:
+                selected_month = st.selectbox("📅 集計する月を選択", month_options)
+                df_month = df_all[df_all['年月'] == selected_month].copy()
+
+                # 表記ゆれ・改行対策
+                df_month['担当講師'] = df_month['担当講師'].astype(str)
+                df_month_exploded = df_month.assign(担当講師=df_month['担当講師'].str.split(r'[\n,、]')).explode('担当講師')
+                df_month_exploded['担当講師'] = df_month_exploded['担当講師'].str.strip()
                 
-                # 🌟 各生徒のデータ取得も自動リトライで保護
-                df = robust_api_call(load_all_data, s_name, fallback_value=pd.DataFrame())
-                
-                if not df.empty:
-                    df['生徒名'] = s_name
-                    all_data_list.append(df)
-                    
-                p_bar.progress((i + 1) / len(student_names))
-                time.sleep(0.1) # API制限を避けるための微小な待機
-            
-            t_status.empty()
-            p_bar.empty()
-            
-            if all_data_list:
-                st.session_state['salary_df_all'] = pd.concat(all_data_list, ignore_index=True)
+                if '授業形態' in df_month_exploded.columns:
+                    df_month_exploded['授業形態'] = df_month_exploded['授業形態'].astype(str).apply(
+                        lambda x: unicodedata.normalize('NFKC', x).replace(' ', '')
+                    )
 
-        if 'salary_df_all' in st.session_state:
-            df_all = st.session_state['salary_df_all']
-            if '日時' in df_all.columns and '担当講師' in df_all.columns:
-                df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
-                df_all = df_all.dropna(subset=['日時'])
-                df_all['年月'] = df_all['日時'].dt.strftime("%Y年%m月")
+                valid_teachers = [t for t in df_month_exploded['担当講師'].unique() if t not in ["未入力", "", "nan", "None"]]
 
-                month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
-                if month_options:
-                    selected_month = st.selectbox("📅 集計する月を選択", month_options)
-                    df_month = df_all[df_all['年月'] == selected_month].copy()
-
-                    # 表記ゆれ・改行対策
-                    df_month['担当講師'] = df_month['担当講師'].astype(str)
-                    df_month_exploded = df_month.assign(担当講師=df_month['担当講師'].str.split(r'[\n,、]')).explode('担当講師')
-                    df_month_exploded['担当講師'] = df_month_exploded['担当講師'].str.strip()
-                    
-                    if '授業形態' in df_month_exploded.columns:
-                        df_month_exploded['授業形態'] = df_month_exploded['授業形態'].astype(str).apply(
-                            lambda x: unicodedata.normalize('NFKC', x).replace(' ', '')
-                        )
-
-                    valid_teachers = [t for t in df_month_exploded['担当講師'].unique() if t not in ["未入力", "", "nan", "None"]]
-
-                    # 新しい先生をマスタに自動追加する処理
-                    master_teacher_names = df_instructors['講師名'].astype(str).tolist() if not df_instructors.empty else []
-                    new_rows = []
-                    for t in valid_teachers:
-                        if t not in master_teacher_names:
-                            new_rows.append({
-                                "講師名": t, "1:1単価": base_price_1on1, "1:2単価": base_price_1on2, 
-                                "1:3単価": base_price_1on3, "交通費": 0, "役職手当": 0
-                            })
-                    if new_rows:
-                        df_instructors = pd.concat([df_instructors, pd.DataFrame(new_rows)], ignore_index=True)
+                # 新しい先生をマスタに自動追加する処理
+                master_teacher_names = df_instructors['講師名'].astype(str).tolist() if not df_instructors.empty else []
+                new_rows = []
+                for t in valid_teachers:
+                    if t not in master_teacher_names:
+                        new_rows.append({
+                            "講師名": t, "1:1単価": base_price_1on1, "1:2単価": base_price_1on2, 
+                            "1:3単価": base_price_1on3, "交通費": 0, "役職手当": 0
+                        })
+                if new_rows:
+                    df_instructors = pd.concat([df_instructors, pd.DataFrame(new_rows)], ignore_index=True)
 
     st.divider()
 
-    # --- 3. 👨‍🏫 講師ごとの単価・設定（データが無くてもここは必ず表示！） ---
+    # --- 3. 👨‍🏫 講師ごとの単価・設定 ---
     st.subheader("👨‍🏫 講師ごとの単価・設定")
     with st.form("master_edit_form"):
         st.info("💡 単価を変更した後は、必ず下の「保存する」ボタンを押してください。")
@@ -139,12 +134,12 @@ def render_salary_dashboard_page():
         submit_btn = st.form_submit_button("💾 変更をスプレッドシート（マスタ）に保存する", type="primary")
 
     if submit_btn:
-        with st.spinner("☁️ スプレッドシートに保存中...（通信状況により数秒かかります）"):
-            # 🌟 保存処理も自動リトライで保護
+        with st.spinner("☁️ スプレッドシートに保存中..."):
+            # 保存処理を自動リトライで保護
             success = robust_api_call(update_instructor_master, current_editor_df, fallback_value=False)
             
             if success is not False:
-                st.cache_data.clear() 
+                st.cache_data.clear() # 保存後はキャッシュをクリアして最新状態に
                 time.sleep(1)
                 st.success("✅ スプレッドシートを更新しました！")
                 st.rerun() 
@@ -153,7 +148,7 @@ def render_salary_dashboard_page():
 
     st.divider()
 
-    # --- 4. 給与計算と表示（データが準備できた場合のみ実行） ---
+    # --- 4. 給与計算と表示 ---
     if df_month_exploded is not None and not df_month_exploded.empty and selected_month:
         summary_list = []
         for teacher in valid_teachers:
@@ -226,8 +221,8 @@ def render_salary_dashboard_page():
             st.divider()
             st.subheader("📢 先生のページへ給与データを公開")
             if st.button(f"🚀 {selected_month} の給与を確定して公開する", use_container_width=True):
-                with st.spinner("☁️ データを送信中...（通信状況により数秒かかります）"):
-                    # 🌟 公開処理も自動リトライで保護
+                with st.spinner("☁️ データを送信中..."):
+                    # 公開処理も自動リトライで保護
                     success = robust_api_call(publish_salary_data, selected_month, df_summary, fallback_value=False)
                     
                     if success is not False:
