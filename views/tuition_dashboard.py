@@ -17,7 +17,8 @@ from utils.g_sheets import (
 from utils.pdf_generator import generate_invoice_pdf
 
 # --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
-@st.cache_data(show_spinner=False)
+# 💡 フリーズ感を防ぐため show_spinner にメッセージを追加
+@st.cache_data(show_spinner="☁️ 授業データを集計中...")
 def fetch_all_student_data_cached(student_names):
     """
     全生徒の授業データを一括取得してキャッシュする関数。
@@ -50,54 +51,67 @@ def fetch_all_student_data_cached(student_names):
 def render_tuition_dashboard_page():
     st.header("💴 月謝（請求額）管理ダッシュボード")
 
-    # --- 🛠 データ更新管理 ---
-    # キャッシュをクリアして強制的に再読み込みするためのボタン
-    if st.sidebar.button("🔄 データを最新に更新"):
-        st.cache_data.clear()
-        st.rerun()
-
     # --- 1. 基本マスタデータの取得（防御付き） ---
     student_names = robust_api_call(get_all_student_names, fallback_value=[])
     student_master = robust_api_call(get_student_master_data, fallback_value={})
     price_master = robust_api_call(load_price_master, fallback_value=pd.DataFrame())
     
-    if not student_names: 
-        st.warning("生徒データが見つからないか、通信エラーが発生しました。左側のボタンで更新してください。")
-        return
-
     # マスタのゆらぎ補正
-    if not price_master.empty:
+    if not price_master.empty and '学年' in price_master.columns and 'コマ数' in price_master.columns:
         price_master['学年'] = price_master['学年'].astype(str).apply(lambda x: unicodedata.normalize('NFKC', x).strip())
         price_master['コマ数'] = pd.to_numeric(price_master['コマ数'], errors='coerce').fillna(0).astype(int)
 
-    # --- 2. 授業データの集計（キャッシュ・防御付き） ---
-    # キャッシュ関数を呼び出す
-    all_data_list = fetch_all_student_data_cached(student_names)
-    
-    if all_data_list:
-        df_all = pd.concat(all_data_list, ignore_index=True)
-        df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
-        df_all = df_all.dropna(subset=['日時'])
-        df_all['年月'] = df_all['日時'].dt.strftime("%Y年%m月")
-        month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
-    else:
-        from datetime import datetime
-        month_options = [datetime.now().strftime("%Y年%m月")]
+    # --- 2. 授業データの集計と年月リストの作成 ---
+    month_options = ["データなし"]
+    df_all = pd.DataFrame()
+    all_data_list = []
 
-    # --- 3. UI: 請求月の選択 ---
-    selected_month = st.selectbox("📅 請求月を選択", month_options)
+    if student_names:
+        all_data_list = fetch_all_student_data_cached(student_names)
+        if all_data_list:
+            df_all = pd.concat(all_data_list, ignore_index=True)
+            if '日時' in df_all.columns:
+                df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
+                df_all = df_all.dropna(subset=['日時'])
+                df_all['年月'] = df_all['日時'].dt.strftime("%Y年%m月")
+                month_options = sorted(df_all['年月'].unique().tolist(), reverse=True)
+        else:
+            from datetime import datetime
+            month_options = [datetime.now().strftime("%Y年%m月")]
+
+    # --- 3. 🌟 UI: 請求月の選択と更新ボタン（上部に横並び配置） ---
+    col_month, col_btn = st.columns([2, 1], vertical_alignment="bottom")
     
-    if all_data_list:
+    with col_month:
+        selected_month = st.selectbox("📅 請求月を選択", month_options)
+        
+    with col_btn:
+        if st.button("🔄 最新データに更新", type="primary", use_container_width=True):
+            # このページ用のキャッシュだけをピンポイントでクリア
+            fetch_all_student_data_cached.clear()
+            st.toast("最新データを取得します...", icon="⏳")
+            st.rerun()
+
+    st.divider()
+
+    # --- ⚠️ エラーハンドリング（ボタンの下に配置して常に更新可能にする） ---
+    if not student_names: 
+        st.warning("⚠️ 生徒データが見つからないか、通信エラーが発生しました。上の更新ボタンを押して再試行してください。")
+        return
+        
+    if selected_month == "データなし":
+        st.info("集計対象のデータがありません。")
+        return
+
+    # --- 4. 請求額の計算ロジック ---
+    if all_data_list and not df_all.empty:
         df_month = df_all[df_all['年月'] == selected_month]
     else:
         df_month = pd.DataFrame(columns=['生徒名'])
 
-    st.divider()
     st.subheader(f"👤 {selected_month} の請求設定")
-
     force_recalc = st.checkbox("🔄 過去の保存データを無視して、現在の料金マスタで強制的に再計算する")
 
-    # --- 4. 請求額の計算ロジック ---
     actual_koma_dict = {s: len(df_month[df_month['生徒名'] == s]) for s in student_names}
     
     # 保存済みデータの読み込みを防御
@@ -192,17 +206,17 @@ def render_tuition_dashboard_page():
             use_container_width=True,
             disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数", "➕ 追加コマ", "🉐 割引コマ"] 
         )
-        submitted = st.form_submit_button("💾 確定して保存", use_container_width=True)
+        submitted = st.form_submit_button("💾 確定して保存", type="primary", use_container_width=True)
                 
         if submitted:
-            with st.spinner("保存中..."):
+            with st.spinner("☁️ 保存中..."):
                 save_df = edited_df.drop(columns=["📝 実際の受講数"])
                 # 保存処理を防御
                 success = robust_api_call(save_billing_data, selected_month, save_df, fallback_value=False)
                 
-                if success:
+                if success is not False:
                     st.success("✅ 保存しました！")
-                    st.cache_data.clear() # 保存後はキャッシュを消して最新状態にする
+                    st.cache_data.clear() # 月謝データの保存後は関連する他画面にも影響が出るため全体クリア推奨
                     time.sleep(1)
                     st.rerun()
                 else:
@@ -228,7 +242,8 @@ def render_tuition_dashboard_page():
                     label=f"📥 {target_student} 様の請求書をダウンロード",
                     data=pdf_file,
                     file_name=f"請求書_{selected_month}_{target_student}.pdf",
-                    mime="application/pdf"
+                    mime="application/pdf",
+                    type="primary" # こちらも目立たせました
                 )
             except Exception as e:
-                st.error(f"PDF生成エラー: {e}")
+                st.error(f"⚠️ PDF生成エラー: {e}")
