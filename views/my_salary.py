@@ -7,7 +7,8 @@ from utils.g_sheets import load_published_salary
 from utils.pdf_generator import generate_payslip_pdf
 
 # --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
-@st.cache_data(show_spinner=False)
+# 💡 スピナーのメッセージを追加してフリーズ感を解消
+@st.cache_data(show_spinner="☁️ 給与データを取得中...")
 def fetch_published_salary_cached():
     """公開済みの給与データを取得・キャッシュ・防御"""
     return robust_api_call(load_published_salary, fallback_value=pd.DataFrame())
@@ -19,41 +20,54 @@ def render_my_salary_page():
     st.header(f"💴 {teacher_name} 先生の給与確認")
     st.write("※教室長から公開された確定済みの給与明細を表示しています。")
 
-    # --- 🛠 データ更新管理 ---
-    if st.sidebar.button("🔄 給与明細を最新に更新"):
-        st.cache_data.clear()
-        st.rerun()
-
     # 1. 公開された給与データを読み込む（キャッシュ＆防御経由で爆速！）
     df_all_salaries = fetch_published_salary_cached()
     
+    # --------------------------------------------------------
+    # 🌟 操作パネル（月選択 ＆ 更新ボタン）を画面上部に配置
+    # --------------------------------------------------------
+    month_options = ["データなし"]
+    my_data = pd.DataFrame()
+    
+    # データが存在する場合のみ、自分のデータに絞り込んで月のリストを作成
+    if not df_all_salaries.empty and '👨‍🏫 担当講師' in df_all_salaries.columns:
+        my_data = df_all_salaries[df_all_salaries['👨‍🏫 担当講師'] == teacher_name]
+        if not my_data.empty and '年月' in my_data.columns:
+            my_data = my_data.sort_values('年月', ascending=False).reset_index(drop=True)
+            month_options = my_data['年月'].unique().tolist()
+
+    col_month, col_btn = st.columns([2, 1], vertical_alignment="bottom")
+    
+    with col_month:
+        selected_month = st.selectbox("📅 確認する月を選択してください", month_options)
+        
+    with col_btn:
+        if st.button("🔄 最新データに更新", type="primary", use_container_width=True):
+            # このページ用のキャッシュだけをピンポイントでクリア
+            fetch_published_salary_cached.clear()
+            st.toast("最新データを取得します...", icon="⏳")
+            st.rerun()
+
+    st.divider()
+    # --------------------------------------------------------
+
+    # --- ⚠️ エラーハンドリング（ボタンの下に配置することで、エラー時も更新ボタンを押せるようにする） ---
     if df_all_salaries.empty:
-        st.warning("現在、公開されている給与データはありません。通信エラーの可能性もあるため、左側のボタンで更新をお試しください。")
+        st.warning("現在、公開されている給与データはありません。通信エラーの可能性もあるため、上のボタンで更新をお試しください。")
         return
         
-    # 2. 自分のデータだけに絞り込む
-    # 💡 スプレッドシート側のカラム名が変更されてもクラッシュしないための防御
     if '👨‍🏫 担当講師' not in df_all_salaries.columns:
         st.error("⚠️ データに「担当講師」の項目が見つかりません。システム管理者（教室長）にお問い合わせください。")
         return
         
-    my_data = df_all_salaries[df_all_salaries['👨‍🏫 担当講師'] == teacher_name]
-    
     if my_data.empty:
         st.info(f"現在、{teacher_name} 先生の公開済み給与データはありません。")
         return
 
-    # 年月で降順（新しい月を上に）並び替え
-    if '年月' in my_data.columns:
-        my_data = my_data.sort_values('年月', ascending=False).reset_index(drop=True)
-        month_options = my_data['年月'].unique().tolist()
-    else:
-        st.error("⚠️ データに「年月」の項目が見つかりません。")
+    if selected_month == "データなし":
         return
-    
-    # 3. 表示月を選択（デフォルトは一番新しい月）
-    selected_month = st.selectbox("📅 確認する月を選択してください", month_options)
-    
+
+    # --- 📊 給与データの表示 ---
     # 選んだ月のデータ行を取得
     selected_row = my_data[my_data['年月'] == selected_month].iloc[0]
     
