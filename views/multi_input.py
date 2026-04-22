@@ -131,7 +131,12 @@ def render_multi_input_page(textbook_master):
                                     # 数字以外（"プリント"等）が入っている場合の安全対策
                                     last_page_num = int(last_page) if str(last_page).isdigit() else 0
 
-                                    st.info(f"💡 **【前回 ({subject}) の引継ぎ事項】**\n\n{last_note}")
+                                    st.info(
+                                        f"💡 **【前回 ({subject}) の引継ぎ・宿題】**\n\n"
+                                        f"📚 **宿題テキスト:** {last_hw_text}\n"
+                                        f"🎯 **宿題の範囲:** {last_hw_pages}\n\n"
+                                        f"💬 **引継ぎメモ:**\n{last_note}"
+                                    )
 
                                     # 🌟 さらに改善: 複数テキスト対応＆個別の進捗入力 ＋ 新規テキスト入力機能！
                                     st.write("📚 **使用テキストと進捗**")
