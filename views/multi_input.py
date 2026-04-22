@@ -138,16 +138,23 @@ def render_multi_input_page(textbook_master):
                                         f"💬 **引継ぎメモ:**\n{last_note}"
                                     )
                                     
+                                    # 🤖 【賢く進化】「出した宿題P」の自動計算ロジック
+                                    assigned_p = 0
+                                    # "P.10〜20" や "10-20" などの文字列から、開始と終了の数字を抜き出す
+                                    match = re.search(r'(\d+)\s*[〜~-]\s*(\d+)', str(last_hw_pages))
+                                    if match:
+                                        a_start, a_end = int(match.group(1)), int(match.group(2))
+                                        if a_end >= a_start:
+                                            assigned_p = a_end - a_start + 1
+
+                                    # 🌟 【完全復活】宿題の達成状況入力（入力は「やった分」だけ！）
                                     st.write("📝 **今回の宿題達成状況**")
-                                    c_hw1, c_hw2, c_hw3 = st.columns(3)
+                                    c_hw1, c_hw2 = st.columns(2)
                                     
                                     with c_hw1:
                                         done_start = st.number_input("やった宿題 開始P", min_value=0, value=0, key=f"done_start_{i}")
                                     with c_hw2:
                                         done_end = st.number_input("やった宿題 終了P", min_value=0, value=0, key=f"done_end_{i}")
-                                    with c_hw3:
-                                        # やる気ランクの計算（割り算）には分母となる「出した宿題P」も必要なので復活させます
-                                        assigned_p = st.number_input("出されていた宿題P", min_value=0, value=0, key=f"assigned_p_{i}")
                                     
                                     # 開始Pと終了Pから「何ページやってきたか（completed_p）」を自動計算
                                     if done_end >= done_start and done_end > 0:
@@ -155,7 +162,7 @@ def render_multi_input_page(textbook_master):
                                     else:
                                         completed_p = 0
                                         
-                                    st.caption(f"📊 シートに保存されるデータ ➡ 出した宿題: **{assigned_p}** P / やった宿題: **{completed_p}** P")
+                                    st.caption(f"📊 シートに保存されるデータ ➡ 出した宿題(自動計算): **{assigned_p}** P / やった宿題: **{completed_p}** P")
 
                                     st.divider() # 区切り線
 
@@ -353,7 +360,7 @@ def render_multi_input_page(textbook_master):
                         keys_to_reset = [
                             f"name_{i}", f"att_{i}", f"late_{i}", f"sub_{i}", f"texts_{i}", 
                             f"done_start_{i}", f"done_end_{i}", f"adv_start_{i}", f"adv_end_{i}", 
-                            f"num_q_{i}", f"conc_{i}", f"reac_{i}", f"assigned_p_{i}",
+                            f"num_q_{i}", f"conc_{i}", f"reac_{i}",
                             f"hw_text_{i}", f"n_start_{i}", f"n_end_{i}",
                             f"advc_{i}", f"p_msg_{i}", f"next_h_{i}",
                             f"new_usage_text_{i}" # 👈 忘れずに新規入力用のキーもリセット！
