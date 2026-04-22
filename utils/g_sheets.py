@@ -24,10 +24,7 @@ SPREADSHEET_ID = '1tnhK-rvf_cSXmuY9REkD_cK6Wg4XP7alc1UHTpSRrv4'
 @st.cache_resource
 def get_gc_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    # ❌ 修正前：PCの中のファイルを探しに行く
-    # credentials = Credentials.from_service_account_file('secret.json', scopes=scopes)
     
-    # ⭕ 修正後：Streamlitの秘密の金庫から鍵のデータを取り出して読み込む！
     secret_dict = json.loads(st.secrets["gcp_service_account_json"])
     credentials = Credentials.from_service_account_info(secret_dict, scopes=scopes)
     return gspread.authorize(credentials)
