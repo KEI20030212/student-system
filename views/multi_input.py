@@ -103,7 +103,7 @@ def render_multi_input_page(textbook_master):
                                     "quiz_records": [], "w_nums_for_sheet": "", "attendance": attendance,
                                     "late_time": late_time, "concentration": "-", "reaction": "-",
                                     "advice": "-", "parent_msg": "-", "next_handover": "-",
-                                    "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
+                                    "assigned_p": assigned_p, "completed_p": 0, "motivation_rank": 0, 
                                     "next_hw_text": "-", "next_hw_pages": "-"
                                 })
                             else:
@@ -137,6 +137,27 @@ def render_multi_input_page(textbook_master):
                                         f"🎯 **宿題の範囲:** {last_hw_pages}\n\n"
                                         f"💬 **引継ぎメモ:**\n{last_note}"
                                     )
+                                    
+                                    st.write("📝 **今回の宿題達成状況**")
+                                    c_hw1, c_hw2, c_hw3 = st.columns(3)
+                                    
+                                    with c_hw1:
+                                        done_start = st.number_input("やった宿題 開始P", min_value=0, value=0, key=f"done_start_{i}")
+                                    with c_hw2:
+                                        done_end = st.number_input("やった宿題 終了P", min_value=0, value=0, key=f"done_end_{i}")
+                                    with c_hw3:
+                                        # やる気ランクの計算（割り算）には分母となる「出した宿題P」も必要なので復活させます
+                                        assigned_p = st.number_input("出されていた宿題P", min_value=0, value=0, key=f"assigned_p_{i}")
+                                    
+                                    # 開始Pと終了Pから「何ページやってきたか（completed_p）」を自動計算
+                                    if done_end >= done_start and done_end > 0:
+                                        completed_p = done_end - done_start + 1
+                                    else:
+                                        completed_p = 0
+                                        
+                                    st.caption(f"📊 シートに保存されるデータ ➡ 出した宿題: **{assigned_p}** P / やった宿題: **{completed_p}** P")
+
+                                    st.divider() # 区切り線
 
                                     # 🌟 さらに改善: 複数テキスト対応＆個別の進捗入力 ＋ 新規テキスト入力機能！
                                     st.write("📚 **使用テキストと進捗**")
@@ -259,7 +280,7 @@ def render_multi_input_page(textbook_master):
                                         "w_nums_for_sheet": w_nums_for_sheet, "attendance": attendance,
                                         "late_time": late_time, "concentration": concentration or "-", "reaction": reaction or "-",
                                         "advice": advice, "parent_msg": parent_msg, "next_handover": next_handover,
-                                        "assigned_p": 0, "completed_p": 0, "advanced_p_str": advanced_p_str,
+                                        "assigned_p": 0, "completed_p": completed_p, "advanced_p_str": advanced_p_str,
                                         "motivation_rank": motivation_rank, 
                                         "next_hw_text": selected_hw_text or "-", 
                                         "next_hw_pages": next_hw_pages_str
@@ -332,7 +353,7 @@ def render_multi_input_page(textbook_master):
                         keys_to_reset = [
                             f"name_{i}", f"att_{i}", f"late_{i}", f"sub_{i}", f"texts_{i}", 
                             f"done_start_{i}", f"done_end_{i}", f"adv_start_{i}", f"adv_end_{i}", 
-                            f"num_q_{i}", f"conc_{i}", f"reac_{i}",
+                            f"num_q_{i}", f"conc_{i}", f"reac_{i}", f"assigned_p_{i}",
                             f"hw_text_{i}", f"n_start_{i}", f"n_end_{i}",
                             f"advc_{i}", f"p_msg_{i}", f"next_h_{i}",
                             f"new_usage_text_{i}" # 👈 忘れずに新規入力用のキーもリセット！
