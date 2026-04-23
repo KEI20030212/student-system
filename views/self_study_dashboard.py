@@ -121,7 +121,6 @@ def render_self_study_dashboard():
     progress_bar = st.progress(0, text="🚀 データの集計を準備中...")
     
     with st.spinner("あらゆる学習データをかき集めています..."):
-        # プログレスバー更新：20%
         progress_bar.progress(20, text="☁️ 自習データを取得中...")
         df_self_study = load_self_study_data()
         if not df_self_study.empty:
@@ -130,25 +129,32 @@ def render_self_study_dashboard():
             df_self_study['年月'] = df_self_study['日付'].dt.strftime('%Y年%m月')
             df_self_study['自習時間(分)'] = pd.to_numeric(df_self_study['自習時間(分)'], errors='coerce').fillna(0)
         
-        # プログレスバー更新：60%
         progress_bar.progress(60, text="☁️ 授業データを取得中...")
         df_classes = load_entire_log_data()
+        
         if not df_classes.empty:
-            # 💡 【改善1】列名の揺れを吸収！「名前」を「生徒名」にリネーム
+            # 🔥 【ここが重要！】重複エラーを物理的に回避する処理
+            # 1. 完全に同じ列名が複数あったら、最初の1つ以外を捨てる
+            df_classes = df_classes.loc[:, ~df_classes.columns.duplicated()]
+            
+            # 2. 「名前」列を「生徒名」にリネームする
             if '名前' in df_classes.columns:
+                # もし「生徒名」という列が既にあるなら、リネーム前に消しておく（重複防止）
+                if '生徒名' in df_classes.columns:
+                    df_classes = df_classes.drop(columns=['生徒名'])
                 df_classes = df_classes.rename(columns={'名前': '生徒名'})
             
-            # 💡 【改善2】「日時」と「日付」どちらの列名でも対応できるようにする
+            # 3. 日付列の処理（「日時」か「日付」どちらかある方を使う）
             date_col = '日時' if '日時' in df_classes.columns else ('日付' if '日付' in df_classes.columns else None)
             
             if date_col:
-                # errors='coerce' で文字列など日付に変換できないものを除外
                 df_classes[date_col] = pd.to_datetime(df_classes[date_col], errors='coerce')
                 df_classes = df_classes.dropna(subset=[date_col])
                 df_classes['年月'] = df_classes[date_col].dt.strftime('%Y年%m月')
 
-        # プログレスバー更新：90%
         progress_bar.progress(90, text="⚙️ データを合算・計算中...")
+
+    # --- 以下、3. データの絞り込みと合算 へ続く ---
 
     if df_self_study.empty and df_classes.empty:
         progress_bar.empty()
