@@ -129,22 +129,36 @@ def render_self_study_dashboard():
             df_self_study['年月'] = df_self_study['日付'].dt.strftime('%Y年%m月')
             df_self_study['自習時間(分)'] = pd.to_numeric(df_self_study['自習時間(分)'], errors='coerce').fillna(0)
         
+        # プログレスバー更新：60%
         progress_bar.progress(60, text="☁️ 授業データを取得中...")
         df_classes = load_entire_log_data()
         
         if not df_classes.empty:
-            # 🔥 【ここが重要！】重複エラーを物理的に回避する処理
-            # 1. 完全に同じ列名が複数あったら、最初の1つ以外を捨てる
+            # 🛡️ 【究極の防衛策 1】インデックス（行番号）が悪さをしないようにリセット
+            df_classes = df_classes.reset_index(drop=True)
+            
+            # 🛡️ 【究極の防衛策 2】列名の前後に隠れている「見えない空白」をすべて抹殺
+            df_classes.columns = [str(c).strip() for c in df_classes.columns]
+            
+            # 🛡️ 【究極の防衛策 3】完全な重複列をここで物理的に排除
             df_classes = df_classes.loc[:, ~df_classes.columns.duplicated()]
             
-            # 2. 「名前」列を「生徒名」にリネームする
+            # --- 列名の統一処理 ---
             if '名前' in df_classes.columns:
-                # もし「生徒名」という列が既にあるなら、リネーム前に消しておく（重複防止）
                 if '生徒名' in df_classes.columns:
-                    df_classes = df_classes.drop(columns=['生徒名'])
-                df_classes = df_classes.rename(columns={'名前': '生徒名'})
+                    # 「名前」と「生徒名」両方ある場合は、「名前」列の方を削除して統一
+                    df_classes = df_classes.drop(columns=['名前'])
+                else:
+                    # 「生徒名」がない場合は、「名前」を「生徒名」にリネーム
+                    df_classes = df_classes.rename(columns={'名前': '生徒名'})
             
-            # 3. 日付列の処理（「日時」か「日付」どちらかある方を使う）
+            # 🛡️ 【究極の防衛策 4】万が一「生徒名」が複数列（2D）の塊になっていたら、最初の1列だけを引っこ抜く
+            if '生徒名' in df_classes.columns and isinstance(df_classes['生徒名'], pd.DataFrame):
+                clean_series = df_classes['生徒名'].iloc[:, 0].copy() # 1列目だけ確保
+                df_classes = df_classes.drop(columns=['生徒名'])      # 一旦全部消す
+                df_classes['生徒名'] = clean_series                    # 綺麗な1列だけ戻す
+
+            # --- 日付の処理 ---
             date_col = '日時' if '日時' in df_classes.columns else ('日付' if '日付' in df_classes.columns else None)
             
             if date_col:
@@ -153,7 +167,6 @@ def render_self_study_dashboard():
                 df_classes['年月'] = df_classes[date_col].dt.strftime('%Y年%m月')
 
         progress_bar.progress(90, text="⚙️ データを合算・計算中...")
-
     # --- 以下、3. データの絞り込みと合算 へ続く ---
 
     if df_self_study.empty and df_classes.empty:
