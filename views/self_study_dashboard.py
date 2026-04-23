@@ -124,10 +124,19 @@ def render_self_study_dashboard():
         # プログレスバー更新：60%
         progress_bar.progress(60, text="☁️ 授業データを取得中...")
         df_classes = load_entire_log_data()
-        if not df_classes.empty and '日時' in df_classes.columns:
-            df_classes['日時'] = pd.to_datetime(df_classes['日時'], format='mixed', errors='coerce')
-            df_classes = df_classes.dropna(subset=['日時'])
-            df_classes['年月'] = df_classes['日時'].dt.strftime('%Y年%m月')
+        if not df_classes.empty:
+            # 💡 【改善1】列名の揺れを吸収！「名前」を「生徒名」にリネーム
+            if '名前' in df_classes.columns:
+                df_classes = df_classes.rename(columns={'名前': '生徒名'})
+            
+            # 💡 【改善2】「日時」と「日付」どちらの列名でも対応できるようにする
+            date_col = '日時' if '日時' in df_classes.columns else ('日付' if '日付' in df_classes.columns else None)
+            
+            if date_col:
+                # errors='coerce' で文字列など日付に変換できないものを除外
+                df_classes[date_col] = pd.to_datetime(df_classes[date_col], errors='coerce')
+                df_classes = df_classes.dropna(subset=[date_col])
+                df_classes['年月'] = df_classes[date_col].dt.strftime('%Y年%m月')
 
         # プログレスバー更新：90%
         progress_bar.progress(90, text="⚙️ データを合算・計算中...")
@@ -148,10 +157,15 @@ def render_self_study_dashboard():
     else:
         ss_grouped = pd.DataFrame(columns=['生徒名', '自習時間(分)'])
 
-    if mode == "自習時間 ＋ 授業時間" and not df_classes.empty:
+    # 💡 df_classes に「生徒名」が含まれているかもチェック条件に追加
+    if mode == "自習時間 ＋ 授業時間" and not df_classes.empty and '生徒名' in df_classes.columns:
         df_cl_filtered = df_classes.copy()
         if selected_month != "すべての期間（累計）":
             df_cl_filtered = df_cl_filtered[df_cl_filtered['年月'] == selected_month]
+        
+        # 💡 【改善3】欠席したコマを計算から除外！（出欠列に「出席」という文字が含まれるものだけ残す）
+        if '出欠' in df_cl_filtered.columns:
+            df_cl_filtered = df_cl_filtered[df_cl_filtered['出欠'].astype(str).str.contains('出席', na=False)]
         
         cl_grouped = df_cl_filtered.groupby('生徒名').size().reset_index(name='コマ数')
         cl_grouped['授業時間(分)'] = cl_grouped['コマ数'] * 90
