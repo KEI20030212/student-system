@@ -41,10 +41,19 @@ def render_self_study_dashboard():
             * { background-color: transparent !important; }
             .main .block-container { padding-top: 0 !important; margin-top: 0 !important; gap: 0 !important; max-width: 100% !important; }
             header, [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
-            .stButton, [data-testid="stSelectbox"], [data-testid="stMultiSelect"], [data-testid="stRadio"], [data-testid="stDataFrame"], [data-testid="stSpinner"], hr { display: none !important; }
+            
+            /* 🌟 ここから [data-testid="stDataFrame"] を消し、表が隠れないようにしました */
+            .stButton, [data-testid="stSelectbox"], [data-testid="stMultiSelect"], [data-testid="stRadio"], [data-testid="stSpinner"], hr { display: none !important; }
             h1, h2, h3, h4, h5, h6, p, [data-testid="stMarkdownContainer"] p { display: none !important; margin: 0 !important; padding: 0 !important; }
+            
             .print-title { display: block !important; text-align: center !important; color: black !important; font-size: 26px !important; font-weight: bold !important; margin-top: 0px !important; margin-bottom: 10px !important; padding: 0 !important; }
+            /* 🌟 表の見出し用のスタイルを追加 */
+            .print-table-title { display: block !important; color: black !important; font-size: 20px !important; font-weight: bold !important; margin-top: 20px !important; margin-bottom: 10px !important; }
+            
             [data-testid="stArrowVegaLiteChart"] { display: block !important; width: 100% !important; margin: 0 auto !important; padding: 0 !important; }
+            
+            /* 🌟 表全体が綺麗に印刷されるための設定 */
+            [data-testid="stTable"], [data-testid="stDataFrame"] { display: block !important; width: 100% !important; }
         }
         </style>
     """, unsafe_allow_html=True)
@@ -255,7 +264,9 @@ def render_self_study_dashboard():
     # ==========================================
     # 5. 詳細データ表の表示
     # ==========================================
-    st.markdown("### 📋 詳細データ")
+    # 🌟 印刷時にも消えない専用の見出しに変更
+    st.markdown("<div class='print-table-title'>📋 詳細データ</div>", unsafe_allow_html=True)
+    
     display_df = merged.sort_values(by='合計時間(分)', ascending=False).reset_index(drop=True)
     display_df.index = display_df.index + 1
     
@@ -264,4 +275,5 @@ def render_self_study_dashboard():
     else:
         cols_to_show = ['生徒名', '学年', '自習時間(分)']
         
-    st.dataframe(display_df[cols_to_show], use_container_width=True)
+    # 🌟 印刷で途切れないように st.dataframe から st.table に変更！
+    st.table(display_df[cols_to_show])
