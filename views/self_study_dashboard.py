@@ -37,23 +37,45 @@ def render_self_study_dashboard():
     st.markdown("""
         <style>
         @media print {
+            /* 1. 全体の基本設定（背景を透明にし、文字を黒に） */
             [data-testid="stAlert"] { display: none !important; }
-            * { background-color: transparent !important; }
-            .main .block-container { padding-top: 0 !important; margin-top: 0 !important; gap: 0 !important; max-width: 100% !important; }
+            * { background-color: transparent !important; color: black !important; }
+            .main .block-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+            
+            /* 2. 不要なUI（ボタン、メニュー、サイドバーなど）を消す */
             header, [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
-            
-            /* 🌟 ここから [data-testid="stDataFrame"] を消し、表が隠れないようにしました */
             .stButton, [data-testid="stSelectbox"], [data-testid="stMultiSelect"], [data-testid="stRadio"], [data-testid="stSpinner"], hr { display: none !important; }
-            h1, h2, h3, h4, h5, h6, p, [data-testid="stMarkdownContainer"] p { display: none !important; margin: 0 !important; padding: 0 !important; }
             
-            .print-title { display: block !important; text-align: center !important; color: black !important; font-size: 26px !important; font-weight: bold !important; margin-top: 0px !important; margin-bottom: 10px !important; padding: 0 !important; }
-            /* 🌟 表の見出し用のスタイルを追加 */
-            .print-table-title { display: block !important; color: black !important; font-size: 20px !important; font-weight: bold !important; margin-top: 20px !important; margin-bottom: 10px !important; }
+            /* 3. 余計な文字を消す（※表の中身が消えないように、pタグの消し方を調整しました！） */
+            h1, h2, h3, h4, h5, h6 { display: none !important; }
+            [data-testid="stMarkdownContainer"] p { display: none !important; }
             
-            [data-testid="stArrowVegaLiteChart"] { display: block !important; width: 100% !important; margin: 0 auto !important; padding: 0 !important; }
+            /* 4. 印刷用の専用見出しスタイル */
+            .print-title { display: block !important; text-align: center !important; font-size: 22px !important; font-weight: bold !important; margin-bottom: 20px !important; }
+            .print-table-title { display: block !important; font-size: 18px !important; font-weight: bold !important; margin-top: 30px !important; margin-bottom: 10px !important; }
             
-            /* 🌟 表全体が綺麗に印刷されるための設定 */
-            [data-testid="stTable"], [data-testid="stDataFrame"] { display: block !important; width: 100% !important; }
+            /* 5. グラフの幅を自動調整 */
+            [data-testid="stArrowVegaLiteChart"] { display: block !important; width: 100% !important; margin: 0 auto !important; }
+            
+            /* 🌟 6. 表（st.table）が綺麗に印刷されるための究極設定 */
+            [data-testid="stTable"] { 
+                display: block !important; 
+                overflow: visible !important; 
+                height: auto !important; 
+            }
+            [data-testid="stTable"] table { 
+                width: 100% !important; 
+                border-collapse: collapse !important; /* 枠線を1本線にピシッと揃える */
+            }
+            [data-testid="stTable"] th, [data-testid="stTable"] td { 
+                border: 1px solid #333 !important; /* 表の枠線を黒くハッキリさせる */
+                padding: 6px 10px !important; 
+                text-align: left !important;
+            }
+            /* 行の途中でページが切れないようにする（2ページ目にまたがる対策） */
+            [data-testid="stTable"] tr { 
+                page-break-inside: avoid !important; 
+            }
         }
         </style>
     """, unsafe_allow_html=True)
