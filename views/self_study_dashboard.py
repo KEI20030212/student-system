@@ -33,48 +33,57 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法 ---
+    # --- 🖨️ 印刷用の魔法（最終形態） ---
     st.markdown("""
         <style>
         @media print {
-            /* 1. 全体の基本設定（背景を透明にし、文字を黒に） */
-            [data-testid="stAlert"] { display: none !important; }
-            * { background-color: transparent !important; color: black !important; }
-            .main .block-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-            
-            /* 2. 不要なUI（ボタン、メニュー、サイドバーなど）を消す */
-            header, [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
-            .stButton, [data-testid="stSelectbox"], [data-testid="stMultiSelect"], [data-testid="stRadio"], [data-testid="stSpinner"], hr { display: none !important; }
-            
-            /* 3. 余計な文字を消す（※表の中身が消えないように、pタグの消し方を調整しました！） */
-            h1, h2, h3, h4, h5, h6 { display: none !important; }
-            [data-testid="stMarkdownContainer"] p { display: none !important; }
-            
-            /* 4. 印刷用の専用見出しスタイル */
-            .print-title { display: block !important; text-align: center !important; font-size: 22px !important; font-weight: bold !important; margin-bottom: 20px !important; }
-            .print-table-title { display: block !important; font-size: 18px !important; font-weight: bold !important; margin-top: 30px !important; margin-bottom: 10px !important; }
-            
-            /* 5. グラフの幅を自動調整 */
-            [data-testid="stArrowVegaLiteChart"] { display: block !important; width: 100% !important; margin: 0 auto !important; }
-            
-            /* 🌟 6. 表（st.table）が綺麗に印刷されるための究極設定 */
+            /* 🌟 1. 悪さをしていた「グラフの吹き出し」を強制的に消去！ */
+            #vg-tooltip-element, .vg-tooltip {
+                display: none !important;
+            }
+
+            /* 🌟 2. Streamlitの「スクロール箱」を解除して中身を全部出す（これが一番重要！） */
+            html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewBlockContainer"], .main, .block-container {
+                display: block !important;
+                height: auto !important;
+                min-height: auto !important;
+                overflow: visible !important;
+                position: static !important;
+            }
+
+            /* 3. 不要なメニュー、ボタン、設定フォーム、注意書きを非表示 */
+            header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
+            [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"] { 
+                display: none !important; 
+            }
+
+            /* 4. 背景色を透明、文字を黒にしてクッキリ印刷 */
+            * {
+                background-color: transparent !important;
+                color: black !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            /* 5. グラフの幅を紙に合わせる */
+            [data-testid="stArrowVegaLiteChart"] {
+                display: block !important;
+                width: 100% !important;
+                page-break-inside: avoid !important;
+            }
+
+            /* 6. 表（st.table）をエクセルのように綺麗な枠線で印刷 */
             [data-testid="stTable"] { 
                 display: block !important; 
-                overflow: visible !important; 
-                height: auto !important; 
+                width: 100% !important;
             }
             [data-testid="stTable"] table { 
                 width: 100% !important; 
-                border-collapse: collapse !important; /* 枠線を1本線にピシッと揃える */
+                border-collapse: collapse !important;
             }
             [data-testid="stTable"] th, [data-testid="stTable"] td { 
-                border: 1px solid #333 !important; /* 表の枠線を黒くハッキリさせる */
+                border: 1px solid #333 !important; 
                 padding: 6px 10px !important; 
-                text-align: left !important;
-            }
-            /* 行の途中でページが切れないようにする（2ページ目にまたがる対策） */
-            [data-testid="stTable"] tr { 
-                page-break-inside: avoid !important; 
             }
         }
         </style>
