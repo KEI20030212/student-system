@@ -99,13 +99,36 @@ def render_self_study_dashboard():
             if st.button("🔄 最新データに更新"):
                 get_all_student_grades.clear() # キャッシュを消去
                 st.rerun() # 画面をリロード
+                
         with btn_col2:
-            if st.button("🖨️ グラフを印刷"):
-                components.html("<script>window.parent.print();</script>", height=0)
+            # 🌟 【修正箇所】Streamlitをリロードさせない、魔法のHTMLボタン！
+            components.html(
+                """
+                <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
+                    <button onclick="window.parent.print()" style="
+                        background-color: white;
+                        border: 1px solid #dcdcdc;
+                        color: #31333F;
+                        padding: 0.35rem 0.75rem;
+                        font-size: 16px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        width: 100%;
+                        font-family: sans-serif;
+                        box-shadow: 0px 1px 2px rgba(0,0,0,0.05);
+                        transition: all 0.2s ease;
+                    " onmouseover="this.style.borderColor='#ff4b4b'; this.style.color='#ff4b4b';" 
+                      onmouseout="this.style.borderColor='#dcdcdc'; this.style.color='#31333F';">
+                        🖨️ グラフを印刷
+                    </button>
+                </div>
+                """,
+                height=45
+            )
+            
         st.caption("※スマホはブラウザの「共有」メニューからプリントしてください")
     
     st.write("自習時間と授業時間を合算したり、学年ごとに絞り込んだりできる究極のグラフです🔥")
-
     # ==========================================
     # 1. UI（コントローラー）の作成 
     # ==========================================
