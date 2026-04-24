@@ -33,7 +33,7 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（グラフとタイトルだけ印刷・特化版） ---
+    # --- 🖨️ 印刷用の魔法（グラフとタイトルだけ印刷・完全版） ---
     st.markdown("""
         <style>
         @media print {
@@ -51,18 +51,20 @@ def render_self_study_dashboard():
                 position: static !important;
             }
 
-            /* 🌟 3. 不要なものを【すべて非表示】にする */
+            /* 🌟 3. 不要なものを【すべて非表示】にする（ここを追加・強化しました！） */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
             [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"],
-            [data-testid="stTable"], /* ← 表を消す魔法 */
-            .print-table-title, /* ← 表の見出しを消す魔法 */
-            [data-testid="stMarkdownContainer"] p, /* ← 余計な説明文を消す魔法 */
-            .stProgress /* ← プログレスバーを消す魔法 */
+            [data-testid="stTable"], /* 表を消す */
+            .print-table-title, /* 表の見出しを消す */
+            [data-testid="stMarkdownContainer"] p, /* 余計な説明文を消す */
+            [data-testid="stMarkdownContainer"] h3, /* ← 💥「📊 学習時間ダッシュボード」を消す魔法 */
+            iframe, /* ← 💥「🖨️ グラフを印刷」ボタンごと消す魔法 */
+            .stProgress /* プログレスバーを消す */
             { 
                 display: none !important; 
             }
 
-            /* 🌟 4. グラフを印刷の主役にする */
+            /* 4. グラフを印刷の主役にする */
             [data-testid="stArrowVegaLiteChart"] {
                 display: block !important;
                 width: 100% !important;
@@ -76,7 +78,7 @@ def render_self_study_dashboard():
                 print-color-adjust: exact !important;
             }
 
-            /* 🌟 6. グラフのタイトル（🏆 勉強時間ランキング...）は綺麗に表示する */
+            /* 6. グラフのタイトル（🏆 勉強時間ランキング...）は綺麗に表示する */
             .print-title { 
                 display: block !important; 
                 text-align: center !important; 
