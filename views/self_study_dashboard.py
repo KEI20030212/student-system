@@ -33,16 +33,16 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（最終形態） ---
+    # --- 🖨️ 印刷用の魔法（表だけ印刷・特化版） ---
     st.markdown("""
         <style>
         @media print {
-            /* 🌟 1. 悪さをしていた「グラフの吹き出し」を強制的に消去！ */
+            /* 1. 吹き出しを強制的に消去 */
             #vg-tooltip-element, .vg-tooltip {
                 display: none !important;
             }
 
-            /* 🌟 2. Streamlitの「スクロール箱」を解除して中身を全部出す（これが一番重要！） */
+            /* 2. Streamlitの「スクロール箱」を解除して中身を全部出す */
             html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewBlockContainer"], .main, .block-container {
                 display: block !important;
                 height: auto !important;
@@ -51,9 +51,12 @@ def render_self_study_dashboard():
                 position: static !important;
             }
 
-            /* 3. 不要なメニュー、ボタン、設定フォーム、注意書きを非表示 */
+            /* 🌟 3. 不要なものを【すべて非表示】にする（グラフもここで消します！） */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
-            [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"] { 
+            [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"],
+            [data-testid="stArrowVegaLiteChart"], /* ← グラフを消す魔法 */
+            [data-testid="stMarkdownContainer"] p /* ← 余計な説明文を消す魔法 */
+            { 
                 display: none !important; 
             }
 
@@ -65,12 +68,17 @@ def render_self_study_dashboard():
                 print-color-adjust: exact !important;
             }
 
-            /* 5. グラフの幅を紙に合わせる */
-            [data-testid="stArrowVegaLiteChart"] {
-                display: block !important;
-                width: 100% !important;
-                page-break-inside: avoid !important;
+            /* 🌟 5. 表のタイトル（🏆 勉強時間ランキング...）は綺麗に表示する */
+            .print-title { 
+                display: block !important; 
+                text-align: center !important; 
+                font-size: 22px !important; 
+                font-weight: bold !important; 
+                margin-bottom: 20px !important; 
             }
+            
+            /* 「📋 詳細データ」という見出しは、今回は邪魔になるので消します */
+            .print-table-title { display: none !important; }
 
             /* 6. 表（st.table）をエクセルのように綺麗な枠線で印刷 */
             [data-testid="stTable"] { 
