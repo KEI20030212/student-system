@@ -33,22 +33,20 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（A4横向き・ピッタリ配置の最終完成版） ---
+    # --- 🖨️ 印刷用の魔法（1ページ強制ピタッと収めバージョン） ---
     st.markdown("""
         <style>
-        /* 🌟 0. 印刷時の用紙設定（A4・横向き） */
+        /* 🌟 1. 用紙設定（シンプルに landscape のみにするとブラウザが認識しやすくなります） */
         @media print {
             @page {
-                size: A4 landscape; /* 強制的にA4の横向き(Landscape)にする */
-                margin: 15mm;       /* 上下左右に15mmの綺麗な余白を作る */
+                size: landscape; 
+                margin: 10mm;       /* 余白を少し狭くして広く使う */
             }
 
-            /* 1. 吹き出し（ツールチップ）を強制的に消去 */
-            #vg-tooltip-element, .vg-tooltip {
-                display: none !important;
-            }
+            /* 吹き出しを消去 */
+            #vg-tooltip-element, .vg-tooltip { display: none !important; }
 
-            /* 🌟 2. Streamlitの「スクロール箱」を解除し、A4用紙の幅に合わせる */
+            /* スクロール解除＆A4の幅に合わせる */
             html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewBlockContainer"], .main, .block-container {
                 display: block !important;
                 height: 100% !important;
@@ -57,41 +55,40 @@ def render_self_study_dashboard():
                 position: static !important;
                 width: 100% !important;
                 max-width: 100% !important;
-                padding: 0 !important; /* 余計な隙間を詰める */
+                padding: 0 !important;
             }
 
-            /* 3. 不要なものを【すべて非表示】にする */
+            /* 不要なものをすべて非表示 */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
             [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"],
-            [data-testid="stTable"], /* 表を消す */
-            .print-table-title, /* 表の見出しを消す */
-            [data-testid="stMarkdownContainer"] p, /* 余計な説明文を消す */
-            [data-testid="stMarkdownContainer"] h1, /* 大見出しを消す */
-            [data-testid="stMarkdownContainer"] h2, /* 中見出しを消す */
-            [data-testid="stMarkdownContainer"] h3, /* 小見出しを消す */
-            [data-testid="stHeadingWithActionElements"], /* 見出し枠を消す */
-            iframe, /* HTMLボタンごと消す */
-            .stProgress /* プログレスバーを消す */
-            { 
+            [data-testid="stTable"], .print-table-title,
+            [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] h1, 
+            [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3, 
+            [data-testid="stHeadingWithActionElements"], iframe, .stProgress { 
                 display: none !important; 
             }
 
-            /* 🌟 4. グラフをA4サイズの主役にする */
+            /* 🌟 2. グラフを「A4横の高さ」に強制的に縮小して収める魔法 */
             [data-testid="stArrowVegaLiteChart"] {
                 display: flex !important;
                 justify-content: center !important;
-                align-items: flex-start !important;
                 width: 100% !important;
-                page-break-inside: avoid !important; /* 途中でページが切断されないようにする */
+                max-height: 160mm !important; /* A4横の縦幅からタイトル分を引いた上限 */
+                page-break-inside: avoid !important;
+                overflow: hidden !important;
             }
             
-            /* グラフの描画部分が紙からはみ出さないように制御 */
-            canvas {
+            /* グラフの画像(canvas/svg)自体を枠に合わせて縮小 */
+            [data-testid="stArrowVegaLiteChart"] canvas,
+            [data-testid="stArrowVegaLiteChart"] svg {
+                max-height: 160mm !important;
                 max-width: 100% !important;
+                width: auto !important;
                 height: auto !important;
+                object-fit: contain !important; /* 縦横比を崩さずに全体を収める */
             }
 
-            /* 5. 背景色を透明、文字を黒にしてクッキリ印刷 */
+            /* 背景色・文字色の調整 */
             * {
                 background-color: transparent !important;
                 color: black !important;
@@ -99,14 +96,14 @@ def render_self_study_dashboard():
                 print-color-adjust: exact !important;
             }
 
-            /* 🌟 6. グラフのタイトルを中心に大きく配置 */
+            /* タイトルの設定 */
             .print-title { 
                 display: block !important; 
                 text-align: center !important; 
-                font-size: 26px !important; /* 横向きに合わせて少し大きく */
+                font-size: 26px !important; 
                 font-weight: bold !important; 
                 margin-top: 0px !important;
-                margin-bottom: 25px !important; 
+                margin-bottom: 15px !important; 
             }
         }
         </style>
