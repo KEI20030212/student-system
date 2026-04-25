@@ -387,11 +387,11 @@ def get_quiz_maker_sheets():
                 "full_marks": full_marks # 数値化したものをセット
             }
     return quiz_data
-def add_quiz_maker_sheet(test_name, sheet_id, full_marks): # 🌟 ここに full_marks を追加！
+def add_quiz_maker_sheet(test_name, sheet_id, full_marks, paper_size="A4"): # 🌟 ここに full_marks を追加！
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("設定_小テスト一覧")
-    ws.append_row([test_name, sheet_id, full_marks])
+    ws.append_row([test_name, sheet_id, full_marks, paper_size])
     st.cache_data.clear()
 def delete_quiz_maker_sheet(test_name):
     gc = get_gc_client()
@@ -1266,28 +1266,42 @@ def get_student_quiz_records(student_name):
 
 def get_quiz_master_dict():
     """
-    「設定_小テスト一覧」シートから、テスト名と満点の対応表を取得する
+    「設定_小テスト一覧」シートから、テスト名と満点・用紙サイズの対応表を取得する
     """
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         worksheet = sh.worksheet("設定_小テスト一覧")
         
+        # get_all_values() はデータをリストの形で取得します
         all_records = worksheet.get_all_values()
         master_dict = {}
         
         # 1行目（ヘッダー）を飛ばしてループ
-        # A列:テキスト名, B列:単元名, C列:満点 と仮定
+        # A列:テキスト名(row[0]), B列:単元名(row[1]), C列:満点(row[2]), D列:用紙サイズ(row[3]) と仮定
         for row in all_records[1:]:
             if len(row) >= 3:
                 # 記録シート側の quiz_name と合わせるため「テキスト_単元」をキーにする
                 quiz_key = f"{row[0]}_{row[1]}"
+                
+                # C列（満点）の取得
                 try:
                     full_marks = float(row[2])
                 except ValueError:
                     full_marks = 100 # 数字でない場合はデフォルト100点
+                    
+                # 🌟 【ここを追加！】D列（用紙サイズ）の取得
+                # 行のデータが4つ以上ある ＆ 空欄じゃない場合はそのサイズを使い、それ以外は「A4」にする安全策
+                if len(row) >= 4 and row[3].strip() != "":
+                    paper_size = row[3].strip()
+                else:
+                    paper_size = "A4"
                 
-                master_dict[quiz_key] = {"full_marks": full_marks}
+                # 🌟 【ここを変更！】辞書の中に "サイズ" も一緒に保存する
+                master_dict[quiz_key] = {
+                    "full_marks": full_marks,
+                    "サイズ": paper_size
+                }
                 
         return master_dict
     except Exception as e:
