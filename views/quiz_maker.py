@@ -144,16 +144,32 @@ def render_quiz_maker_page():
                             
                         gid = target_ws.id
                         
-                        # 🌟🌟 変更の最大のキモ: size=A4 だった部分を {paper_size} に変更！ 🌟🌟
+                        # --- 🌟 1. 用紙サイズによって切り取る範囲(range)を自動で変える ---
+                        # 大文字・小文字どちらでも大丈夫なように .upper() を使います
+                        size_check = paper_size.upper()
+                        
+                        if size_check == "B5":
+                            q_range = "A1:I28"   # B5はI列まで
+                            a_range = "J1:R28"   # 解答はJ列から
+                        else:
+                            # A4やA3の場合は範囲を広げる
+                            q_range = "A1:N28"   # N列まで
+                            a_range = "O1:AB28"  # 解答はO列から
+                        
+                        # --- 🌟 2. URL（base_url）の作成 ---
+                        # scale=4 を入れることで、範囲が広くても1ページに収まるように自動縮小されます
                         base_url = (
                             f"https://docs.google.com/spreadsheets/d/{sheet_id}/export"
                             f"?format=pdf&gid={gid}&portrait=true&size={paper_size}"
-                            f"&gridlines=false&fitw=true"
-                            f"&top_margin=0.4&bottom_margin=0.4&left_margin=0.1&right_margin=0.1" # 余白の設定（数字を小さくすると余白が狭くなります）
-                            f"&horizontal_alignment=LEFT" # 水平方向を中央揃えにする
+                            f"&gridlines=false"
+                            f"&scale=4" # 👈 これが重要！「1ページに収める」設定
+                            f"&top_margin=0.2&bottom_margin=0.2&left_margin=0.2&right_margin=0.2" # 余白を少し詰めました
+                            f"&horizontal_alignment=CENTER" # 中央寄せの方がA3/A4では綺麗に見えます
                         )
-                        url_q = f"{base_url}&range=A1:I28"
-                        url_a = f"{base_url}&range=J1:R28"
+                        
+                        # --- 🌟 3. 決定した範囲を合体させる ---
+                        url_q = f"{base_url}&range={q_range}"
+                        url_a = f"{base_url}&range={a_range}"
                         
                         import google.auth.transport.requests
                         import requests
