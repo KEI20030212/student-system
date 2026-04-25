@@ -123,9 +123,13 @@ def render_self_study_dashboard():
                 st.rerun() # 画面をリロード
                 
         with btn_col2:
-            # 🌟 【修正箇所】Streamlitをリロードさせない、魔法のHTMLボタン！
+            # 🌟 【修正箇所】枠線が切れないように高さを広げ、見えない余白をリセット！
             components.html(
                 """
+                <style>
+                    /* ブラウザ特有の余計な余白を消して、ボタンの周りに少しだけ安全な隙間を作る */
+                    body { margin: 0; padding: 2px; box-sizing: border-box; }
+                </style>
                 <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
                     <button onclick="window.parent.print()" style="
                         background-color: white;
@@ -145,7 +149,7 @@ def render_self_study_dashboard():
                     </button>
                 </div>
                 """,
-                height=55
+                height=55 # 💥 枠の高さを「45」から「55」に広げて、下切れを防止！
             )
             
         st.caption("※スマホはブラウザの「共有」メニューからプリントしてください")
