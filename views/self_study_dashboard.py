@@ -33,73 +33,74 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（横向き・余白徹底排除・中央配置バージョン） ---
+    # --- 🖨️ 印刷用の魔法（横向き・隙間ゼロ・完全強制フィット版） ---
     st.markdown("""
         <style>
         @media print {
+            /* 1. 用紙の強制設定 */
             @page {
                 size: landscape; 
-                margin: 10mm; /* 用紙のフチの余白 */
+                margin: 5mm 10mm; /* 上下5mm、左右10mmの限界まで広い余白 */
             }
 
-            /* 🌟 1. Streamlit特有の「上の見えない巨大な余白」を完全に消滅させる */
+            /* 🌟 2. 真ん中から始まってしまう原因（透明な箱の隙間）を完全に破壊 */
             html, body, .main, .block-container, 
             [data-testid="stAppViewContainer"], 
-            [data-testid="stAppViewBlockContainer"] {
-                padding-top: 0 !important;   /* 上の余白をゼロに！ */
-                padding-bottom: 0 !important;
-                margin-top: 0 !important;
-                display: block !important;
-                height: 100% !important;
-                width: 100% !important;
-                position: static !important;
+            [data-testid="stAppViewBlockContainer"],
+            [data-testid="stVerticalBlock"],
+            [data-testid="stVerticalBlockBorderWrapper"],
+            [data-testid="element-container"] {
+                display: block !important;  /* Flexboxを解除して「自動的な隙間」を無効化 */
+                padding: 0 !important;
+                margin: 0 !important;
+                gap: 0 !important;          /* ← 💥これが透明な壁（押し出し）の犯人です！ */
+                height: auto !important;
             }
 
-            /* 吹き出しを消去 */
-            #vg-tooltip-element, .vg-tooltip { display: none !important; }
-
-            /* 不要なものをすべて非表示 */
+            /* 不要なものをすべて非表示（中身だけでなく外箱も極力消す） */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
             [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"],
             [data-testid="stTable"], .print-table-title,
             [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] h1, 
             [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3, 
-            [data-testid="stHeadingWithActionElements"], iframe, .stProgress { 
+            [data-testid="stHeadingWithActionElements"], iframe, .stProgress,
+            #vg-tooltip-element, .vg-tooltip { 
                 display: none !important; 
             }
 
-            /* 🌟 2. タイトルも一番上に引き上げ、無駄な隙間をなくす */
+            /* 🌟 3. タイトルを一番上（隙間ゼロ）に配置 */
             .print-title { 
                 display: block !important; 
                 text-align: center !important; 
                 font-size: 24px !important; 
                 font-weight: bold !important; 
-                margin: 0px auto 10px auto !important; 
-                padding-top: 0px !important;
+                margin: 0 auto 5px auto !important; 
+                padding: 0 !important;
             }
 
-            /* 🌟 3. グラフを上に詰めつつ、横向き用紙の中にピタッと収める */
+            /* 🌟 4. グラフが下を突き破る原因を修正（A4横に強制フィット） */
             [data-testid="stArrowVegaLiteChart"] {
                 display: block !important;
                 width: 100% !important;
-                max-height: 175mm !important; /* A4横の縦幅から逆算した限界サイズ */
+                height: 165mm !important;     /* 💥 A4横の限界の高さに完全固定！ */
+                max-height: 165mm !important; 
                 margin: 0 auto !important;
-                text-align: center !important;
-                page-break-inside: avoid !important;
+                padding: 0 !important;
+                overflow: hidden !important;  /* はみ出しをカット */
             }
             
-            /* 画像自体を縮小・中央揃え */
+            /* 🌟 5. グラフ画像自体を枠の中に「縦横比を保って」縮小して収める */
             [data-testid="stArrowVegaLiteChart"] canvas,
             [data-testid="stArrowVegaLiteChart"] svg {
-                max-height: 170mm !important;
-                max-width: 100% !important;
                 width: auto !important;
-                height: auto !important;
-                object-fit: contain !important; 
-                margin: 0 auto !important;
+                height: 100% !important;      /* 外枠の165mmに強制的に合わせる */
+                max-width: 100% !important;
+                object-fit: contain !important; /* 全体が収まるように自動縮小！ */
                 display: block !important;
+                margin: 0 auto !important;
             }
 
+            /* 背景色・文字色の調整 */
             * {
                 background-color: transparent !important;
                 color: black !important;
