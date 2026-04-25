@@ -33,7 +33,7 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（グラフとタイトルだけ印刷・完全版） ---
+    # --- 🖨️ 印刷用の魔法（グラフとタイトルだけ印刷・完全無欠版） ---
     st.markdown("""
         <style>
         @media print {
@@ -51,14 +51,17 @@ def render_self_study_dashboard():
                 position: static !important;
             }
 
-            /* 🌟 3. 不要なものを【すべて非表示】にする（ここを追加・強化しました！） */
+            /* 🌟 3. 不要なものを【すべて非表示】にする（一番上のタイトル達もここで消します！） */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
             [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"],
             [data-testid="stTable"], /* 表を消す */
             .print-table-title, /* 表の見出しを消す */
             [data-testid="stMarkdownContainer"] p, /* 余計な説明文を消す */
-            [data-testid="stMarkdownContainer"] h3, /* ← 💥「📊 学習時間ダッシュボード」を消す魔法 */
-            iframe, /* ← 💥「🖨️ グラフを印刷」ボタンごと消す魔法 */
+            [data-testid="stMarkdownContainer"] h1, /* 💥 大見出し（Dr.関塾...）を消す */
+            [data-testid="stMarkdownContainer"] h2, /* 💥 中見出し（教室・学習状況...）を消す */
+            [data-testid="stMarkdownContainer"] h3, /* 💥 小見出し（学習時間ダッシュボード）を消す */
+            [data-testid="stHeadingWithActionElements"], /* 💥 Streamlit特有の見出し枠を消す */
+            iframe, /* HTMLボタンごと消す */
             .stProgress /* プログレスバーを消す */
             { 
                 display: none !important; 
