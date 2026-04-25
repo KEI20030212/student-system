@@ -145,7 +145,7 @@ def render_self_study_dashboard():
                     </button>
                 </div>
                 """,
-                height=45
+                height=55
             )
             
         st.caption("※スマホはブラウザの「共有」メニューからプリントしてください")
