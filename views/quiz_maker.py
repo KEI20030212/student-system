@@ -160,11 +160,19 @@ def render_quiz_maker_page():
                         # scale=4 を入れることで、範囲が広くても1ページに収まるように自動縮小されます
                         base_url = (
                             f"https://docs.google.com/spreadsheets/d/{sheet_id}/export"
-                            f"?format=pdf&gid={gid}&portrait=true&size={paper_size}"
-                            f"&gridlines=false"
-                            f"&scale=4" # 👈 これが重要！「1ページに収める」設定
-                            f"&top_margin=0.2&bottom_margin=0.2&left_margin=0.2&right_margin=0.2" # 余白を少し詰めました
-                            f"&horizontal_alignment=CENTER" # 中央寄せの方がA3/A4では綺麗に見えます
+                            f"?format=pdf&gid={gid}"
+                            f"&size={size_check}"      # A3, A4, B5 など
+                            f"&portrait=true"          # 縦向き
+                            f"&gridlines=false"        # 枠線なし
+                            f"&scale=3"                # 🌟 scale=3 は「横幅に合わせる」
+                            f"&fitw=true"              # 🌟 fitw=true も「横幅に合わせる」
+                            f"&top_margin=0.2"         # 余白を最小限に
+                            f"&bottom_margin=0.2"
+                            f"&left_margin=0.2"
+                            f"&right_margin=0.2"
+                            f"&horizontal_alignment=CENTER"
+                            f"&fzr=false"              # 🌟 固定行の解除（これが邪魔してる可能性大）
+                            f"&fzc=false"              # 🌟 固定列の解除
                         )
                         
                         # --- 🌟 3. 決定した範囲を合体させる ---
