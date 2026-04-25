@@ -367,6 +367,8 @@ def get_quiz_maker_sheets():
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("設定_小テスト一覧")
+    
+    # get_all_records() は1行目を見出し(キー)として取得してくれます
     records = ws.get_all_records()
 
     quiz_data = {}
@@ -382,9 +384,15 @@ def get_quiz_maker_sheets():
                 # 空文字 "" などで変換に失敗した場合は100点とする
                 full_marks = 100.0 
                 
+            # 🌟 【ここを追加！】スプレッドシートから「用紙サイズ」を取得する
+            # ※「用紙サイズ」という列がない、または空欄の場合は "A4" にします
+            raw_size = str(row.get('用紙サイズ', 'A4')).strip()
+            paper_size = raw_size if raw_size else "A4"
+                
             quiz_data[name] = {
                 "id": str(row.get('スプレッドシートID', '')),
-                "full_marks": full_marks # 数値化したものをセット
+                "full_marks": full_marks, # 数値化したものをセット
+                "サイズ": paper_size      # 🌟 ここで取得したサイズも一緒に保存！
             }
     return quiz_data
 def add_quiz_maker_sheet(test_name, sheet_id, full_marks, paper_size="A4"): # 🌟 ここに full_marks を追加！
