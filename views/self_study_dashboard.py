@@ -33,30 +33,30 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（1ページ強制ピタッと収めバージョン） ---
+    # --- 🖨️ 印刷用の魔法（横向き・余白徹底排除・中央配置バージョン） ---
     st.markdown("""
         <style>
-        /* 🌟 1. 用紙設定（シンプルに landscape のみにするとブラウザが認識しやすくなります） */
         @media print {
             @page {
                 size: landscape; 
-                margin: 10mm;       /* 余白を少し狭くして広く使う */
+                margin: 10mm; /* 用紙のフチの余白 */
+            }
+
+            /* 🌟 1. Streamlit特有の「上の見えない巨大な余白」を完全に消滅させる */
+            html, body, .main, .block-container, 
+            [data-testid="stAppViewContainer"], 
+            [data-testid="stAppViewBlockContainer"] {
+                padding-top: 0 !important;   /* 上の余白をゼロに！ */
+                padding-bottom: 0 !important;
+                margin-top: 0 !important;
+                display: block !important;
+                height: 100% !important;
+                width: 100% !important;
+                position: static !important;
             }
 
             /* 吹き出しを消去 */
             #vg-tooltip-element, .vg-tooltip { display: none !important; }
-
-            /* スクロール解除＆A4の幅に合わせる */
-            html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewBlockContainer"], .main, .block-container {
-                display: block !important;
-                height: 100% !important;
-                min-height: 100% !important;
-                overflow: visible !important;
-                position: static !important;
-                width: 100% !important;
-                max-width: 100% !important;
-                padding: 0 !important;
-            }
 
             /* 不要なものをすべて非表示 */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
@@ -68,42 +68,43 @@ def render_self_study_dashboard():
                 display: none !important; 
             }
 
-            /* 🌟 2. グラフを「A4横の高さ」に強制的に縮小して収める魔法 */
+            /* 🌟 2. タイトルも一番上に引き上げ、無駄な隙間をなくす */
+            .print-title { 
+                display: block !important; 
+                text-align: center !important; 
+                font-size: 24px !important; 
+                font-weight: bold !important; 
+                margin: 0px auto 10px auto !important; 
+                padding-top: 0px !important;
+            }
+
+            /* 🌟 3. グラフを上に詰めつつ、横向き用紙の中にピタッと収める */
             [data-testid="stArrowVegaLiteChart"] {
-                display: flex !important;
-                justify-content: center !important;
+                display: block !important;
                 width: 100% !important;
-                max-height: 160mm !important; /* A4横の縦幅からタイトル分を引いた上限 */
+                max-height: 175mm !important; /* A4横の縦幅から逆算した限界サイズ */
+                margin: 0 auto !important;
+                text-align: center !important;
                 page-break-inside: avoid !important;
-                overflow: hidden !important;
             }
             
-            /* グラフの画像(canvas/svg)自体を枠に合わせて縮小 */
+            /* 画像自体を縮小・中央揃え */
             [data-testid="stArrowVegaLiteChart"] canvas,
             [data-testid="stArrowVegaLiteChart"] svg {
-                max-height: 160mm !important;
+                max-height: 170mm !important;
                 max-width: 100% !important;
                 width: auto !important;
                 height: auto !important;
-                object-fit: contain !important; /* 縦横比を崩さずに全体を収める */
+                object-fit: contain !important; 
+                margin: 0 auto !important;
+                display: block !important;
             }
 
-            /* 背景色・文字色の調整 */
             * {
                 background-color: transparent !important;
                 color: black !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
-            }
-
-            /* タイトルの設定 */
-            .print-title { 
-                display: block !important; 
-                text-align: center !important; 
-                font-size: 26px !important; 
-                font-weight: bold !important; 
-                margin-top: 0px !important;
-                margin-bottom: 15px !important; 
             }
         }
         </style>
