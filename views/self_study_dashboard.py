@@ -33,44 +33,62 @@ def get_all_student_grades():
     return pd.DataFrame()
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（グラフとタイトルだけ印刷・完全無欠版） ---
+    # --- 🖨️ 印刷用の魔法（A4横向き・ピッタリ配置の最終完成版） ---
     st.markdown("""
         <style>
+        /* 🌟 0. 印刷時の用紙設定（A4・横向き） */
         @media print {
+            @page {
+                size: A4 landscape; /* 強制的にA4の横向き(Landscape)にする */
+                margin: 15mm;       /* 上下左右に15mmの綺麗な余白を作る */
+            }
+
             /* 1. 吹き出し（ツールチップ）を強制的に消去 */
             #vg-tooltip-element, .vg-tooltip {
                 display: none !important;
             }
 
-            /* 2. Streamlitの「スクロール箱」を解除して中身を全部出す */
+            /* 🌟 2. Streamlitの「スクロール箱」を解除し、A4用紙の幅に合わせる */
             html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewBlockContainer"], .main, .block-container {
                 display: block !important;
-                height: auto !important;
-                min-height: auto !important;
+                height: 100% !important;
+                min-height: 100% !important;
                 overflow: visible !important;
                 position: static !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 0 !important; /* 余計な隙間を詰める */
             }
 
-            /* 🌟 3. 不要なものを【すべて非表示】にする（一番上のタイトル達もここで消します！） */
+            /* 3. 不要なものを【すべて非表示】にする */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
             [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"],
             [data-testid="stTable"], /* 表を消す */
             .print-table-title, /* 表の見出しを消す */
             [data-testid="stMarkdownContainer"] p, /* 余計な説明文を消す */
-            [data-testid="stMarkdownContainer"] h1, /* 💥 大見出し（Dr.関塾...）を消す */
-            [data-testid="stMarkdownContainer"] h2, /* 💥 中見出し（教室・学習状況...）を消す */
-            [data-testid="stMarkdownContainer"] h3, /* 💥 小見出し（学習時間ダッシュボード）を消す */
-            [data-testid="stHeadingWithActionElements"], /* 💥 Streamlit特有の見出し枠を消す */
+            [data-testid="stMarkdownContainer"] h1, /* 大見出しを消す */
+            [data-testid="stMarkdownContainer"] h2, /* 中見出しを消す */
+            [data-testid="stMarkdownContainer"] h3, /* 小見出しを消す */
+            [data-testid="stHeadingWithActionElements"], /* 見出し枠を消す */
             iframe, /* HTMLボタンごと消す */
             .stProgress /* プログレスバーを消す */
             { 
                 display: none !important; 
             }
 
-            /* 4. グラフを印刷の主役にする */
+            /* 🌟 4. グラフをA4サイズの主役にする */
             [data-testid="stArrowVegaLiteChart"] {
-                display: block !important;
+                display: flex !important;
+                justify-content: center !important;
+                align-items: flex-start !important;
                 width: 100% !important;
+                page-break-inside: avoid !important; /* 途中でページが切断されないようにする */
+            }
+            
+            /* グラフの描画部分が紙からはみ出さないように制御 */
+            canvas {
+                max-width: 100% !important;
+                height: auto !important;
             }
 
             /* 5. 背景色を透明、文字を黒にしてクッキリ印刷 */
@@ -81,14 +99,14 @@ def render_self_study_dashboard():
                 print-color-adjust: exact !important;
             }
 
-            /* 6. グラフのタイトル（🏆 勉強時間ランキング...）は綺麗に表示する */
+            /* 🌟 6. グラフのタイトルを中心に大きく配置 */
             .print-title { 
                 display: block !important; 
                 text-align: center !important; 
-                font-size: 24px !important; 
+                font-size: 26px !important; /* 横向きに合わせて少し大きく */
                 font-weight: bold !important; 
-                margin-bottom: 20px !important; 
-                margin-top: 10px !important;
+                margin-top: 0px !important;
+                margin-bottom: 25px !important; 
             }
         }
         </style>
