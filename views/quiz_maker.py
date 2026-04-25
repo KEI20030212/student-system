@@ -149,8 +149,8 @@ def render_quiz_maker_page():
                             f"https://docs.google.com/spreadsheets/d/{sheet_id}/export"
                             f"?format=pdf&gid={gid}&portrait=true&size={paper_size}"
                             f"&gridlines=false&fitw=true"
-                            f"&top_margin=0.4&bottom_margin=0.4&left_margin=0.4&right_margin=0.4" # 余白の設定（数字を小さくすると余白が狭くなります）
-                            f"&horizontal_alignment=CENTER" # 水平方向を中央揃えにする
+                            f"&top_margin=0.4&bottom_margin=0.4&left_margin=0.1&right_margin=0.1" # 余白の設定（数字を小さくすると余白が狭くなります）
+                            f"&horizontal_alignment=LEFT" # 水平方向を中央揃えにする
                         )
                         url_q = f"{base_url}&range=A1:I28"
                         url_a = f"{base_url}&range=J1:R28"
