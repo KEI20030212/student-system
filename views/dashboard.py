@@ -8,7 +8,7 @@ import gspread
 import re
 
 # 🌟 api_guard.py から robust_api_call を呼び出す（ファイルの場所に合わせて変更してください）
-from api_guard import robust_api_call 
+from utils.api_guard import robust_api_call 
 
 from utils.g_sheets import (
     get_all_student_names,
