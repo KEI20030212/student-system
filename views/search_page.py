@@ -7,13 +7,18 @@ from utils.g_sheets import (
     delete_specific_log    # 👈 間違えた記録を消し去る関数！
 )
 
+# 🌟 追加: 強化版APIコール関数をインポート
+from utils.api_guard import robust_api_call
+
 def render_search_page():
     st.header("🔍 全生徒の過去ログ検索 ＆ 修正")
     
     # ==========================================
     # 🌟 None対策 1: 生徒名リストから空っぽのデータ（None）を追い出す！
     # ==========================================
-    raw_student_names = get_all_student_names()
+    # 🌟 強化: 生徒名取得を robust_api_call で保護（失敗時は空リストを返す）
+    raw_student_names = robust_api_call(get_all_student_names, fallback_value=[])
+    
     # もしNoneや空白が含まれていたら除外し、キレイなリストだけを残します
     student_names = [name for name in raw_student_names if name and str(name).strip() not in ["None", "nan", ""]] if raw_student_names else []
 
@@ -29,23 +34,27 @@ def render_search_page():
                 
                 if st.form_submit_button("🚨 この記録を削除する", type="primary"):
                     date_str = del_date.strftime("%Y/%m/%d")
-                    success = delete_specific_log(del_name, date_str, del_subject)
+                    # 🌟 強化: 削除処理を robust_api_call で保護（失敗時はFalseを返す）
+                    with st.spinner("データを削除中..."):
+                        success = robust_api_call(delete_specific_log, del_name, date_str, del_subject, fallback_value=False)
+                        
                     if success:
                         st.success(f"✅ {date_str} の {del_name} さん ({del_subject}) の記録を削除しました！下の表にも反映されています。")
                     else:
-                        st.error("⚠️ 該当する記録が見つかりませんでした。日付や科目を確認してください。")
+                        st.error("⚠️ 該当する記録が見つかりませんでした。日付や科目を確認してください。（または通信エラーの可能性があります）")
     
     st.divider()
 
     if not student_names: 
-        st.warning("生徒が登録されていません。")
+        st.warning("生徒が登録されていません。（または通信エラーによりデータを取得できませんでした）")
         return
 
     with st.spinner("データベースから一括読み込み中..."):
-        df_all = load_entire_log_data()
+        # 🌟 強化: 全ログ読み込みを robust_api_call で保護（失敗時は空のDataFrameを返す）
+        df_all = robust_api_call(load_entire_log_data, fallback_value=pd.DataFrame())
     
     if df_all.empty: 
-        st.info("まだ授業記録がありません。")
+        st.info("まだ授業記録がないか、通信エラーによりデータを取得できませんでした。")
         return
         
     df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
