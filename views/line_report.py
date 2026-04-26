@@ -7,6 +7,7 @@ from utils.g_sheets import (
     load_daily_class_record,
     load_school_homework_data  # 🌟 追加：学校課題データを読み込む関数
 )
+from utils.api_guard import robust_api_call  # 🛡️ 超・強化版APIガードをインポート
 
 def render_line_report_page():
     st.header("📱 LINE用 授業報告レポート生成")
@@ -14,7 +15,10 @@ def render_line_report_page():
 
     # 1. 生徒と日付の選択エリア
     col1, col2 = st.columns(2)
-    student_names = get_all_student_names()
+    
+    # 🛡️ APIガード適用
+    student_names = robust_api_call(get_all_student_names, fallback_value=[])
+    
     selected_student = col1.selectbox("👤 生徒を選択", ["-- 選択 --"] + student_names)
     selected_date = col2.date_input("📅 授業日を選択", datetime.date.today())
 
@@ -28,7 +32,9 @@ def render_line_report_page():
         date_str = selected_date.strftime("%Y/%m/%d")
 
         # --- ① 授業記録の取得 ---
-        class_record = load_daily_class_record(selected_student, date_str)
+        # 🛡️ APIガード適用（引数があるため lambda を使用）
+        class_record = robust_api_call(lambda: load_daily_class_record(selected_student, date_str), fallback_value={})
+        
         if not class_record:
             st.warning(f"⚠️ {date_str} の {selected_student} さんの授業記録が見つかりません。")
             teacher_name = "（不明）"; subject = "（未入力）"; period = "（未入力）"
@@ -45,9 +51,15 @@ def render_line_report_page():
             parent_msg = class_record.get("保護者への連絡", "（特になし）")
 
         # --- ② 小テスト結果の取得 ---
-        df_quiz = load_quiz_data_from_dedicated_sheet(selected_student)
+        # 🛡️ APIガード適用（DataFrameをフォールバックに指定）
+        df_quiz = robust_api_call(
+            lambda: load_quiz_data_from_dedicated_sheet(selected_student), 
+            fallback_value=pd.DataFrame()
+        )
         quiz_text = "小テストは実施していません"
-        if not df_quiz.empty:
+        
+        # DataFrameが空ではなく、かつAPIエラーの特殊カラムが含まれていないかチェック
+        if not df_quiz.empty and "APIエラー発生" not in df_quiz.columns:
             df_quiz['日時'] = pd.to_datetime(df_quiz['日時'], format='mixed', errors='coerce')
             target_date = pd.to_datetime(selected_date).date()
             daily_quiz = df_quiz[df_quiz['日時'].dt.date == target_date]
@@ -56,12 +68,15 @@ def render_line_report_page():
                 for _, row in daily_quiz.iterrows():
                     quiz_results.append(f"【{row.get('テキスト', '不明')} {row.get('単元', '不明')}】: {row.get('点数', '不明')}点")
                 quiz_text = "\n・".join(quiz_results)
+        elif "APIエラー発生" in df_quiz.columns:
+            quiz_text = "（⚠️通信エラーにより小テスト結果を取得できませんでした）"
 
         # --- 🌟 ③ 【New!】学校課題アラートの自動生成 ---
-        df_hw = load_school_homework_data()
+        # 🛡️ APIガード適用
+        df_hw = robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
         hw_alert_text = ""
         
-        if not df_hw.empty:
+        if not df_hw.empty and "APIエラー発生" not in df_hw.columns:
             # 選択された生徒の「提出済」以外の課題を抽出
             student_hw = df_hw[(df_hw['生徒名'] == selected_student) & (df_hw['ステータス'] != '提出済')].copy()
             
