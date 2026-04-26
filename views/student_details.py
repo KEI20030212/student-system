@@ -20,6 +20,9 @@ from utils.calc_logic import (
     calculate_quiz_points
 )
 
+# 🌟 APIガードをインポート
+from utils.api_guard import robust_api_call
+
 def render_student_details_page(selected_student):
     # タブ作成
     tab_info, tab_input, tab_view = st.tabs(["👤 基本情報・カルテ", "✍️ テスト成績を入力", "📈 テスト成績推移を見る"])
@@ -27,19 +30,12 @@ def render_student_details_page(selected_student):
     with tab_info:
         info = get_student_info(selected_student)
         
-        # 🌟 APIエラー対策付きの読み込み
-        df_test = pd.DataFrame()
-        max_retries = 5
-        for attempt in range(max_retries):
-            try:
-                df_test = load_test_scores()
-                break
-            except Exception:
-                if attempt < max_retries - 1: 
-                    time.sleep(2 ** attempt)
+        # 🌟 APIエラー対策付きの読み込み (robust_api_callでスッキリ！)
+        df_test = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
         
         df_student_tests = pd.DataFrame()
-        if not df_test.empty:
+        # エラーで空のDataFrameが返ってきていないか、エラーフラグがないか確認
+        if not df_test.empty and 'APIエラー発生' not in df_test.columns:
             df_student_tests = df_test[df_test['生徒名'] == selected_student]
 
         col_prof, col_graph = st.columns([1, 1])
@@ -62,21 +58,20 @@ def render_student_details_page(selected_student):
                         
                         if st.form_submit_button("💾 基本情報を保存", type="primary"):
                             with st.spinner("☁️ 情報を保存中...（混雑時は自動で再試行します）"):
-                                max_retries_save = 5
-                                for attempt in range(max_retries_save):
-                                    try:
-                                        update_student_info(selected_student, new_grade, new_school, new_target, new_subjects, info.get('能力', 3), info.get('やる気', 3), info.get('内申点', 3), info.get('最新偏差値', 50), info.get('宿題履行率', 100))
-                                        time.sleep(1) 
-                                        st.cache_data.clear() 
-                                        st.success(f"基本情報を保存しました！")
-                                        time.sleep(1.5) 
-                                        st.rerun()
-                                        break
-                                    except Exception:
-                                        if attempt < max_retries_save - 1: 
-                                            time.sleep(2 ** attempt)
-                                        else: 
-                                            st.error("通信エラーが発生しました。もう一度お試しください。")
+                                # 🌟 保存処理を関数にまとめて robust_api_call に渡す
+                                def _update_info():
+                                    update_student_info(selected_student, new_grade, new_school, new_target, new_subjects, info.get('能力', 3), info.get('やる気', 3), info.get('内申点', 3), info.get('最新偏差値', 50), info.get('宿題履行率', 100))
+                                    return True
+                                
+                                success = robust_api_call(_update_info, fallback_value=False)
+                                
+                                if success:
+                                    st.cache_data.clear() 
+                                    st.success(f"基本情報を保存しました！")
+                                    time.sleep(1.5) 
+                                    st.rerun()
+                                else:
+                                    st.error("通信エラーが発生しました。もう一度お試しください。")
             else:
                 st.info("※プロフィールの編集は教室長のみ可能です。")
 
@@ -178,22 +173,22 @@ def render_student_details_page(selected_student):
                     
                     if submit_naishin:
                         with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
-                            max_retries_save = 5
-                            for attempt in range(max_retries_save):
-                                try:
-                                    save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
-                                                    None, None, None, None, None, None, None, 
-                                                    n_pe, n_gika, None, n_mus, n_art, is_naishin=True)
-                                    st.cache_data.clear()
-                                    st.success("内申点を登録しました！")
-                                    time.sleep(1.5)
-                                    st.rerun()
-                                    break
-                                except Exception:
-                                    if attempt < max_retries_save - 1:
-                                        time.sleep(2 ** attempt)
-                                    else:
-                                        st.error("通信エラーが発生しました。もう一度お試しください。")
+                            # 🌟 保存処理を関数にまとめて robust_api_call に渡す
+                            def _save_naishin():
+                                save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
+                                                None, None, None, None, None, None, None, 
+                                                n_pe, n_gika, None, n_mus, n_art, is_naishin=True)
+                                return True
+                            
+                            success = robust_api_call(_save_naishin, fallback_value=False)
+                            
+                            if success:
+                                st.cache_data.clear()
+                                st.success("内申点を登録しました！")
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error("通信エラーが発生しました。もう一度お試しください。")
 
             # --- 2. テスト成績（定期・期末・模試）の入力 ---
             else:
@@ -252,22 +247,22 @@ def render_student_details_page(selected_student):
                     
                     if submit_test:
                         with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
-                            max_retries_save = 5
-                            for attempt in range(max_retries_save):
-                                try:
-                                    save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, 
-                                                    dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, None, None, 
-                                                    pe, tech, home, mus, art, is_naishin=False)
-                                    st.cache_data.clear()
-                                    st.success("成績を登録しました！")
-                                    time.sleep(1.5)
-                                    st.rerun()
-                                    break
-                                except Exception:
-                                    if attempt < max_retries_save - 1:
-                                        time.sleep(2 ** attempt)
-                                    else:
-                                        st.error("通信エラーが発生しました。もう一度お試しください。")
+                            # 🌟 保存処理を関数にまとめて robust_api_call に渡す
+                            def _save_test():
+                                save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, 
+                                                dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, None, None, 
+                                                pe, tech, home, mus, art, is_naishin=False)
+                                return True
+                            
+                            success = robust_api_call(_save_test, fallback_value=False)
+                            
+                            if success:
+                                st.cache_data.clear()
+                                st.success("成績を登録しました！")
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error("通信エラーが発生しました。もう一度お試しください。")
 
     with tab_view:
         if not df_student_tests.empty:
@@ -279,4 +274,4 @@ def render_student_details_page(selected_student):
             
             st.dataframe(df_student_tests, hide_index=True, use_container_width=True)
         else:
-            st.info("まだ成績データがありません。")
+            st.info("まだ成績データがありません、または通信エラーによりデータを取得できませんでした。")
