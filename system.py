@@ -35,7 +35,11 @@ from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate
 from utils.g_sheets import load_textbook_master, get_textbook_master, add_new_textbook, get_last_homework_info
 from utils.g_sheets import get_all_accounts
 
-
+st.sidebar.write("### バージョン確認")
+st.sidebar.write(f"streamlit: {st.__version__}")
+st.sidebar.write(f"gspread: {gspread.__version__}")
+st.sidebar.write(f"google-auth: {google.auth.__version__}")
+st.sidebar.write(f"pandas: {pd.__version__}")
 # ページの基本設定
 img = Image.open("icon.jpg")
 st.set_page_config(page_title="学習塾管理システム", page_icon=img, layout="wide")
