@@ -47,7 +47,7 @@ def render_analysis_page(name):
         st.divider()
 
         # --- 🌟 小テスト点数グラフ (df_all_quizzesを使用) ---
-        st.markdown("**💯 単元別小テスト点数**")
+        st.markdown("**💯 テキスト別・単元別小テスト点数**")
         
         if df_all_quizzes.empty:
             st.info("小テストの記録が見つかりません。")
@@ -64,10 +64,25 @@ def render_analysis_page(name):
                 df_quiz_chart = df_student_quiz.dropna(subset=['数値点数'])
                 
                 if not df_quiz_chart.empty:
-                    # 棒グラフを表示（「単元」列があると仮定しています）
-                    # 列名が「テスト名」などの場合は適宜書き換えてください
-                    chart_x = "単元" if "単元" in df_quiz_chart.columns else "日時"
-                    st.bar_chart(data=df_quiz_chart, x=chart_x, y="数値点数")
+                    # 🌟 「テスト名」という列があるかチェックして、テストごとにグラフを分ける
+                    # ※ スプレッドシートの実際の列名（「テキスト」「テスト名」「教材名」など）に合わせて書き換えてください！
+                    target_column = "テキスト"  # 💡 ここを実際の列名に合わせます
+                    
+                    if target_column in df_quiz_chart.columns:
+                        # テスト名の種類を重複なしで取得
+                        text_names = df_quiz_chart[target_column].unique()
+                        
+                        # テキストごとにループしてグラフを描画
+                        for t_name in text_names:
+                            st.markdown(f"##### 📗 {t_name}")
+                            df_sub = df_quiz_chart[df_quiz_chart[target_column] == t_name]
+                            
+                            chart_x = "単元" if "単元" in df_sub.columns else "日時"
+                            st.bar_chart(data=df_sub, x=chart_x, y="数値点数")
+                    else:
+                        # 対象の列がない場合は今まで通り1つのグラフで表示
+                        chart_x = "単元" if "単元" in df_quiz_chart.columns else "日時"
+                        st.bar_chart(data=df_quiz_chart, x=chart_x, y="数値点数")
                 else:
                     st.info("有効な点数データがありません。")
 
