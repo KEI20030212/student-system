@@ -3,6 +3,9 @@ import pandas as pd
 import re  # 👈 文字から数字を抜き出すためのツールを追加！
 from utils.g_sheets import get_all_student_names, load_all_data
 
+# 🌟 APIガードをインポート
+from utils.api_guard import robust_api_call
+
 # --- 🌟 追加機能：「P.14~17」などからページ数を自動計算する関数 ---
 def calculate_page_amount(text):
     if pd.isna(text): return 0
@@ -37,16 +40,20 @@ def render_analytics_dashboard_page():
     default_months = [(today - pd.DateOffset(months=i)).strftime("%Y年%m月") for i in range(12)]
     df_all = pd.DataFrame()
 
-    # 1. データ読み込み
-    student_names = get_all_student_names()
+    # 1. データ読み込み (🌟 robust_api_callを適用)
+    student_names = robust_api_call(get_all_student_names, fallback_value=[])
+    
     if not student_names:
-        st.info("💡 生徒データが登録されていません。")
+        st.info("💡 生徒データが登録されていないか、通信エラーで取得できませんでした。")
     else:
         all_data_list = []
-        with st.spinner('全データを解析中... 先生たちのマネジメント力を集計しています！'):
+        with st.spinner('全データを解析中... 先生たちのマネジメント力を集計しています！（通信状況により時間がかかる場合があります）'):
             for s_name in student_names:
-                df = load_all_data(s_name)
-                if not df.empty:
+                # 🌟 各生徒のデータ読み込みにも robust_api_call を適用
+                df = robust_api_call(lambda: load_all_data(s_name), fallback_value=pd.DataFrame())
+                
+                # 🌟 robust_api_call が返すエラー通知用DataFrameを除外する安全確認を追加
+                if not df.empty and "APIエラー発生" not in df.columns:
                     df['生徒名'] = s_name
                     all_data_list.append(df)
         
