@@ -11,12 +11,15 @@ from utils.g_sheets import (
     get_gc_client
 )
 
+# 🌟 追加: 強化版APIコール関数をインポート
+from utils.api_guard import robust_api_call
+
 def render_word_quiz_maker_page():
     st.header("🔤 単語テスト作成・印刷")
     st.write("単語テスト専用のレイアウトでPDFを作成します。")
 
-    # 既存のリスト取得機能を流用
-    quiz_dict = get_quiz_maker_sheets()
+    # 🌟 強化: 既存のリスト取得機能を robust_api_call で保護（失敗時は空の辞書）
+    quiz_dict = robust_api_call(get_quiz_maker_sheets, fallback_value={})
 
     # --- 新規登録機能（既存と同じ） ---
     with st.expander("➕ 新しい単語テストをリストに登録する"):
@@ -27,13 +30,14 @@ def render_word_quiz_maker_page():
             # 単語テストは選択肢でサイズが決まるため、登録時はデフォルトでOK
             submit_new = st.form_submit_button("リストに登録する ✨")
             if submit_new and new_name:
-                add_quiz_maker_sheet(new_name, new_id.strip(), new_full_marks, "B5") # デフォルトB5
+                # 🌟 強化: 新規登録を robust_api_call で保護
+                robust_api_call(add_quiz_maker_sheet, new_name, new_id.strip(), new_full_marks, "B5") # デフォルトB5
                 st.success(f"「{new_name}」を登録しました！")
                 time.sleep(1)
                 st.rerun()
 
     if not quiz_dict:
-        st.warning("テストが登録されていません。")
+        st.warning("テストが登録されていません。（または通信エラーによりデータを取得できませんでした）")
         return
 
     # --- メイン設定 ---
@@ -73,19 +77,28 @@ def render_word_quiz_maker_page():
         if st.button(f"✨ 単語テスト({word_type})を作成する", type="primary", use_container_width=True):
             with st.spinner("単語テスト生成中..."):
                 try:
-                    gc = get_gc_client()
-                    sh = gc.open_by_key(sheet_id)
-                    
-                    # 1. 範囲書き込み
-                    setting_ws = sh.worksheet("テスト範囲指定")
-                    setting_ws.update_acell('B2', start_num)
-                    setting_ws.update_acell('B3', end_num)
-                    setting_ws.update_acell('D3', shuffle) 
-                    time.sleep(3) 
+                    # 🌟 強化: スプレッドシートへの連続アクセスを関数化し、robust_api_call で一括保護
+                    def update_sheet_and_get_gid():
+                        gc = get_gc_client()
+                        sh = gc.open_by_key(sheet_id)
+                        
+                        # 1. 範囲書き込み
+                        setting_ws = sh.worksheet("テスト範囲指定")
+                        setting_ws.update_acell('B2', start_num)
+                        setting_ws.update_acell('B3', end_num)
+                        setting_ws.update_acell('D3', shuffle) 
+                        
+                        # 2. シート取得
+                        target_ws = sh.worksheet(target_sheet_name)
+                        return target_ws.id
 
-                    # 2. シート取得
-                    target_ws = sh.worksheet(target_sheet_name)
-                    gid = target_ws.id
+                    gid = robust_api_call(update_sheet_and_get_gid, fallback_value=None)
+                    
+                    if gid is None:
+                        st.error("スプレッドシートの更新に失敗しました。通信状況を確認して再度お試しください。")
+                        st.stop()
+                        
+                    time.sleep(3) 
 
                     # 3. PDF URL作成 (前回の最強設定を適用)
                     base_url = (
@@ -108,8 +121,13 @@ def render_word_quiz_maker_page():
                     creds.refresh(google.auth.transport.requests.Request())
                     headers = {"Authorization": f"Bearer {creds.token}"}
                     
-                    res_q = requests.get(url_q, headers=headers)
-                    res_a = requests.get(url_a, headers=headers)
+                    # 🌟 強化: PDFダウンロード時の requests.get も robust_api_call で保護
+                    res_q = robust_api_call(requests.get, url_q, headers=headers, fallback_value=None)
+                    res_a = robust_api_call(requests.get, url_a, headers=headers, fallback_value=None)
+                    
+                    if res_q is None or res_a is None or res_q.status_code != 200 or res_a.status_code != 200:
+                        st.error("PDFファイルの取得に失敗しました。通信が混雑している可能性があります。")
+                        st.stop()
                     
                     merger = PdfWriter()
                     merger.append(io.BytesIO(res_q.content))
