@@ -22,6 +22,18 @@ from utils.calc_logic import (
     calculate_motivation_rank
 )
 
+# 🛡️ APIエラー対策: リトライ機能を持つラッパー関数
+def robust_api_call(func, *args, max_retries=3, **kwargs):
+    """Google Sheets API 制限や一時的なエラーを防ぐためのリトライ関数"""
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise e  # 最終試行でも失敗した場合はエラーを投げる
+            # エラー発生時は待機時間を倍に増やして再試行 (Exponential Backoff: 1秒, 2秒...)
+            time.sleep(2 ** attempt)
+
 def render_multi_input_page(textbook_master):
     st.header("📝 授業・自習記録の入力")
 
@@ -29,15 +41,15 @@ def render_multi_input_page(textbook_master):
     st.divider()
 
     if "cached_student_names" not in st.session_state:
-        st.session_state["cached_student_names"] = get_all_student_names()
+        st.session_state["cached_student_names"] = robust_api_call(get_all_student_names)
     student_names = st.session_state["cached_student_names"]
 
     if "cached_teacher_names" not in st.session_state:
-        st.session_state["cached_teacher_names"] = get_all_teacher_names()
+        st.session_state["cached_teacher_names"] = robust_api_call(get_all_teacher_names)
     teacher_names = st.session_state["cached_teacher_names"]
 
     if "cached_text_options" not in st.session_state:
-        st.session_state["cached_text_options"] = list(get_textbook_master().keys())
+        st.session_state["cached_text_options"] = list(robust_api_call(get_textbook_master).keys())
     text_options = st.session_state["cached_text_options"]
 
 
@@ -103,7 +115,7 @@ def render_multi_input_page(textbook_master):
                                     "quiz_records": [], "w_nums_for_sheet": "", "attendance": attendance,
                                     "late_time": late_time, "concentration": "-", "reaction": "-",
                                     "advice": "-", "parent_msg": "-", "next_handover": "-",
-                                    "assigned_p": assigned_p, "completed_p": 0, "motivation_rank": 0, 
+                                    "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
                                     "next_hw_text": "-", "next_hw_pages": "-"
                                 })
                             else:
@@ -118,9 +130,9 @@ def render_multi_input_page(textbook_master):
                                     if cache_key not in st.session_state:
                                         with st.spinner("☁️ 過去のデータを読み込み中..."):
                                             st.session_state[cache_key] = {
-                                                "note": get_last_handover(name, subject),
-                                                "hw_info": get_last_homework_info(name, subject),
-                                                "page": get_last_page_from_sheet(name)
+                                                "note": robust_api_call(get_last_handover, name, subject),
+                                                "hw_info": robust_api_call(get_last_homework_info, name, subject),
+                                                "page": robust_api_call(get_last_page_from_sheet, name)
                                             }
                                     
                                     cached_data = st.session_state[cache_key]
@@ -176,7 +188,7 @@ def render_multi_input_page(textbook_master):
                                         new_usage_text = st.text_input("📝 新しいテキスト名を入力 (授業使用)", key=f"new_usage_text_{i}")
                                         if new_usage_text:
                                             # マスターに登録
-                                            add_new_textbook(new_usage_text)
+                                            robust_api_call(add_new_textbook, new_usage_text)
                                             # リストから "🆕 新規テキスト入力" を外し、新しいテキスト名を追加
                                             selected_texts.remove("🆕 新規テキスト入力")
                                             if new_usage_text not in selected_texts:
@@ -259,7 +271,7 @@ def render_multi_input_page(textbook_master):
                                     if selected_hw_text == "🆕 新規テキスト入力":
                                         new_text_name = st.text_input("新規テキスト名を入力", key=f"new_hw_text_{i}")
                                         if new_text_name:
-                                            add_new_textbook(new_text_name)
+                                            robust_api_call(add_new_textbook, new_text_name)
                                             selected_hw_text = new_text_name
                                             if "cached_text_options" in st.session_state:
                                                 del st.session_state["cached_text_options"]
@@ -301,7 +313,8 @@ def render_multi_input_page(textbook_master):
                         for data in input_data_list:
                             
                             # 1. いつも通りの授業記録を保存
-                            save_to_spreadsheet(
+                            robust_api_call(
+                                save_to_spreadsheet,
                                 name=data.get("name", ""),
                                 subject=data.get("subject", ""),
                                 text_name=data.get("text_name_str", data.get("text_name", "")), # 👈 複数テキストの名前に対応
@@ -328,7 +341,8 @@ def render_multi_input_page(textbook_master):
                             # 2. 小テストの専用シート保存
                             if data.get("quiz_records") and len(data["quiz_records"]) > 0:
                                 for q in data["quiz_records"]:
-                                    save_quiz_to_dedicated_sheet(
+                                    robust_api_call(
+                                        save_quiz_to_dedicated_sheet,
                                         date_str=date.strftime("%Y/%m/%d"),
                                         student_name=data["name"],
                                         text_name=q["quiz_name"],
@@ -340,7 +354,8 @@ def render_multi_input_page(textbook_master):
                             
                             if data["attendance"] != "欠席（振替なし）" and "欠席" not in data["attendance"]:
                                 try:
-                                    update_student_homework_rate(
+                                    robust_api_call(
+                                        update_student_homework_rate,
                                         data["name"], data["subject"], data["assigned_p"], data["completed_p"]
                                     )
                                 except Exception:
@@ -435,7 +450,9 @@ def render_multi_input_page(textbook_master):
                         success_count = 0
                         for idx, rec in enumerate(ss_records):
                             # 保存関数の呼び出し（引数を案Aに合わせる）
-                            ok, msg = save_self_study_record(
+                            # 🛡️ 堅牢化: APIエラー対策のラッパーを使用
+                            ok, msg = robust_api_call(
+                                save_self_study_record,
                                 rec["date"], ss_name, rec["start"], rec["end"], 
                                 rec["break"], rec["actual"], rec["content"], rec["pts"]
                             )
