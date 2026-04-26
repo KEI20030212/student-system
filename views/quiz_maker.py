@@ -14,11 +14,15 @@ from utils.g_sheets import (
     get_gc_client
 )
 
+# 🌟 追加: 強化版APIコール関数をインポート
+from utils.api_guard import robust_api_call
+
 def render_quiz_maker_page():
     st.header("🖨️ 小テスト作成・印刷")
     st.write("設定したスプレッドシートと連動して、自動で問題を抽出し、印刷用データを作成します。")
 
-    quiz_dict = get_quiz_maker_sheets()
+    # 🌟 強化: リスト取得もAPIコール経由で保護。失敗時は空の辞書を返す。
+    quiz_dict = robust_api_call(get_quiz_maker_sheets, fallback_value={})
 
     with st.expander("➕ 新しい小テストをリストに登録する"):
         st.write("他の先生も使えるように、新しい小テストのファイルをリストに保存します！")
@@ -38,8 +42,8 @@ def render_quiz_maker_page():
             if submit_new:
                 if new_name:
                     save_id = new_id.strip() if new_id else ""
-                    # 🌟 変更: 新しい引数「new_paper_size」を裏方部隊に渡す！
-                    add_quiz_maker_sheet(new_name, save_id, new_full_marks, new_paper_size)
+                    # 🌟 強化: 追加処理を robust_api_call で保護
+                    robust_api_call(add_quiz_maker_sheet, new_name, save_id, new_full_marks, new_paper_size)
                     st.success(f"「{new_name}」({new_paper_size}サイズ) をリストに登録しました！")
                     time.sleep(1)
                     st.rerun()
@@ -49,7 +53,7 @@ def render_quiz_maker_page():
     st.divider()
 
     if not quiz_dict:
-        st.warning("小テストが登録されていません。上のメニューから登録してください。")
+        st.warning("小テストが登録されていません。通信エラーの可能性もあるため、少し待ってからページを更新するか、上のメニューから登録してください。")
         return
 
     sorted_quiz_names = sorted(quiz_dict.keys())
@@ -63,7 +67,8 @@ def render_quiz_maker_page():
         with st.popover("🗑️ 削除", use_container_width=True):
             st.warning(f"本当に「{quiz_name}」をリストから削除しますか？")
             if st.button("はい、削除します", type="primary", use_container_width=True):
-                delete_quiz_maker_sheet(quiz_name)
+                # 🌟 強化: 削除処理を robust_api_call で保護
+                robust_api_call(delete_quiz_maker_sheet, quiz_name)
                 st.toast(f"🗑️ 「{quiz_name}」を削除しました！")
                 time.sleep(1)
                 st.rerun()
@@ -116,18 +121,23 @@ def render_quiz_maker_page():
             else:
                 with st.spinner(f"魔法の小テストジェネレーターを起動中... [{target_sheet_name} / {paper_size}]"):
                     try:
-                        gc = get_gc_client()
-                        sh = gc.open_by_key(sheet_id)
+                        # 🌟 強化: 各API操作を robust_api_call で保護
+                        gc = robust_api_call(get_gc_client)
+                        sh = robust_api_call(gc.open_by_key, sheet_id)
                         
                         if test_type == "確認テスト":
-                            setting_ws = sh.worksheet("テスト範囲指定")
-                            setting_ws.update_acell('B2', start_num)
-                            setting_ws.update_acell('B3', end_num)
-                            setting_ws.update_acell('D3', shuffle) 
+                            setting_ws = robust_api_call(sh.worksheet, "テスト範囲指定")
+                            # セルの更新も通信なので一つずつ保護します
+                            robust_api_call(setting_ws.update_acell, 'B2', start_num)
+                            robust_api_call(setting_ws.update_acell, 'B3', end_num)
+                            robust_api_call(setting_ws.update_acell, 'D3', shuffle) 
                             time.sleep(3) 
                         
                         target_ws = None
-                        for ws in sh.worksheets():
+                        # 🌟 強化: シート一覧の取得もAPI通信なので保護
+                        all_worksheets = robust_api_call(sh.worksheets, fallback_value=[])
+                        
+                        for ws in all_worksheets:
                             clean_ws_title = ws.title.replace(" ", "").replace("　", "")
                             clean_target = target_sheet_name.replace(" ", "").replace("　", "")
                             
@@ -136,7 +146,7 @@ def render_quiz_maker_page():
                                 break
                                 
                         if target_ws is None:
-                            existing_sheets = [ws.title for ws in sh.worksheets()]
+                            existing_sheets = [ws.title for ws in all_worksheets]
                             st.error(f"❌ 「{target_sheet_name}」という名前のシートが見つかりません！")
                             st.info(f"🔍 【プログラムが見つけた実際のシート名一覧】\n" + " ／ ".join(existing_sheets))
                             st.write("💡 アドバイス: カッコの全角・半角（ `()` と `（）` ）がスプレッドシートと合っているか確認してください！")
@@ -190,8 +200,12 @@ def render_quiz_maker_page():
                         creds.refresh(req)
                         headers = {"Authorization": f"Bearer {creds.token}"}
                         
-                        res_q = requests.get(url_q, headers=headers)
-                        res_a = requests.get(url_a, headers=headers)
+                        # 🌟 強化: 最終的なPDFダウンロードのリクエストも保護
+                        res_q = robust_api_call(requests.get, url_q, headers=headers)
+                        res_a = robust_api_call(requests.get, url_a, headers=headers)
+                        
+                        if res_q is None or res_a is None:
+                            raise Exception("PDFデータの取得時に通信エラーが発生し、再試行回数の上限に達しました。")
                         
                         merger = PdfWriter()
                         merger.append(io.BytesIO(res_q.content))
