@@ -9,6 +9,9 @@ from utils.g_sheets import (
     get_all_student_grades
 )
 
+# 🌟 追加: 強化版APIコール関数をインポート
+from utils.api_guard import robust_api_call
+
 def render_school_homework_page():
     col_h, col_r = st.columns([0.8, 0.2])
     with col_h:
@@ -25,10 +28,12 @@ def render_school_homework_page():
     # ==========================================
     with tab1:
         st.write("「完了（終わった）」と「提出済（学校に出した）」を分けて管理します。")
-        df = load_school_homework_data()
+        
+        # 🌟 強化: データ読み込みを robust_api_call で保護（失敗時は空のDataFrameを返す）
+        df = robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
         
         if df.empty:
-            st.info("現在、登録されている学校の課題はありません。")
+            st.info("現在、登録されている学校の課題はありません。（または通信エラーによりデータを取得できませんでした）")
         else:
             df_active = df[df["ステータス"] != "提出済"].copy()
             df_active["提出期限"] = pd.to_datetime(df_active["提出期限"], errors='coerce').dt.date
@@ -104,11 +109,16 @@ def render_school_homework_page():
                         with col_b:
                             if st.button("💾 更新", key=f"btn_{idx}", use_container_width=True):
                                 with st.spinner("反映中..."):
-                                    if update_homework_status(row.name + 2, new_status):
+                                    # 🌟 強化: ステータス更新処理を robust_api_call で保護
+                                    update_success = robust_api_call(update_homework_status, row.name + 2, new_status)
+                                    
+                                    if update_success:
                                         load_school_homework_data.clear()
                                         time.sleep(1.5)
                                         st.success(f"{row['教科']}の状況を更新しました！")
                                         st.rerun()
+                                    else:
+                                        st.error("通信エラーのため更新に失敗しました。時間をおいて再試行してください。")
                         
                         # 最後の課題以外は区切り線を引く
                         if row.name != student_tasks.index[-1]:
@@ -121,10 +131,11 @@ def render_school_homework_page():
         st.subheader("➕ 学校・学年を指定して一括登録")
         st.info("課題内容を改行して入力すると、一度に複数の課題を登録できます。")
         
-        df_students = get_all_student_grades()
+        # 🌟 強化: 生徒データの取得を robust_api_call で保護（失敗時は空のDataFrame）
+        df_students = robust_api_call(get_all_student_grades, fallback_value=pd.DataFrame())
         
         if df_students.empty:
-            st.warning("生徒データが取得できません。設定_生徒情報シートを確認してください。")
+            st.warning("生徒データが取得できません。通信エラーか、設定_生徒情報シートを確認してください。")
         else:
             if '学校名' in df_students.columns:
                 valid_schools = sorted([s for s in df_students['学校名'].unique() if str(s).strip() != ""])
@@ -173,9 +184,14 @@ def render_school_homework_page():
                         st.error("課題内容を1つ以上入力してください！")
                     else:
                         with st.spinner("一括登録中..."):
-                            is_success, error_msg = add_school_homework_multi(
-                                target_student_list, subject, task_list, deadline, memo
+                            # 🌟 強化: 複数課題の一括登録を robust_api_call で保護（エラー時の初期値も設定）
+                            result = robust_api_call(
+                                add_school_homework_multi, 
+                                target_student_list, subject, task_list, deadline, memo,
+                                fallback_value=(False, "通信エラーが発生しました。時間を置いてお試しください。")
                             )
+                            is_success, error_msg = result
+                            
                             if is_success:
                                 st.success(f"【{target_school} {target_grade}】の{len(target_student_list)}名に、{len(task_list)}個の課題を登録しました！")
                                 time.sleep(1)
@@ -190,10 +206,11 @@ def render_school_homework_page():
         st.subheader("📊 生徒別の課題進捗状況")
         st.write("各生徒の課題消化率を棒グラフで確認できます。")
         
-        df_dash = load_school_homework_data()
+        # 🌟 強化: ダッシュボード用のデータ取得も保護
+        df_dash = robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
         
         if df_dash.empty:
-            st.info("現在、登録されている課題はありません。")
+            st.info("現在、登録されている課題はありません。（または通信エラーにより取得できませんでした）")
         else:
             students_with_hw = sorted(df_dash['生徒名'].unique())
             
