@@ -6,31 +6,29 @@ import time
 import gspread 
 from utils.g_sheets import load_self_study_data, load_entire_log_data, get_gc_client, SPREADSHEET_ID
 
+# 🌟 api_guard をインポート
+from utils.api_guard import robust_api_call
+
 @st.cache_data(ttl=600)
 def get_all_student_grades():
-    """生徒情報から学年データを取得する魔法（APIエラー対策版）"""
-    gc = get_gc_client()
-    max_retries = 7
+    """生徒情報から学年データを取得する魔法（APIエラー完全対策版）"""
+    
+    # 🌟 内部でAPIを叩く処理だけを関数としてまとめる
+    def _fetch_grades():
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("設定_生徒情報")
+        return pd.DataFrame(ws.get_all_records())
 
-    for attempt in range(max_retries):
-        try:
-            sh = gc.open_by_key(SPREADSHEET_ID)
-            ws = sh.worksheet("設定_生徒情報")
-            df = pd.DataFrame(ws.get_all_records())
-            
-            # 無事にデータが取れたら返す
-            if not df.empty:
-                return df
-                
-        except gspread.exceptions.APIError:
-            wait_time = 2 ** attempt
-            time.sleep(wait_time)
-        except Exception:
-            time.sleep(2)
-            
-    # キャッシュを破棄して空のDataFrameを返す
-    get_all_student_grades.clear()
-    return pd.DataFrame()
+    # 🌟 まとめた処理を robust_api_call で包み込んで実行！ループもSleepも全部お任せ
+    df = robust_api_call(_fetch_grades, fallback_value=pd.DataFrame())
+
+    # 無事にデータが取れなかった場合（空、またはエラーDataFrame）はキャッシュを破棄
+    if df.empty or 'APIエラー発生' in df.columns:
+        get_all_student_grades.clear()
+        return pd.DataFrame()
+        
+    return df
 
 def render_self_study_dashboard():
     # --- 🖨️ 印刷用の魔法（横向き・隙間ゼロ・完全強制フィット版） ---
@@ -162,7 +160,7 @@ def render_self_study_dashboard():
     today = pd.Timestamp.today()
     month_list = [(today - pd.DateOffset(months=i)).strftime('%Y年%m月') for i in range(12)]
     
-    # 学年データは軽いので先に取得
+    # 学年データは軽いので先に取得（ここで robust_api_call 版が走る）
     df_grades = get_all_student_grades()
 
     # 🌟 フォームを追加して、ボタンを押すまで読み込まないようにする
@@ -202,18 +200,27 @@ def render_self_study_dashboard():
     
     with st.spinner("あらゆる学習データをかき集めています..."):
         progress_bar.progress(20, text="☁️ 自習データを取得中...")
-        df_self_study = load_self_study_data()
-        if not df_self_study.empty:
+        
+        # 🛡️ ガード適用 1: 自習データの取得
+        df_self_study = robust_api_call(load_self_study_data, fallback_value=pd.DataFrame())
+        
+        # エラー専用のDataFrameじゃないことを確認してから処理
+        if not df_self_study.empty and 'APIエラー発生' not in df_self_study.columns:
             df_self_study['日付'] = pd.to_datetime(df_self_study['日付'], errors='coerce')
             df_self_study = df_self_study.dropna(subset=['日付'])
             df_self_study['年月'] = df_self_study['日付'].dt.strftime('%Y年%m月')
             df_self_study['自習時間(分)'] = pd.to_numeric(df_self_study['自習時間(分)'], errors='coerce').fillna(0)
+        else:
+            df_self_study = pd.DataFrame() # エラー時は安全のため空にしておく
         
         # プログレスバー更新：60%
         progress_bar.progress(60, text="☁️ 授業データを取得中...")
-        df_classes = load_entire_log_data()
         
-        if not df_classes.empty:
+        # 🛡️ ガード適用 2: 授業データの取得
+        df_classes = robust_api_call(load_entire_log_data, fallback_value=pd.DataFrame())
+        
+        # エラー専用のDataFrameじゃないことを確認してから処理
+        if not df_classes.empty and 'APIエラー発生' not in df_classes.columns:
             # 🛡️ 【究極の防衛策 1】インデックス（行番号）が悪さをしないようにリセット
             df_classes = df_classes.reset_index(drop=True)
             
@@ -245,13 +252,15 @@ def render_self_study_dashboard():
                 df_classes[date_col] = pd.to_datetime(df_classes[date_col], errors='coerce')
                 df_classes = df_classes.dropna(subset=[date_col])
                 df_classes['年月'] = df_classes[date_col].dt.strftime('%Y年%m月')
+        else:
+            df_classes = pd.DataFrame() # エラー時は安全のため空にしておく
 
         progress_bar.progress(90, text="⚙️ データを合算・計算中...")
-    # --- 以下、3. データの絞り込みと合算 へ続く ---
 
+    # --- 以下、3. データの絞り込みと合算 へ続く ---
     if df_self_study.empty and df_classes.empty:
         progress_bar.empty()
-        st.info("学習記録がまだありません。")
+        st.info("学習記録がまだありません、または通信エラーによりデータを取得できませんでした。")
         return
 
     # ==========================================
@@ -282,6 +291,8 @@ def render_self_study_dashboard():
         merged['合計時間(分)'] = merged['自習時間(分)'] + merged['授業時間(分)']
     else:
         merged = ss_grouped.copy()
+        if '自習時間(分)' not in merged.columns:
+            merged['自習時間(分)'] = 0
         merged['授業時間(分)'] = 0
         merged['合計時間(分)'] = merged['自習時間(分)']
 
