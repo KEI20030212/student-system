@@ -7,14 +7,21 @@ from utils.g_sheets import (
     save_seating_data
 )
 
+# 🌟 APIガードをインポート
+from utils.api_guard import robust_api_call
+
 def render_attendance_seat_page():
     st.header("✅ 本日の出欠・座席管理")
     st.write("今日の授業の座席割り当てと、生徒の出欠状況を一画面で管理します。")
     
-    student_names = get_all_student_names()
-    if not student_names: return
+    # 🌟 1. 生徒名の取得に robust_api_call を適用
+    student_names = robust_api_call(get_all_student_names, fallback_value=[])
+    if not student_names:
+        st.warning("💡 生徒データが登録されていないか、通信エラーで取得できませんでした。")
+        return
     
-    seating_data = load_seating_data()
+    # 🌟 2. 座席データの取得に robust_api_call を適用（失敗時は空の辞書を返す）
+    seating_data = robust_api_call(load_seating_data, fallback_value={})
     
     if 'num_booths' not in st.session_state:
         st.session_state['num_booths'] = max(6, len(seating_data))
@@ -37,7 +44,7 @@ def render_attendance_seat_page():
     new_seating = {}
     
     # =========================================================
-    # 🌟 新機能：現在「どこかのブース」にいる生徒をリストアップ！
+    # 🌟 現在「どこかのブース」にいる生徒をリストアップ！
     # =========================================================
     assigned_students = set()
     for i in range(st.session_state['num_booths']):
@@ -105,8 +112,18 @@ def render_attendance_seat_page():
     
     st.divider()
     if st.button("💾 本日の座席表を確定・共有する", type="primary", use_container_width=True):
-        with st.spinner('スプレッドシートに保存中...'):
-            save_seating_data(new_seating)
-            st.session_state['num_booths'] = len(new_seating)
-            st.success(f"✨ 全 {len(new_seating)} ブースの座席表をクラウドに保存しました！")
-            st.rerun()
+        with st.spinner('☁️ スプレッドシートに保存中...（混雑時は自動で再試行します）'):
+            
+            # 🌟 3. 保存処理を関数で包んで robust_api_call に渡す
+            def _save():
+                save_seating_data(new_seating)
+                return True
+                
+            success = robust_api_call(_save, fallback_value=False)
+            
+            if success:
+                st.session_state['num_booths'] = len(new_seating)
+                st.success(f"✨ 全 {len(new_seating)} ブースの座席表をクラウドに保存しました！")
+                st.rerun()
+            else:
+                st.error("保存に失敗しました。少し時間をおいてから再度お試しください。")
