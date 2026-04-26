@@ -12,20 +12,26 @@ from utils.g_sheets import (
     load_quiz_data_from_dedicated_sheet  # 新しく追加した読込用関数
 )
 
+# 🌟 APIエラー対策モジュールを読み込み
+from utils.api_guard import robust_api_call
+
 # ==========================================
-# 🌟 APIエラー対策：キャッシュ（一時保存）機能
+# 🌟 APIエラー対策：キャッシュ（一時保存）機能 + 強化版APIコール
 # ==========================================
 @st.cache_data(ttl=600)  # 600秒(10分)間は再取得せず、手元のデータを使い回す
 def cached_get_student_names():
-    return get_all_student_names()
+    # 万が一失敗した場合は空のリストを返す
+    return robust_api_call(get_all_student_names, fallback_value=[])
 
 @st.cache_data(ttl=600)  # マスタデータも10分間キャッシュ
 def cached_get_textbook_master():
-    return get_textbook_master()
+    # 万が一失敗した場合は空の辞書を返す
+    return robust_api_call(get_textbook_master, fallback_value={})
 
 @st.cache_data(ttl=60)   # 小テスト記録データのキャッシュ
 def cached_load_quiz_data(student_name):
-    return load_quiz_data_from_dedicated_sheet(student_name)
+    # エラー時はDataFrameをfallback_valueに指定し、エラーメッセージ入りDFを受け取る
+    return robust_api_call(load_quiz_data_from_dedicated_sheet, student_name, fallback_value=pd.DataFrame())
 
 # ==========================================
 
@@ -35,6 +41,12 @@ def render_quiz_list_page():
 
     # 1. 生徒の選択
     student_names = cached_get_student_names()
+    
+    # APIエラー等で生徒リストが取得できなかった場合のガード
+    if not student_names:
+        st.error("生徒データの取得に失敗しました。時間をおいて再読み込みしてください。")
+        st.stop()
+
     selected_student = st.selectbox("👤 生徒を選択", ["-- 選択 --"] + student_names)
     
     if selected_student == "-- 選択 --":
@@ -54,49 +66,56 @@ def render_quiz_list_page():
             
             # テキスト選択
             textbooks = list(master_dict.keys())
-            target_text = col1.selectbox("📚 テキスト", textbooks)
-            
-            # 章の選択（選択したテキストに基づいてリストを変える）
-            chapters = master_dict.get(target_text, [])
-            target_chap = col2.selectbox("📖 章・単元", chapters)
-            
-            col3, col4 = st.columns(2)
-            # 🌟 ミス問題番号の入力
-            w_nums = col3.text_input("❌ ミス問題番号 (カンマ区切りで入力)", placeholder="例: 1, 3, 5")
-            # 実施日
-            test_date = col4.date_input("📅 実施日", datetime.date.today())
-            
-            submit_quiz = st.form_submit_button("この内容で記録する ✨", type="primary")
-            
-            if submit_quiz:
-                # 🌟 点数の自動計算 (ミス1問につき-10点)
-                if not w_nums.strip():
-                    score = 100
-                    miss_count = 0
-                else:
-                    miss_count = len([x for x in w_nums.split(",") if x.strip()])
-                    score = max(0, 100 - (miss_count * 10))
-
-                with st.spinner("記録中..."):
-                    # 🌟 専用シート用の関数に変更！(実施形態は"自習"として記録)
-                    success = save_quiz_to_dedicated_sheet(
-                        test_date.strftime("%Y/%m/%d"), 
-                        selected_student, 
-                        target_text, 
-                        target_chap, 
-                        score,
-                        w_nums,
-                        "自習"
-                    )
-                    
-                    if success:
-                        st.success(f"【{target_text} {target_chap}】を {score}点（ミス{miss_count}問）で記録しました！")
-                        # キャッシュをクリアして最新データを読み込めるようにする
-                        cached_load_quiz_data.clear()
-                        # 画面を更新してグラフに反映
-                        st.rerun()
+            if not textbooks:
+                st.warning("マスタデータが取得できないため、入力できません。")
+                st.form_submit_button("記録不可", disabled=True)
+            else:
+                target_text = col1.selectbox("📚 テキスト", textbooks)
+                
+                # 章の選択（選択したテキストに基づいてリストを変える）
+                chapters = master_dict.get(target_text, [])
+                target_chap = col2.selectbox("📖 章・単元", chapters)
+                
+                col3, col4 = st.columns(2)
+                # 🌟 ミス問題番号の入力
+                w_nums = col3.text_input("❌ ミス問題番号 (カンマ区切りで入力)", placeholder="例: 1, 3, 5")
+                # 実施日
+                test_date = col4.date_input("📅 実施日", datetime.date.today())
+                
+                submit_quiz = st.form_submit_button("この内容で記録する ✨", type="primary")
+                
+                if submit_quiz:
+                    # 🌟 点数の自動計算 (ミス1問につき-10点)
+                    if not w_nums.strip():
+                        score = 100
+                        miss_count = 0
                     else:
-                        st.error("記録に失敗しました。スプレッドシートを確認してください。")
+                        miss_count = len([x for x in w_nums.split(",") if x.strip()])
+                        score = max(0, 100 - (miss_count * 10))
+
+                    with st.spinner("記録中..."):
+                        # 🌟 保存処理も robust_api_call で保護！
+                        success = robust_api_call(
+                            save_quiz_to_dedicated_sheet,
+                            test_date.strftime("%Y/%m/%d"), 
+                            selected_student, 
+                            target_text, 
+                            target_chap, 
+                            score,
+                            w_nums,
+                            "自習",
+                            fallback_value=False # 失敗時はFalseを返す
+                        )
+                        
+                        if success:
+                            st.success(f"【{target_text} {target_chap}】を {score}点（ミス{miss_count}問）で記録しました！")
+                            # キャッシュをクリアして最新データを読み込めるようにする
+                            cached_load_quiz_data.clear()
+                            # 画面を更新してグラフに反映
+                            st.rerun()
+                        else:
+                            # robust_api_call 内でエラー表示されるため、ここではシンプルなエラーに留める
+                            st.error("記録に失敗しました。通信状況を確認してください。")
 
     st.divider()
 
@@ -104,8 +123,13 @@ def render_quiz_list_page():
     # 🌟 以降、習熟度マップの表示ロジック
     # ==========================================
     with st.spinner("習熟度データを集計中..."):
-        # 🌟 ここも専用シートから読み込むように変更！
+        # 🌟 専用シートから読み込み（エラー時は "APIエラー発生" カラムを含む DataFrame が返る）
         df_quiz = cached_load_quiz_data(selected_student)
+        
+        # 🚨 エラー発生時の安全確保
+        if "APIエラー発生" in df_quiz.columns:
+            st.error("小テスト記録の取得中にエラーが発生したため、処理を中断しました。時間をおいて再試行してください。")
+            st.stop()
         
         flat_data = []
         for text_name, chaps in master_dict.items():
