@@ -100,6 +100,7 @@ def render_word_quiz_maker_page():
 
                     # 4. ダウンロード処理
                     import requests
+                    import google.auth.transport.requests
                     from google.oauth2.service_account import Credentials
                     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
                     secret_dict = json.loads(st.secrets["gcp_service_account_json"])
