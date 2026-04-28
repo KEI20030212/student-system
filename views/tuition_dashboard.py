@@ -87,9 +87,24 @@ def render_tuition_dashboard_page():
         
     with col_btn:
         if st.button("🔄 最新データに更新", type="primary", use_container_width=True):
-            # このページ用のキャッシュだけをピンポイントでクリア
+            # 🌟 解決策: 関連するすべてのキャッシュをクリアする
             fetch_all_student_data_cached.clear()
-            st.toast("最新データを取得します...", icon="⏳")
+            
+            # 料金マスタのキャッシュをクリア（これが重要！）
+            if hasattr(load_price_master, "clear"):
+                load_price_master.clear()
+            
+            # 生徒名リストや生徒マスタが utils 側でキャッシュされている場合も考慮してクリア
+            if hasattr(get_all_student_names, "clear"):
+                get_all_student_names.clear()
+            if hasattr(get_student_master_data, "clear"):
+                get_student_master_data.clear()
+            
+            # もし個別に消すのが面倒な場合は st.cache_data.clear() でもOKですが、
+            # 上記のように個別消去するほうが他ページへの影響が少なくて済みます。
+
+            st.toast("最新の授業データと料金マスタを取得します...", icon="⏳")
+            time.sleep(0.5)
             st.rerun()
 
     st.divider()
