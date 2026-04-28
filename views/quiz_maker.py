@@ -158,11 +158,11 @@ def render_quiz_maker_page():
                         # 大文字・小文字どちらでも大丈夫なように .upper() を使います
                         size_check = paper_size.upper()
                         
-                        if size_check == "B5":
-                            q_range = "A1:I28"   # B5はI列まで
+                        if size_check == "A4":
+                            q_range = "A1:I28"   # A4はI列まで
                             a_range = "J1:R28"   # 解答はJ列から
                         else:
-                            # A4やA3の場合は範囲を広げる
+                            # B5やA3の場合は範囲を広げる
                             q_range = "A1:N28"   # N列まで
                             a_range = "O1:AB28"  # 解答はO列から
                         
