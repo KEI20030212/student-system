@@ -77,22 +77,14 @@ def render_quiz_list_page():
                 target_chap = col2.selectbox("📖 章・単元", chapters)
                 
                 col3, col4 = st.columns(2)
-                # 🌟 ミス問題番号の入力
-                w_nums = col3.text_input("❌ ミス問題番号 (カンマ区切りで入力)", placeholder="例: 1, 3, 5")
+                # 🌟 点数の直接入力 (0〜100で設定、デフォルト100点)
+                score = col3.number_input("💯 点数", min_value=0, max_value=100, value=100, step=1)
                 # 実施日
                 test_date = col4.date_input("📅 実施日", datetime.date.today())
                 
                 submit_quiz = st.form_submit_button("この内容で記録する ✨", type="primary")
                 
                 if submit_quiz:
-                    # 🌟 点数の自動計算 (ミス1問につき-10点)
-                    if not w_nums.strip():
-                        score = 100
-                        miss_count = 0
-                    else:
-                        miss_count = len([x for x in w_nums.split(",") if x.strip()])
-                        score = max(0, 100 - (miss_count * 10))
-
                     with st.spinner("記録中..."):
                         # 🌟 保存処理も robust_api_call で保護！
                         success = robust_api_call(
@@ -102,13 +94,13 @@ def render_quiz_list_page():
                             target_text, 
                             target_chap, 
                             score,
-                            w_nums,
+                            "",  # 以前のミス問題番号カラム。列ズレを防ぐため空文字を渡す
                             "自習",
                             fallback_value=False # 失敗時はFalseを返す
                         )
                         
                         if success:
-                            st.success(f"【{target_text} {target_chap}】を {score}点（ミス{miss_count}問）で記録しました！")
+                            st.success(f"【{target_text} {target_chap}】を {score}点で記録しました！")
                             # キャッシュをクリアして最新データを読み込めるようにする
                             cached_load_quiz_data.clear()
                             # 画面を更新してグラフに反映
