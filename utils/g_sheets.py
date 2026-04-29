@@ -218,20 +218,24 @@ def update_student_homework_rate(name):
 def save_test_score(date, name, test_type, eng, math_score, jpn, sci, soc, 
                     dev_eng=None, dev_math=None, dev_jpn=None, dev_sci=None, dev_soc=None, 
                     dev_3=None, dev_5=None, 
-                    pe=None, tech=None, home=None, mus=None, art=None, is_naishin=False): # 🎨 artを追加
+                    pe=None, tech=None, home=None, mus=None, art=None, is_naishin=False,
+                    att_eng=None, att_math=None, att_jpn=None, att_sci=None, att_soc=None, # 🌟 態度を追加
+                    att_pe=None, att_gika=None, att_art=None, att_mus=None):
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("成績_定期テスト")
     
     header = ws.row_values(1)
     
-    # 🌟 「美術」をテスト用に追加、内申用は「技術 内申」「家庭 内申」を「技家 内申」に変更
+    # 🌟 「態度」用のカラムを required_cols に追加
     required_cols = [
         '偏差値_英語', '偏差値_数学', '偏差値_国語', '偏差値_理科', '偏差値_社会', 
         '英語 偏差値', '数学 偏差値', '国語 偏差値', '理科 偏差値', '社会 偏差値', 
-        '偏差値_3科', '偏差値_5科', '保体', '技術', '家庭', '美術', '音楽', '9科総合', # 🎨 美術を追加
+        '偏差値_3科', '偏差値_5科', '保体', '技術', '家庭', '美術', '音楽', '9科総合', 
         '英語 内申', '数学 内申', '国語 内申', '理科 内申', '社会 内申',
-        '保体 内申', '技家 内申', '美術 内申', '音楽 内申' # 🛠️ 技家 内申、美術 内申を追加
+        '保体 内申', '技家 内申', '美術 内申', '音楽 内申',
+        '英語 態度', '数学 態度', '国語 態度', '理科 態度', '社会 態度', # 🌟 追加
+        '保体 態度', '技家 態度', '美術 態度', '音楽 態度' # 🌟 追加
     ]
     missing_cols = [col for col in required_cols if col not in header]
     
@@ -247,6 +251,7 @@ def save_test_score(date, name, test_type, eng, math_score, jpn, sci, soc,
     }
 
     if is_naishin:
+        # 🌟 UIのセレクトボックスの未選択 ("") を考慮し、値がなければ "-" を入れる
         row_dict.update({
             '英語 内申': eng if eng is not None else "-",
             '数学 内申': math_score if math_score is not None else "-",
@@ -254,13 +259,21 @@ def save_test_score(date, name, test_type, eng, math_score, jpn, sci, soc,
             '理科 内申': sci if sci is not None else "-",
             '社会 内申': soc if soc is not None else "-",
             '保体 内申': pe if pe is not None else "-",
-            '技家 内申': tech if tech is not None else "-", # 🛠️ view側から技家の値が tech の位置に渡ってきます
-            '美術 内申': art if art is not None else "-",   # 🎨 追加
-            '音楽 内申': mus if mus is not None else "-"
+            '技家 内申': tech if tech is not None else "-", 
+            '美術 内申': art if art is not None else "-",  
+            '音楽 内申': mus if mus is not None else "-",
+            '英語 態度': att_eng if att_eng else "-",   # 🌟 追加
+            '数学 態度': att_math if att_math else "-", # 🌟 追加
+            '国語 態度': att_jpn if att_jpn else "-",   # 🌟 追加
+            '理科 態度': att_sci if att_sci else "-",   # 🌟 追加
+            '社会 態度': att_soc if att_soc else "-",   # 🌟 追加
+            '保体 態度': att_pe if att_pe else "-",     # 🌟 追加
+            '技家 態度': att_gika if att_gika else "-", # 🌟 追加
+            '美術 態度': att_art if att_art else "-",   # 🌟 追加
+            '音楽 態度': att_mus if att_mus else "-"    # 🌟 追加
         })
     else:
         total_5 = sum([x for x in [eng, math_score, jpn, sci, soc] if x is not None])
-        # 🎨 9科総合の計算に art を追加
         total_9 = total_5 + sum([x for x in [pe, tech, home, mus, art] if x is not None]) if test_type == "期末テスト" else "-"
 
         row_dict.update({
@@ -284,7 +297,7 @@ def save_test_score(date, name, test_type, eng, math_score, jpn, sci, soc,
             '偏差値_5科': dev_5 if dev_5 is not None else "-",
             '保体': pe if pe is not None else "-", '技術': tech if tech is not None else "-",
             '家庭': home if home is not None else "-", '音楽': mus if mus is not None else "-",
-            '美術': art if art is not None else "-", # 🎨 追加
+            '美術': art if art is not None else "-", 
             '9科総合': total_9
         })
     
