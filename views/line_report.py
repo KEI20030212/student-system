@@ -4,10 +4,10 @@ import pandas as pd
 from utils.g_sheets import (
     get_all_student_names,
     load_quiz_data_from_dedicated_sheet,
-    load_daily_class_record,
-    load_school_homework_data  # 🌟 追加：学校課題データを読み込む関数
+    load_all_data,         # 🌟 変更：1日の全授業を拾うため、生徒の全データを取得する関数を使用
+    load_school_homework_data 
 )
-from utils.api_guard import robust_api_call  # 🛡️ 超・強化版APIガードをインポート
+from utils.api_guard import robust_api_call
 
 def render_line_report_page():
     st.header("📱 LINE用 授業報告レポート生成")
@@ -31,34 +31,68 @@ def render_line_report_page():
     with st.spinner("スプレッドシートからデータを取得中..."):
         date_str = selected_date.strftime("%Y/%m/%d")
 
-        # --- ① 授業記録の取得 ---
-        # 🛡️ APIガード適用（引数があるため lambda を使用）
-        class_record = robust_api_call(lambda: load_daily_class_record(selected_student, date_str), fallback_value={})
+        # --- 🌟 ① 授業記録の取得（複数コマ対応） ---
+        df_classes = robust_api_call(lambda: load_all_data(selected_student), fallback_value=pd.DataFrame())
         
-        if not class_record:
-            st.warning(f"⚠️ {date_str} の {selected_student} さんの授業記録が見つかりません。")
-            teacher_name = "（不明）"; subject = "（未入力）"; period = "（未入力）"
-            progress = "（未入力）"; attitude = "（未入力）"; advice = "（特になし）"; parent_msg = "（特になし）"
-        else:
-            teacher_name = class_record.get("担当講師", "（未入力）")
-            subject = class_record.get("科目", "（未入力）")
-            period = class_record.get("授業コマ", "（未入力）")
-            text_name = class_record.get("テキスト", ""); unit = class_record.get("単元", ""); end_page = class_record.get("終了ページ", "")
-            progress = f"{text_name} {unit}（〜{end_page}P）" if text_name else "（未入力）"
-            concentration = class_record.get("集中力", ""); reaction = class_record.get("反応", "")
-            attitude = f"集中力: {concentration} / 反応: {reaction}" if concentration or reaction else "（未入力）"
-            advice = class_record.get("アドバイス", "（特になし）")
-            parent_msg = class_record.get("保護者への連絡", "（特になし）")
+        class_sections = []
+        advice_sections = []
+        parent_msg_sections = []
 
-        # --- ② 小テスト結果の取得 ---
-        # 🛡️ APIガード適用（DataFrameをフォールバックに指定）
+        if not df_classes.empty and "APIエラー発生" not in df_classes.columns:
+            # 日付型に変換して選択日と一致するものを抽出
+            df_classes['日時'] = pd.to_datetime(df_classes['日時'], format='mixed', errors='coerce')
+            target_date = pd.to_datetime(selected_date).date()
+            daily_classes = df_classes[df_classes['日時'].dt.date == target_date]
+
+            if not daily_classes.empty:
+                # 複数コマある場合はループで回してテキストを作成
+                for _, row in daily_classes.iterrows():
+                    teacher = row.get("担当講師", "（未入力）")
+                    subject = row.get("科目", "（未入力）")
+                    period = row.get("授業コマ", "（未入力）")
+                    
+                    text_name = row.get("テキスト", "")
+                    unit = row.get("単元", "")
+                    end_page = row.get("終了ページ", "")
+                    progress = f"{text_name} {unit}（〜{end_page}P）" if text_name else "（未入力）"
+                    
+                    concentration = row.get("集中力", "")
+                    reaction = row.get("反応", "")
+                    attitude = f"集中力: {concentration} / 反応: {reaction}" if concentration or reaction else "（未入力）"
+                    
+                    advice = str(row.get("アドバイス", "")).strip()
+                    parent_msg = str(row.get("保護者への連絡", "")).strip()
+
+                    # 授業ごとのブロックを作成
+                    class_text = f"📅 【授業内容】（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}"
+                    class_sections.append(class_text)
+
+                    # アドバイスや連絡事項がある場合のみ追加（誰からのコメントか分かるようにする）
+                    if advice and advice != "nan":
+                        advice_sections.append(f"《{subject} / {teacher} より》\n{advice}")
+                    if parent_msg and parent_msg != "nan":
+                        parent_msg_sections.append(f"《{subject} / {teacher} より》\n{parent_msg}")
+
+        # 万が一授業データが見つからなかった場合の処理
+        if not class_sections:
+            st.warning(f"⚠️ {date_str} の {selected_student} さんの授業記録が見つかりません。")
+            classes_text = "📅 【授業内容】\n（データが見つかりませんでした）"
+            advices_text = "（特になし）"
+            msgs_text = "（特になし）"
+        else:
+            # リストを改行で連結して1つの文字列にする
+            classes_text = "\n\n".join(class_sections)
+            advices_text = "\n\n".join(advice_sections) if advice_sections else "（特になし）"
+            msgs_text = "\n\n".join(parent_msg_sections) if parent_msg_sections else "（特になし）"
+
+
+        # --- ② 小テスト結果の取得（そのまま） ---
         df_quiz = robust_api_call(
             lambda: load_quiz_data_from_dedicated_sheet(selected_student), 
             fallback_value=pd.DataFrame()
         )
         quiz_text = "小テストは実施していません"
         
-        # DataFrameが空ではなく、かつAPIエラーの特殊カラムが含まれていないかチェック
         if not df_quiz.empty and "APIエラー発生" not in df_quiz.columns:
             df_quiz['日時'] = pd.to_datetime(df_quiz['日時'], format='mixed', errors='coerce')
             target_date = pd.to_datetime(selected_date).date()
@@ -71,17 +105,14 @@ def render_line_report_page():
         elif "APIエラー発生" in df_quiz.columns:
             quiz_text = "（⚠️通信エラーにより小テスト結果を取得できませんでした）"
 
-        # --- 🌟 ③ 【New!】学校課題アラートの自動生成 ---
-        # 🛡️ APIガード適用
+        # --- ③ 学校課題アラートの自動生成（そのまま） ---
         df_hw = robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
         hw_alert_text = ""
         
         if not df_hw.empty and "APIエラー発生" not in df_hw.columns:
-            # 選択された生徒の「提出済」以外の課題を抽出
             student_hw = df_hw[(df_hw['生徒名'] == selected_student) & (df_hw['ステータス'] != '提出済')].copy()
             
             if not student_hw.empty:
-                # 期限を日付型に変換してソート
                 student_hw['提出期限'] = pd.to_datetime(student_hw['提出期限']).dt.date
                 student_hw = student_hw.sort_values('提出期限')
                 
@@ -91,7 +122,6 @@ def render_line_report_page():
                 for _, row in student_hw.iterrows():
                     days_left = (row['提出期限'] - today).days
                     
-                    # 期限切れ、または期限まで7日以内のものだけアラートに載せる
                     if days_left < 0:
                         alerts.append(f"❌【期限超過！】{row['教科']}: {row['課題内容']}（{row['提出期限']}）")
                     elif days_left <= 3:
@@ -107,7 +137,6 @@ def render_line_report_page():
         # ==========================================
         st.subheader("📋 完成したLINEメッセージ")
         
-        # 学校課題がある場合だけ、項目を表示する
         hw_section = ""
         if hw_alert_text:
             hw_section = f"\n⚠️ 【学校課題の提出アラート】{hw_alert_text}\n"
@@ -115,21 +144,17 @@ def render_line_report_page():
         line_message = f"""保護者様
 
 お世話になっております。本日の {selected_student} さんの授業報告をいたします。
-（担当講師：{teacher_name}）
 
-📅 【授業内容】（{date_str} {period}）
-・科目：{subject}
-・進捗：{progress}
-・様子：{attitude}
+{classes_text}
 
 💯 【小テスト結果】
 ・{quiz_text}
 {hw_section}
 🗣️ 【担当講師より（アドバイス等）】
-{advice}
+{advices_text}
 
 📢 【ご連絡事項】
-{parent_msg}
+{msgs_text}
 
 ご不明な点がございましたら、お気軽にご連絡ください。
 引き続きよろしくお願いいたします。"""
