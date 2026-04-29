@@ -175,29 +175,52 @@ def render_student_details_page(selected_student):
 
             if test_type == "通知表（内申点）":
                 with st.form("naishin_input_form"):
-                    st.info("各科目の内申点（1〜5）を入力してください。")
+                    st.info("各科目の内申点（1〜5）と態度（A〜C）を入力してください。")
                     n1, n2, n3, n4, n5 = st.columns(5)
+                    
+                    # 🌟 各科目に「態度」の入力欄を追加
                     n_eng = n1.number_input("英語 内申", 1, 5, value=None)
+                    att_eng = n1.selectbox("英語 態度", ["", "A", "B", "C"], index=0)
+                    
                     n_math = n2.number_input("数学 内申", 1, 5, value=None)
+                    att_math = n2.selectbox("数学 態度", ["", "A", "B", "C"], index=0)
+                    
                     n_jpn = n3.number_input("国語 内申", 1, 5, value=None)
+                    att_jpn = n3.selectbox("国語 態度", ["", "A", "B", "C"], index=0)
+                    
                     n_sci = n4.number_input("理科 内申", 1, 5, value=None)
+                    att_sci = n4.selectbox("理科 態度", ["", "A", "B", "C"], index=0)
+                    
                     n_soc = n5.number_input("社会 内申", 1, 5, value=None)
+                    att_soc = n5.selectbox("社会 態度", ["", "A", "B", "C"], index=0)
                     
                     st.divider()
                     nb1, nb2, nb3, nb4 = st.columns(4)
+                    
                     n_pe = nb1.number_input("保体 内申", 1, 5, value=None)
+                    att_pe = nb1.selectbox("保体 態度", ["", "A", "B", "C"], index=0)
+                    
                     n_gika = nb2.number_input("技家 内申", 1, 5, value=None)
+                    att_gika = nb2.selectbox("技家 態度", ["", "A", "B", "C"], index=0)
+                    
                     n_art = nb3.number_input("美術 内申", 1, 5, value=None)
+                    att_art = nb3.selectbox("美術 態度", ["", "A", "B", "C"], index=0)
+                    
                     n_mus = nb4.number_input("音楽 内申", 1, 5, value=None)
+                    att_mus = nb4.selectbox("音楽 態度", ["", "A", "B", "C"], index=0)
                     
                     submit_naishin = st.form_submit_button("💾 内申点を登録する", type="primary")
                     
                     if submit_naishin:
                         with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
                             def _save_naishin():
+                                # 🌟 save_test_score に態度の情報を渡す（※utils/g_sheets.py側も引数を受け取るように改修が必要です）
                                 save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
                                                 None, None, None, None, None, None, None, 
-                                                n_pe, n_gika, None, n_mus, n_art, is_naishin=True)
+                                                n_pe, n_gika, None, n_mus, n_art, is_naishin=True,
+                                                att_eng=att_eng, att_math=att_math, att_jpn=att_jpn, 
+                                                att_sci=att_sci, att_soc=att_soc, att_pe=att_pe, 
+                                                att_gika=att_gika, att_art=att_art, att_mus=att_mus)
                                 return True
                             
                             success = robust_api_call(_save_naishin, fallback_value=False)
