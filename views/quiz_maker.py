@@ -56,7 +56,16 @@ def render_quiz_maker_page():
         st.warning("小テストが登録されていません。通信エラーの可能性もあるため、少し待ってからページを更新するか、上のメニューから登録してください。")
         return
 
-    sorted_quiz_names = sorted(quiz_dict.keys())
+    # --- 🌟 追加: 単語テスト（キクタン）系をリストから除外する ---
+    exclude_list = ["キクタン8問", "キクタン16問", "キクタン32問", "キクタン50問"]
+    filtered_quiz_names = [name for name in quiz_dict.keys() if name not in exclude_list]
+
+    if not filtered_quiz_names:
+        st.warning("表示できる小テストがありません。（キクタン以外のテストを登録してください）")
+        return
+
+    sorted_quiz_names = sorted(filtered_quiz_names)
+    # -------------------------------------------------------------
 
     c_sel, c_del = st.columns([4, 1])
     with c_sel:
