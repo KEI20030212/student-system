@@ -51,10 +51,27 @@ def render_line_report_page():
                     subject = row.get("科目", "（未入力）")
                     period = row.get("授業コマ", "（未入力）")
                     
-                    text_name = row.get("テキスト", "")
-                    unit = row.get("単元", "")
-                    end_page = row.get("終了ページ", "")
-                    progress = f"{text_name} {unit}（〜{end_page}P）" if text_name else "（未入力）"
+                    text_name = str(row.get("テキスト", "")).strip()
+                    if text_name == "nan": text_name = ""
+                    
+                    unit = str(row.get("単元", "")).strip()
+                    if unit == "nan": unit = ""
+                    
+                    end_page = str(row.get("終了ページ", "")).strip()
+                    if end_page == "nan": end_page = ""
+                    
+                    # 終了ページの列に入力がある場合は、それを最優先して表示！
+                    if end_page:
+                        # セルの中で改行されている場合は、LINE上で見やすいように少し字下げ（インデント）する
+                        if "\n" in end_page:
+                            progress = "\n　" + end_page.replace("\n", "\n　")
+                        else:
+                            progress = end_page
+                    elif text_name:
+                        # 終了ページが空欄でテキスト名だけある場合の予備ルート
+                        progress = f"{text_name} {unit}".strip()
+                    else:
+                        progress = "（未入力）"
                     
                     concentration = row.get("集中力", "")
                     reaction = row.get("反応", "")
