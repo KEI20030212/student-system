@@ -254,7 +254,7 @@ def render_multi_input_page(textbook_master):
                                                 # 🌟 章をテキスト入力に変更（第1回、Unit3 などに対応）
                                                 col_q1, col_q2 = st.columns(2)
                                                 with col_q1:
-                                                    target_chap = st.text_input(f"実施した単元/回", placeholder="例: 第1回", key=f"q_chap_{i}_{q_idx}")
+                                                    target_chap = st.number_input(f"実施した単元/回", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
                                                 with col_q2:
                                                     score = st.number_input(f"点数", min_value=0, max_value=100, value=100, step=1, key=f"q_score_{i}_{q_idx}")
                                                 
