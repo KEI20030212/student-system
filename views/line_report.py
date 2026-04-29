@@ -86,9 +86,9 @@ def render_line_report_page():
 
                     # アドバイスや連絡事項がある場合のみ追加（誰からのコメントか分かるようにする）
                     if advice and advice != "nan":
-                        advice_sections.append(f"《{subject} / {teacher} より》\n{advice}")
+                        advice_sections.append(f"《{subject} / {teacher} 先生より》\n{advice}")
                     if parent_msg and parent_msg != "nan":
-                        parent_msg_sections.append(f"《{subject} / {teacher} より》\n{parent_msg}")
+                        parent_msg_sections.append(f"《{subject} / {teacher} 先生より》\n{parent_msg}")
 
         # 万が一授業データが見つからなかった場合の処理
         if not class_sections:
