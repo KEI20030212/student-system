@@ -75,9 +75,8 @@ def render_quiz_list_page():
             else:
                 # 🌟 小テスト名 (設定シートから選択)
                 target_quiz = col1.selectbox("📝 小テスト名", quiz_names)
-                
-                # 🌟 単元・回 (自由に手入力！)
-                target_unit = col2.text_input("📖 単元・回", placeholder="例: 第1回, Unit 3 など")
+                # 🌟 単元・回 (数字のみ入力)
+                target_unit = col2.number_input("📖 単元・回", min_value=1, value=1, step=1)
                 
                 # 満点の取得 (設定シートで target_quiz に設定されている満点を探す)
                 max_score = 100
@@ -93,7 +92,7 @@ def render_quiz_list_page():
                 submit_quiz = st.form_submit_button("この内容で記録する ✨", type="primary")
                 
                 if submit_quiz:
-                    if not target_unit.strip():
+                    if target_unit < 1:
                         st.error("⚠️ 「単元・回」を入力してください。")
                     else:
                         with st.spinner("記録中..."):
