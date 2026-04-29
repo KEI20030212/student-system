@@ -60,7 +60,7 @@ def render_student_details_page(selected_student):
                         # 🌟 新規追加：受験生・学校区分の入力欄を横並びで配置
                         c_ex1, c_ex2 = st.columns(2)
                         
-                        exam_opts = ["未設定", "はい（受験生）", "いいえ"]
+                        exam_opts = ["未設定", "受験生"]
                         current_exam = str(info.get('受験区分', '未設定'))
                         ex_idx = exam_opts.index(current_exam) if current_exam in exam_opts else 0
                         new_exam = c_ex1.selectbox("🔥 受験区分", exam_opts, index=ex_idx)
