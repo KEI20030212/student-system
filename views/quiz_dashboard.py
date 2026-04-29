@@ -7,7 +7,7 @@ import datetime
 # ==========================================
 from utils.g_sheets import (
     get_all_student_names, 
-    get_quiz_master_dict,                # 🌟 今回はこれだけで全てまかないます！
+    get_quiz_master_dict,                
     save_quiz_to_dedicated_sheet,        
     load_quiz_data_from_dedicated_sheet  
 )
@@ -23,7 +23,7 @@ def cached_get_student_names():
 
 @st.cache_data(ttl=600)  
 def cached_get_quiz_details():
-    # 「設定_小テスト一覧」から取得 (例: {"確認テスト_第1回": {"full_marks": 50, "サイズ": "A4"}})
+    # 「設定_小テスト一覧」から取得
     return robust_api_call(get_quiz_master_dict, fallback_value={})
 
 @st.cache_data(ttl=60)   
@@ -34,7 +34,7 @@ def cached_load_quiz_data(student_name):
 
 def render_quiz_list_page():
     st.header("📝 小テスト進捗＆習熟度マップ")
-    st.write("自習などで実施した小テストの結果を入力・確認できるページです🎨")
+    st.write("実施した小テストの結果を入力・確認できるページです🎨")
 
     # 1. 生徒の選択
     student_names = cached_get_student_names()
@@ -48,17 +48,17 @@ def render_quiz_list_page():
     if selected_student == "-- 選択 --":
         st.stop()
 
-    # 2. 小テスト設定の取得と階層化
+    # 2. 小テスト設定の取得
     quiz_details = cached_get_quiz_details()
     
-    # 🌟 A列(小テスト名) と B列(単元・回) の階層辞書を自動生成
-    quiz_hierarchy = {}
+    # 🌟 設定シートから「小テスト名」の重複なしリストを作成
+    # 既存の get_quiz_master_dict は "テスト名_単元" をキーにしているため、_の前半を取得
+    quiz_names = []
     for key in quiz_details.keys():
         if "_" in key:
-            q_name, q_unit = key.split("_", 1)
-            if q_name not in quiz_hierarchy:
-                quiz_hierarchy[q_name] = []
-            quiz_hierarchy[q_name].append(q_unit)
+            q_name = key.split("_", 1)[0]
+            if q_name not in quiz_names:
+                quiz_names.append(q_name)
 
     # ==========================================
     # 🌟 小テスト結果の入力フォーム
@@ -69,23 +69,22 @@ def render_quiz_list_page():
         with st.form("quiz_input_form"):
             col1, col2 = st.columns(2)
             
-            # 小テスト名のリスト（A列の重複なしリスト）
-            quiz_names = list(quiz_hierarchy.keys())
-            
             if not quiz_names:
                 st.warning("「設定_小テスト一覧」のデータが取得できません。")
                 st.form_submit_button("記録不可", disabled=True)
             else:
-                # 🌟 小テスト名 (A列)
+                # 🌟 小テスト名 (設定シートから選択)
                 target_quiz = col1.selectbox("📝 小テスト名", quiz_names)
                 
-                # 🌟 単元・回 (B列)
-                valid_units = quiz_hierarchy.get(target_quiz, [])
-                target_unit = col2.selectbox("📖 単元・回", valid_units)
+                # 🌟 単元・回 (自由に手入力！)
+                target_unit = col2.text_input("📖 単元・回", placeholder="例: 第1回, Unit 3 など")
                 
-                # 満点の取得
-                quiz_key = f"{target_quiz}_{target_unit}"
-                max_score = int(quiz_details.get(quiz_key, {}).get("full_marks", 100))
+                # 満点の取得 (設定シートで target_quiz に設定されている満点を探す)
+                max_score = 100
+                for k, v in quiz_details.items():
+                    if k.startswith(f"{target_quiz}_"):
+                        max_score = int(v.get("full_marks", 100))
+                        break
                 
                 col3, col4 = st.columns(2)
                 score = col3.number_input(f"💯 点数 (満点: {max_score})", min_value=0, max_value=max_score, value=max_score, step=1)
@@ -94,25 +93,28 @@ def render_quiz_list_page():
                 submit_quiz = st.form_submit_button("この内容で記録する ✨", type="primary")
                 
                 if submit_quiz:
-                    with st.spinner("記録中..."):
-                        success = robust_api_call(
-                            save_quiz_to_dedicated_sheet,
-                            test_date.strftime("%Y/%m/%d"), 
-                            selected_student, 
-                            target_quiz,  # 保存先シートでは「テキスト/テスト名」列に保存されます
-                            target_unit,  # 保存先シートでは「単元」列に保存されます
-                            score,
-                            "", 
-                            "自習",
-                            fallback_value=False
-                        )
-                        
-                        if success:
-                            st.success(f"【{target_quiz} {target_unit}】を {score}点で記録しました！")
-                            cached_load_quiz_data.clear()
-                            st.rerun()
-                        else:
-                            st.error("記録に失敗しました。")
+                    if not target_unit.strip():
+                        st.error("⚠️ 「単元・回」を入力してください。")
+                    else:
+                        with st.spinner("記録中..."):
+                            success = robust_api_call(
+                                save_quiz_to_dedicated_sheet,
+                                test_date.strftime("%Y/%m/%d"), 
+                                selected_student, 
+                                target_quiz,  
+                                target_unit,  # 🌟 ここで手入力した値が「単元」列に保存されます！
+                                score,
+                                "", 
+                                "自習",
+                                fallback_value=False
+                            )
+                            
+                            if success:
+                                st.success(f"【{target_quiz} - {target_unit}】を {score}点で記録しました！")
+                                cached_load_quiz_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("記録に失敗しました。")
 
     st.divider()
 
@@ -126,20 +128,8 @@ def render_quiz_list_page():
             st.error("データの取得中にエラーが発生しました。")
             st.stop()
         
-        # 🌟 マスタデータ（下部の表の枠組み）も「設定_小テスト一覧」から直接作成
-        flat_data = []
-        for q_name, units in quiz_hierarchy.items():
-            for unit in units:
-                flat_data.append({'小テスト名': q_name, '単元': unit})
-                
-        df_master = pd.DataFrame(flat_data, columns=['小テスト名', '単元'])
-
-        if df_master.empty:
-            st.warning("⚠️ 小テスト設定データがありません。")
-            st.stop()
-
         if df_quiz.empty:
-            st.warning("小テストの記録がまだありません。")
+            st.info("小テストの記録がまだありません。結果を登録するとここに表が表示されます。")
             st.stop()
 
         df_quiz['点数'] = pd.to_numeric(df_quiz['点数'], errors='coerce')
@@ -150,30 +140,23 @@ def render_quiz_list_page():
             last_date = df_quiz['日時'].max().strftime("%Y年%m月%d日")
             st.success(f"📅 前回実施日: **{last_date}**")
 
-        # 既存シートの「テキスト」列を「小テスト名」として扱う
+        # 🌟 設定シートに単元一覧がないため、記録データから「受けたテストの単元」を抽出して表を作る
         best_scores = df_quiz.groupby(['テキスト', '単元'])['点数'].max().reset_index()
         best_scores = best_scores.rename(columns={'テキスト': '小テスト名', '点数': '最高点数'})
 
-        df_master['単元_clean'] = df_master['単元'].astype(str).str.replace('第', '').str.replace('章', '').str.strip()
-        best_scores['単元_clean'] = best_scores['単元'].astype(str).str.replace('第', '').str.replace('章', '').str.strip()
-
-        df_merged = pd.merge(df_master, best_scores, left_on=['小テスト名', '単元_clean'], right_on=['小テスト名', '単元_clean'], how='left', suffixes=('', '_score'))
-
-        # タブ表示（小テスト名ごと）
-        quiz_list = df_master['小テスト名'].unique().tolist()
+        # タブ表示（生徒が受けたことがある小テスト名ごと）
+        quiz_list = best_scores['小テスト名'].unique().tolist()
+        
+        if not quiz_list:
+            st.stop()
+            
         tabs = st.tabs(quiz_list)
 
         for i, q_name in enumerate(quiz_list):
             with tabs[i]: 
-                df_display = df_merged[df_merged['小テスト名'] == q_name]
+                df_display = best_scores[best_scores['小テスト名'] == q_name]
                 
-                total = len(df_display)
-                done = df_display['最高点数'].notna().sum()
-                rate = int((done / total) * 100) if total > 0 else 0
-                
-                st.subheader(f"📊 達成率: {rate}% ({done}/{total} 単元クリア)")
-                st.progress(rate / 100.0)
-
+                # ピボットテーブル作成
                 pivot_df = df_display.pivot_table(
                     index='小テスト名', 
                     columns='単元', 
@@ -182,28 +165,39 @@ def render_quiz_list_page():
                 )
                 
                 if pivot_df.empty:
-                    st.info("記録がありません。")
                     continue
 
+                # 列を数字順に並び替え
                 import re
                 def sort_key(c):
                     nums = re.findall(r'\d+', str(c))
                     return int(nums[0]) if nums else 999
                 pivot_df = pivot_df[sorted(pivot_df.columns.tolist(), key=sort_key)]
 
-                def add_icon(val, unit_name=None):
-                    if pd.isna(val): return ""
-                    q_key = f"{q_name}_{unit_name}"
-                    full_m = float(quiz_details.get(q_key, {}).get("full_marks", 100))
-                    ratio = val / full_m if full_m > 0 else 0
-                    if ratio >= 1.0: return f"👑 {int(val)}"
-                    elif ratio >= 0.8: return f"🟢 {int(val)}"
-                    elif ratio >= 0.6: return f"🟡 {int(val)}"
-                    else: return f"🔴 {int(val)}"
+                # アイコン付与と満点判定
+                def add_icon(val):
+                    if pd.isna(val) or val == "": return ""
+                    
+                    # 満点の取得
+                    full_m = 100
+                    for k, v in quiz_details.items():
+                        if k.startswith(f"{q_name}_"):
+                            full_m = float(v.get("full_marks", 100))
+                            break
+                            
+                    try:
+                        v = float(val)
+                        ratio = v / full_m if full_m > 0 else 0
+                        if ratio >= 1.0: return f"👑 {int(v)}"
+                        elif ratio >= 0.8: return f"🟢 {int(v)}"
+                        elif ratio >= 0.6: return f"🟡 {int(v)}"
+                        else: return f"🔴 {int(v)}"
+                    except:
+                        return str(val)
 
                 styled_display = pivot_df.copy()
                 for col in styled_display.columns:
-                    styled_display[col] = styled_display[col].apply(lambda x: add_icon(x, col))
+                    styled_display[col] = styled_display[col].apply(add_icon)
 
                 def color_bg(v):
                     if "👑" in str(v): return 'background-color: #fffacd; color: #000; font-weight: bold;'
