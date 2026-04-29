@@ -65,7 +65,7 @@ def render_student_details_page(selected_student):
                         ex_idx = exam_opts.index(current_exam) if current_exam in exam_opts else 0
                         new_exam = c_ex1.selectbox("🔥 受験区分", exam_opts, index=ex_idx)
 
-                        school_opts = ["未設定", "公立", "私立", "国立"]
+                        school_opts = ["未設定", "公立", "私立・国立"]
                         current_sch_type = str(info.get('学校区分', '未設定'))
                         sch_idx = school_opts.index(current_sch_type) if current_sch_type in school_opts else 0
                         new_school_type = c_ex2.selectbox("🏫 学校区分", school_opts, index=sch_idx)
