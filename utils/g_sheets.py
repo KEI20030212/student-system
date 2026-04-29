@@ -408,13 +408,16 @@ def delete_quiz_maker_sheet(test_name):
     cell = ws.find(test_name, in_column=1)
     if cell: ws.delete_rows(cell.row)
     st.cache_data.clear()
-def update_student_info(name, grade, school, target, subjects, ability, motivation, naishin, dev_score, hw_rate):
+def update_student_info(name, grade, school, target, subjects, ability, motivation, naishin, dev_score, hw_rate, exam_status="未設定", school_type="未設定"):
+    # 🌟 ↑引数に exam_status と school_type を追加しました
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("設定_生徒情報")
     
     header = ws.row_values(1)
-    required_cols = ['内申点', '最新偏差値', '宿題履行率']
+    
+    # 🌟 新しい2つの列名を追加（もしスプレッドシートに列がなければ、自動で作ってくれます！）
+    required_cols = ['内申点', '最新偏差値', '宿題履行率', '受験区分', '学校区分']
     missing_cols = [col for col in required_cols if col not in header]
     
     if missing_cols:
@@ -435,14 +438,21 @@ def update_student_info(name, grade, school, target, subjects, ability, motivati
         ws.update_cell(cell.row, header.index('内申点') + 1, naishin)
         ws.update_cell(cell.row, header.index('最新偏差値') + 1, dev_score)
         ws.update_cell(cell.row, header.index('宿題履行率') + 1, hw_rate)
+        
+        # 🌟 既存の生徒データを更新するときに、新しい2項目も書き込む
+        ws.update_cell(cell.row, header.index('受験区分') + 1, exam_status)
+        ws.update_cell(cell.row, header.index('学校区分') + 1, school_type)
     else:
+        # 🌟 新しい生徒を登録するときに、新しい2項目も書き込む
         row_dict = {
             header[0]: name, header[1]: grade, header[2]: school, 
             header[3]: target, header[4]: subjects, header[5]: ability, header[6]: motivation,
-            '内申点': naishin, '最新偏差値': dev_score, '宿題履行率': hw_rate
+            '内申点': naishin, '最新偏差値': dev_score, '宿題履行率': hw_rate,
+            '受験区分': exam_status, '学校区分': school_type
         }
         row_to_append = [row_dict.get(col, "") for col in header]
         ws.append_row(row_to_append)
+        
     st.cache_data.clear()
 def ensure_global_sheets(sh):
     titles = [ws.title for ws in sh.worksheets()]
