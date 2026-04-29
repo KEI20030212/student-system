@@ -43,6 +43,10 @@ def render_student_details_page(selected_student):
         with col_prof:
             st.markdown(f"### 📝 {selected_student} さんのプロフィール")
             st.markdown(f"**🎓 学年**: {info.get('学年', '未設定')}")
+            # 🌟 新規追加の表示項目
+            st.markdown(f"**🔥 受験区分**: {info.get('受験区分', '未設定')}")
+            st.markdown(f"**🏫 学校区分**: {info.get('学校区分', '未設定')}")
+            
             st.markdown(f"**🏫 学校名**: {info.get('学校名', '未設定')}")
             st.markdown(f"**🎯 志望校・目的**: {info.get('志望校・目的', '未設定')}")
             st.markdown(f"**📚 受講科目**: {info.get('受講科目', '未設定')}")
@@ -52,6 +56,20 @@ def render_student_details_page(selected_student):
                     # 🌟 st.form を使って、ボタンを押すまで通信しないようにする
                     with st.form("edit_student_info_form"):
                         new_grade = st.text_input("学年 (例: 中2)", value=info.get('学年', ''))
+                        
+                        # 🌟 新規追加：受験生・学校区分の入力欄を横並びで配置
+                        c_ex1, c_ex2 = st.columns(2)
+                        
+                        exam_opts = ["未設定", "はい（受験生）", "いいえ"]
+                        current_exam = str(info.get('受験区分', '未設定'))
+                        ex_idx = exam_opts.index(current_exam) if current_exam in exam_opts else 0
+                        new_exam = c_ex1.selectbox("🔥 受験区分", exam_opts, index=ex_idx)
+
+                        school_opts = ["未設定", "公立", "私立", "国立"]
+                        current_sch_type = str(info.get('学校区分', '未設定'))
+                        sch_idx = school_opts.index(current_sch_type) if current_sch_type in school_opts else 0
+                        new_school_type = c_ex2.selectbox("🏫 学校区分", school_opts, index=sch_idx)
+                        
                         new_school = st.text_input("学校名", value=info.get('学校名', ''))
                         new_target = st.text_input("志望校・通塾目的", value=info.get('志望校・目的', ''))
                         new_subjects = st.text_input("受講科目 (例: 英語, 数学)", value=info.get('受講科目', ''))
@@ -60,7 +78,21 @@ def render_student_details_page(selected_student):
                             with st.spinner("☁️ 情報を保存中...（混雑時は自動で再試行します）"):
                                 # 🌟 保存処理を関数にまとめて robust_api_call に渡す
                                 def _update_info():
-                                    update_student_info(selected_student, new_grade, new_school, new_target, new_subjects, info.get('能力', 3), info.get('やる気', 3), info.get('内申点', 3), info.get('最新偏差値', 50), info.get('宿題履行率', 100))
+                                    # ⚠️ update_student_info に new_exam と new_school_type を渡すように追加！
+                                    update_student_info(
+                                        selected_student, 
+                                        new_grade, 
+                                        new_school, 
+                                        new_target, 
+                                        new_subjects, 
+                                        info.get('能力', 3), 
+                                        info.get('やる気', 3), 
+                                        info.get('内申点', 3), 
+                                        info.get('最新偏差値', 50), 
+                                        info.get('宿題履行率', 100),
+                                        new_exam,        # 🌟 追加
+                                        new_school_type  # 🌟 追加
+                                    )
                                     return True
                                 
                                 success = robust_api_call(_update_info, fallback_value=False)
@@ -103,13 +135,10 @@ def render_student_details_page(selected_student):
                 current_hw_rate = 0.0
                 
             quiz_master = get_quiz_master_dict()
-            # 💡 ① 小テストの記録を取得し、先生の関数でポイント化して合計する！
             quiz_records = get_student_quiz_records(selected_student)
             total_quiz_pts = 0
             
             for record in quiz_records:
-                # 💡 3. 先生の関数に「点数」「テスト名」「満点リスト」を渡す！
-                # これで、内部的に自動で正しい満点を参照して百分率を出してくれます。
                 pts = calculate_quiz_points(
                     score=record["score"], 
                     quiz_name=record["quiz_name"], 
@@ -117,15 +146,11 @@ def render_student_details_page(selected_student):
                 )
                 total_quiz_pts += pts
             
-            # 💡 STEP1で作った関数を呼び出して、自習ポイントを取得！
             self_study_pts = get_student_self_study_points(selected_student)
-            
-            # 💡 STEP2で作った計算関数に、宿題・小テスト・自習ポイントを入れて「やる気」を算出！
             current_motivation = calculate_motivation_rank(current_hw_rate, total_quiz_pts, self_study_pts)
             
-            # せっかくなので、画面にも「獲得ポイント」を表示してあげましょう
             st.caption(f"🔥 獲得ポイント ｜ 小テスト: **{total_quiz_pts} pt** / 自習: **{self_study_pts} pt**")
-            # 能力の計算
+            
             ability = calculate_ability_rank(latest_naishin, latest_dev)
             
             df_coord = pd.DataFrame({"生徒": [selected_student], "能力 (X)": [ability], "やる気 (Y)": [current_motivation]})
@@ -144,14 +169,11 @@ def render_student_details_page(selected_student):
         with st.container(border=True):
             st.write(f"**{selected_student}** さんのテスト結果・内申点を入力します。")
             
-            # 📝 日付と種別はフォームの外に出す（種別を変えた瞬間に下の入力欄を切り替えるため）
             c1, c2 = st.columns(2)
             date = c1.date_input("実施日", datetime.date.today())
             test_type = c2.selectbox("📝 テスト種別", ["定期テスト(中間など)", "期末テスト", "外部模試", "通知表（内申点）", "その他"])
 
-            # --- 1. 通知表（内申点）の入力 ---
             if test_type == "通知表（内申点）":
-                # 🌟 st.form で囲むことで、入力のたびに再読み込みされるのを防ぎます
                 with st.form("naishin_input_form"):
                     st.info("各科目の内申点（1〜5）を入力してください。")
                     n1, n2, n3, n4, n5 = st.columns(5)
@@ -168,12 +190,10 @@ def render_student_details_page(selected_student):
                     n_art = nb3.number_input("美術 内申", 1, 5, value=None)
                     n_mus = nb4.number_input("音楽 内申", 1, 5, value=None)
                     
-                    # 🌟 st.form_submit_button に変更
                     submit_naishin = st.form_submit_button("💾 内申点を登録する", type="primary")
                     
                     if submit_naishin:
                         with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
-                            # 🌟 保存処理を関数にまとめて robust_api_call に渡す
                             def _save_naishin():
                                 save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
                                                 None, None, None, None, None, None, None, 
@@ -190,9 +210,7 @@ def render_student_details_page(selected_student):
                             else:
                                 st.error("通信エラーが発生しました。もう一度お試しください。")
 
-            # --- 2. テスト成績（定期・期末・模試）の入力 ---
             else:
-                # 🌟 こちらも st.form で囲みます
                 with st.form("test_score_input_form"):
                     with st.expander("⚙️ 各教科の満点設定"):
                         mc1, mc2, mc3, mc4, mc5 = st.columns(5)
@@ -211,7 +229,6 @@ def render_student_details_page(selected_student):
                             m_art = mc9.number_input("美 満点", 0, 100, 50)
                             m_mus = mc10.number_input("音 満点", 0, 100, 50)
 
-                    # 5教科スコア
                     sc1, sc2, sc3, sc4, sc5 = st.columns(5)
                     eng = sc1.number_input(f"英語 (/{m_eng})", 0, m_eng, value=None)
                     math_score = sc2.number_input(f"数学 (/{m_math})", 0, m_math, value=None)
@@ -219,7 +236,6 @@ def render_student_details_page(selected_student):
                     sci = sc4.number_input(f"理科 (/{m_sci})", 0, m_sci, value=None)
                     soc = sc5.number_input(f"社会 (/{m_soc})", 0, m_soc, value=None)
 
-                    # 模試用偏差値
                     dev_eng, dev_math, dev_jpn, dev_sci, dev_soc = None, None, None, None, None
                     if test_type == "外部模試":
                         st.divider()
@@ -231,7 +247,6 @@ def render_student_details_page(selected_student):
                         dev_sci = d4.number_input("理科 偏差値", 0.0, 90.0, value=None, step=0.1)
                         dev_soc = d5.number_input("社会 偏差値", 0.0, 90.0, value=None, step=0.1)
 
-                    # 期末テスト用副教科
                     pe, tech, home, art, mus = None, None, None, None, None
                     if test_type == "期末テスト":
                         st.divider()
@@ -242,12 +257,10 @@ def render_student_details_page(selected_student):
                         art = sc9.number_input(f"美術 (/{m_art})", 0, m_art, value=None)
                         mus = sc10.number_input(f"音楽 (/{m_mus})", 0, m_mus, value=None)
 
-                    # 🌟 st.form_submit_button に変更
                     submit_test = st.form_submit_button("💾 この成績を登録する", type="primary")
                     
                     if submit_test:
                         with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
-                            # 🌟 保存処理を関数にまとめて robust_api_call に渡す
                             def _save_test():
                                 save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, 
                                                 dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, None, None, 
