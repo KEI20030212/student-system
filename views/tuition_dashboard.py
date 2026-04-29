@@ -152,7 +152,8 @@ def render_tuition_dashboard_page():
         saved_price = None
         saved_extra_count = 0
         
-        if not saved_billing_df.empty and '👤 生徒名' in saved_billing_df.columns and student in saved_billing_df['👤 生徒名'].values:
+        # 💡 【修正ポイント】強制再計算(force_recalc)にチェックがない時「だけ」保存データを読み込むようにしました！
+        if not force_recalc and not saved_billing_df.empty and '👤 生徒名' in saved_billing_df.columns and student in saved_billing_df['👤 生徒名'].values:
             row = saved_billing_df[saved_billing_df['👤 生徒名'] == student].iloc[0]
             course = next((row[c] for c in saved_billing_df.columns if "契約コース" in c), master_course)
             saved_price = next((row[c] for c in saved_billing_df.columns if "請求額" in c), None)
@@ -175,14 +176,11 @@ def render_tuition_dashboard_page():
         match = pd.DataFrame()
         if not price_master.empty and '学年' in price_master.columns and 'コマ数' in price_master.columns:
             
-            # 基本条件: 学年 と コマ数
             mask = (price_master['学年'] == grade) & (price_master['コマ数'] == base_koma)
             
-            # マスタに「受験区分」列があれば条件を追加
             if '受験区分' in price_master.columns:
                 mask = mask & (price_master['受験区分'] == exam_status)
                 
-            # マスタに「学校区分」列があれば条件を追加
             if '学校区分' in price_master.columns:
                 mask = mask & (price_master['学校区分'] == school_type)
                 
@@ -192,13 +190,13 @@ def render_tuition_dashboard_page():
             base_price = int(match.iloc[0]['料金'])
             unit_extra_price = int(match.iloc[0]['追加単価'])
         else:
-            # 🌟 警告メッセージも詳細に
             missing_master_warnings.append(f"{student} さん (学年: {grade}, コマ数: {base_koma}, 受験区分: {exam_status}, 学校区分: {school_type})")
             base_price, unit_extra_price = 0, 0
             
         discount_amount = discount_koma * unit_extra_price
         calculated_price = max(0, base_price + (actual_extra_count * unit_extra_price) - discount_amount)
 
+        # 💡 【修正ポイント】強制再計算のロジックをスッキリさせました
         if force_recalc:
             price = calculated_price
         elif saved_price is not None and actual_extra_count == saved_extra_count:
@@ -210,7 +208,7 @@ def render_tuition_dashboard_page():
         table_data.append({
             "👤 生徒名": student,
             "🎓 学年": grade,
-            "🏫 区分": f"{school_type} / {exam_status}",  # 追加！
+            "🏫 区分": f"{school_type} / {exam_status}",
             "📚 契約コース": course,
             "📝 実際の受講数": actual_koma,
             "➕ 追加コマ": actual_extra_count,
