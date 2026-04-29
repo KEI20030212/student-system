@@ -233,12 +233,18 @@ def render_multi_input_page(textbook_master):
                                             with st.container(border=True):
                                                 st.write(f"**【小テスト {q_idx + 1}】**")
                                                 q_name = st.selectbox(f"テストの種類", text_options, index=None, placeholder="テキストを選択", key=f"q_name_{i}_{q_idx}")
-                                                target_chap = st.number_input(f"実施した章/範囲", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
-                                                w_nums = st.text_input(f"ミス問題番号", key=f"w_{i}_{q_idx}")
                                                 
-                                                score = 100 if not w_nums else max(0, 100 - (len(w_nums.split(",")) * 10))
+                                                # 💡 改善: 章と点数を横並びにして手入力に変更
+                                                col_q1, col_q2 = st.columns(2)
+                                                with col_q1:
+                                                    target_chap = st.number_input(f"実施した章/範囲", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
+                                                with col_q2:
+                                                    score = st.number_input(f"点数", min_value=0, max_value=100, value=100, step=1, key=f"q_score_{i}_{q_idx}")
+                                                
+                                                w_nums = st.text_input(f"ミス問題番号 (任意)", key=f"w_{i}_{q_idx}")
+                                                
                                                 quiz_records.append({
-                                                    "quiz_name": q_name or "不明",  # 👈 選んだテキスト名を記録！
+                                                    "quiz_name": q_name or "不明",
                                                     "unit": target_chap, 
                                                     "score": score
                                                 })
@@ -317,8 +323,8 @@ def render_multi_input_page(textbook_master):
                                 save_to_spreadsheet,
                                 name=data.get("name", ""),
                                 subject=data.get("subject", ""),
-                                text_name=data.get("text_name_str", data.get("text_name", "")), # 👈 複数テキストの名前に対応
-                                advanced_p=data.get("advanced_p_str", ""),                      # 👈 「P.10〜20」などの新しい進捗に対応
+                                text_name=data.get("text_name_str", data.get("text_name", "")),
+                                advanced_p=data.get("advanced_p_str", ""),
                                 quiz_records=[],
                                 date=date, 
                                 teacher_name=teacher_name,
@@ -328,14 +334,14 @@ def render_multi_input_page(textbook_master):
                                 advice=data.get("advice", ""),
                                 parent_msg=data.get("parent_msg", ""),
                                 next_handover=data.get("next_handover", ""),
-                                assigned_p=0,  # 👈 使わなくなった古いデータなのでダミーの0を渡す
-                                completed_p=0, # 👈 使わなくなった古いデータなのでダミーの0を渡す
+                                assigned_p=0,  
+                                completed_p=0, 
                                 motivation_rank=data.get("motivation_rank", ""),
                                 next_hw_text=data.get("next_hw_text", ""),
                                 next_hw_pages=data.get("next_hw_pages", ""),
-                                late_time=data.get("late_time", ""),        # 🌟新規パラメータ
-                                concentration=data.get("concentration", ""),# 🌟新規パラメータ
-                                reaction=data.get("reaction", "")           # 🌟新規パラメータ
+                                late_time=data.get("late_time", ""),        
+                                concentration=data.get("concentration", ""),
+                                reaction=data.get("reaction", "")           
                             )
 
                             # 2. 小テストの専用シート保存
@@ -378,11 +384,11 @@ def render_multi_input_page(textbook_master):
                             f"num_q_{i}", f"conc_{i}", f"reac_{i}",
                             f"hw_text_{i}", f"n_start_{i}", f"n_end_{i}",
                             f"advc_{i}", f"p_msg_{i}", f"next_h_{i}",
-                            f"new_usage_text_{i}" # 👈 忘れずに新規入力用のキーもリセット！
+                            f"new_usage_text_{i}"
                         ]
-                        # 動的に増える小テストのキーもリセット
+                        # 動的に増える小テストのキーもリセット（q_scoreを追加！）
                         for q_idx in range(5):
-                            keys_to_reset.extend([f"q_chap_{i}_{q_idx}", f"w_{i}_{q_idx}"])
+                            keys_to_reset.extend([f"q_name_{i}_{q_idx}", f"q_chap_{i}_{q_idx}", f"q_score_{i}_{q_idx}", f"w_{i}_{q_idx}"])
 
                         for k in keys_to_reset:
                             if k in st.session_state:
@@ -420,7 +426,6 @@ def render_multi_input_page(textbook_master):
                     default_date = datetime.date.today() - datetime.timedelta(days=d)
                     ss_date = col_d.date_input("📅 日付", default_date, key=f"d_{d}")
                     
-                    # 💡案A: 開始・終了時間の入力
                     s_time = col_s.time_input("🛫 開始", datetime.time(17, 0), key=f"s_{d}")
                     e_time = col_e.time_input("🛬 終了", datetime.time(19, 0), key=f"e_{d}")
                     b_min = col_b.number_input("☕ 休憩(分)", min_value=0, value=0, step=5, key=f"b_{d}")
@@ -449,7 +454,6 @@ def render_multi_input_page(textbook_master):
                     with st.status("Googleスプレッドシートに送信中...", expanded=True) as status:
                         success_count = 0
                         for idx, rec in enumerate(ss_records):
-                            # 保存関数の呼び出し（引数を案Aに合わせる）
                             # 🛡️ 堅牢化: APIエラー対策のラッパーを使用
                             ok, msg = robust_api_call(
                                 save_self_study_record,
