@@ -1450,7 +1450,9 @@ def get_student_master_data():
         for _, row in df.iterrows():
             master_dict[row["生徒名"]] = {
                 "学年": row["学年"],
+                "学校区分": row["学校区分"],
                 "契約コース": row.get("契約コース", "未設定"),
+                "受験区分": row.get("受験区分", "未設定"),
                 "特別割引コマ": row.get("特別割引(コマ)", 0) # 🌟追加
             }
         return master_dict
