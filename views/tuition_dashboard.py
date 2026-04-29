@@ -17,7 +17,6 @@ from utils.g_sheets import (
 from utils.pdf_generator import generate_invoice_pdf
 
 # --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
-# 💡 フリーズ感を防ぐため show_spinner にメッセージを追加
 @st.cache_data(show_spinner="☁️ 授業データを集計中...")
 def fetch_all_student_data_cached(student_names):
     """
@@ -60,6 +59,12 @@ def render_tuition_dashboard_page():
     if not price_master.empty and '学年' in price_master.columns and 'コマ数' in price_master.columns:
         price_master['学年'] = price_master['学年'].astype(str).apply(lambda x: unicodedata.normalize('NFKC', x).strip())
         price_master['コマ数'] = pd.to_numeric(price_master['コマ数'], errors='coerce').fillna(0).astype(int)
+        
+        # 🌟 追加：新しい区分のゆらぎ補正（列が存在する場合のみ）
+        if '受験区分' in price_master.columns:
+            price_master['受験区分'] = price_master['受験区分'].astype(str).apply(lambda x: unicodedata.normalize('NFKC', x).strip())
+        if '学校区分' in price_master.columns:
+            price_master['学校区分'] = price_master['学校区分'].astype(str).apply(lambda x: unicodedata.normalize('NFKC', x).strip())
 
     # --- 2. 授業データの集計と年月リストの作成 ---
     month_options = ["データなし"]
@@ -79,7 +84,7 @@ def render_tuition_dashboard_page():
             from datetime import datetime
             month_options = [datetime.now().strftime("%Y年%m月")]
 
-    # --- 3. 🌟 UI: 請求月の選択と更新ボタン（上部に横並び配置） ---
+    # --- 3. UI: 請求月の選択と更新ボタン ---
     col_month, col_btn = st.columns([2, 1], vertical_alignment="bottom")
     
     with col_month:
@@ -87,21 +92,13 @@ def render_tuition_dashboard_page():
         
     with col_btn:
         if st.button("🔄 最新データに更新", type="primary", use_container_width=True):
-            # 🌟 解決策: 関連するすべてのキャッシュをクリアする
             fetch_all_student_data_cached.clear()
-            
-            # 料金マスタのキャッシュをクリア（これが重要！）
             if hasattr(load_price_master, "clear"):
                 load_price_master.clear()
-            
-            # 生徒名リストや生徒マスタが utils 側でキャッシュされている場合も考慮してクリア
             if hasattr(get_all_student_names, "clear"):
                 get_all_student_names.clear()
             if hasattr(get_student_master_data, "clear"):
                 get_student_master_data.clear()
-            
-            # もし個別に消すのが面倒な場合は st.cache_data.clear() でもOKですが、
-            # 上記のように個別消去するほうが他ページへの影響が少なくて済みます。
 
             st.toast("最新の授業データと料金マスタを取得します...", icon="⏳")
             time.sleep(0.5)
@@ -109,7 +106,7 @@ def render_tuition_dashboard_page():
 
     st.divider()
 
-    # --- ⚠️ エラーハンドリング（ボタンの下に配置して常に更新可能にする） ---
+    # --- ⚠️ エラーハンドリング ---
     if not student_names: 
         st.warning("⚠️ 生徒データが見つからないか、通信エラーが発生しました。上の更新ボタンを押して再試行してください。")
         return
@@ -129,7 +126,6 @@ def render_tuition_dashboard_page():
 
     actual_koma_dict = {s: len(df_month[df_month['生徒名'] == s]) for s in student_names}
     
-    # 保存済みデータの読み込みを防御
     saved_billing_df = robust_api_call(load_billing_data, selected_month, fallback_value=pd.DataFrame())
 
     table_data = []
@@ -137,12 +133,17 @@ def render_tuition_dashboard_page():
 
     for student in student_names:
         actual_koma = actual_koma_dict.get(student, 0)
-        m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定", "特別割引コマ": 0})
         
-        grade = unicodedata.normalize('NFKC', str(m_info["学年"])).strip()
-        master_course = unicodedata.normalize('NFKC', str(m_info["契約コース"])).strip()
+        # 🌟 生徒マスタから新項目を取得
+        m_info = student_master.get(student, {"学年": "未設定", "契約コース": "未設定", "特別割引コマ": 0, "受験区分": "未設定", "学校区分": "未設定"})
         
-        # 割引コマの数値抽出
+        grade = unicodedata.normalize('NFKC', str(m_info.get("学年", "未設定"))).strip()
+        master_course = unicodedata.normalize('NFKC', str(m_info.get("契約コース", "未設定"))).strip()
+        
+        # 🌟 新項目の抽出と正規化
+        exam_status = unicodedata.normalize('NFKC', str(m_info.get("受験区分", "未設定"))).strip()
+        school_type = unicodedata.normalize('NFKC', str(m_info.get("学校区分", "未設定"))).strip()
+        
         raw_discount = str(m_info.get("特別割引コマ", "0")).strip()
         discount_nums = re.findall(r'\d+', raw_discount)
         discount_koma = int(discount_nums[0]) if discount_nums else 0
@@ -151,7 +152,6 @@ def render_tuition_dashboard_page():
         saved_price = None
         saved_extra_count = 0
         
-        # 保存データがある場合の処理
         if not saved_billing_df.empty and '👤 生徒名' in saved_billing_df.columns and student in saved_billing_df['👤 生徒名'].values:
             row = saved_billing_df[saved_billing_df['👤 生徒名'] == student].iloc[0]
             course = next((row[c] for c in saved_billing_df.columns if "契約コース" in c), master_course)
@@ -163,7 +163,6 @@ def render_tuition_dashboard_page():
             except:
                 pass
 
-        # コース名から基本コマ数を抽出 (例: "週2回(8コマ)" -> 8)
         try:
             koma_nums = re.findall(r'\d+', course)
             base_koma = int(koma_nums[0]) if koma_nums else 0
@@ -172,22 +171,34 @@ def render_tuition_dashboard_page():
             
         actual_extra_count = max(0, actual_koma - base_koma)
         
-        # 料金マスタとの照合
+        # 🌟 料金マスタとの高度な照合ロジック
         match = pd.DataFrame()
         if not price_master.empty and '学年' in price_master.columns and 'コマ数' in price_master.columns:
-            match = price_master[(price_master['学年'] == grade) & (price_master['コマ数'] == base_koma)]
+            
+            # 基本条件: 学年 と コマ数
+            mask = (price_master['学年'] == grade) & (price_master['コマ数'] == base_koma)
+            
+            # マスタに「受験区分」列があれば条件を追加
+            if '受験区分' in price_master.columns:
+                mask = mask & (price_master['受験区分'] == exam_status)
+                
+            # マスタに「学校区分」列があれば条件を追加
+            if '学校区分' in price_master.columns:
+                mask = mask & (price_master['学校区分'] == school_type)
+                
+            match = price_master[mask]
         
         if not match.empty:
             base_price = int(match.iloc[0]['料金'])
             unit_extra_price = int(match.iloc[0]['追加単価'])
         else:
-            missing_master_warnings.append(f"{student} さん (学年: {grade}, コマ数: {base_koma})")
+            # 🌟 警告メッセージも詳細に
+            missing_master_warnings.append(f"{student} さん (学年: {grade}, コマ数: {base_koma}, 受験区分: {exam_status}, 学校区分: {school_type})")
             base_price, unit_extra_price = 0, 0
             
         discount_amount = discount_koma * unit_extra_price
         calculated_price = max(0, base_price + (actual_extra_count * unit_extra_price) - discount_amount)
 
-        # 最終的な請求額の決定（保存値を使うか計算値を使うか）
         if force_recalc:
             price = calculated_price
         elif saved_price is not None and actual_extra_count == saved_extra_count:
@@ -195,9 +206,11 @@ def render_tuition_dashboard_page():
         else:
             price = calculated_price 
 
+        # 🌟 テーブルに区分を表示
         table_data.append({
             "👤 生徒名": student,
             "🎓 学年": grade,
+            "🏫 区分": f"{school_type} / {exam_status}",  # 追加！
             "📚 契約コース": course,
             "📝 実際の受講数": actual_koma,
             "➕ 追加コマ": actual_extra_count,
@@ -205,9 +218,8 @@ def render_tuition_dashboard_page():
             "💴 今月の請求額 (円)": int(price)
         })
     
-    # 警告表示
     if missing_master_warnings:
-        st.error("以下の生徒の料金設定が「料金マスタ」に見つかりません。")
+        st.error("⚠️ 以下の生徒の条件に完全一致する設定が「料金マスタ」に見つかりません。")
         for w in missing_master_warnings:
             st.write(f"- {w}")
 
@@ -219,25 +231,24 @@ def render_tuition_dashboard_page():
             display_df,
             hide_index=True,
             use_container_width=True,
-            disabled=["👤 生徒名", "🎓 学年", "📝 実際の受講数", "➕ 追加コマ", "🉐 割引コマ"] 
+            # 🌟 「区分」も編集不可列に追加
+            disabled=["👤 生徒名", "🎓 学年", "🏫 区分", "📝 実際の受講数", "➕ 追加コマ", "🉐 割引コマ"] 
         )
         submitted = st.form_submit_button("💾 確定して保存", type="primary", use_container_width=True)
                 
         if submitted:
             with st.spinner("☁️ 保存中..."):
-                save_df = edited_df.drop(columns=["📝 実際の受講数"])
-                # 保存処理を防御
+                save_df = edited_df.drop(columns=["📝 実際の受講数", "🏫 区分"]) # 保存時には不要な列を削る
                 success = robust_api_call(save_billing_data, selected_month, save_df, fallback_value=False)
                 
                 if success is not False:
                     st.success("✅ 保存しました！")
-                    st.cache_data.clear() # 月謝データの保存後は関連する他画面にも影響が出るため全体クリア推奨
+                    st.cache_data.clear() 
                     time.sleep(1)
                     st.rerun()
                 else:
                     st.error("❌ 通信エラーにより保存に失敗しました。")
 
-    # 合計表示
     st.divider()
     total = edited_df["💴 今月の請求額 (円)"].sum() if not edited_df.empty else 0
     st.metric(label=f"🌟 {selected_month} の合計請求額", value=f"{total:,} 円")
@@ -258,7 +269,7 @@ def render_tuition_dashboard_page():
                     data=pdf_file,
                     file_name=f"請求書_{selected_month}_{target_student}.pdf",
                     mime="application/pdf",
-                    type="primary" # こちらも目立たせました
+                    type="primary" 
                 )
             except Exception as e:
                 st.error(f"⚠️ PDF生成エラー: {e}")
