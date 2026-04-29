@@ -14,7 +14,8 @@ from utils.g_sheets import (
     get_last_homework_info,  
     add_new_textbook,        
     get_textbook_master,
-    save_quiz_to_dedicated_sheet
+    save_quiz_to_dedicated_sheet,
+    get_quiz_master_dict  # 🌟 追加: 小テストマスター取得関数
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -51,6 +52,20 @@ def render_multi_input_page(textbook_master):
     if "cached_text_options" not in st.session_state:
         st.session_state["cached_text_options"] = list(robust_api_call(get_textbook_master).keys())
     text_options = st.session_state["cached_text_options"]
+
+    # 🌟 追加: 小テスト設定を取得し、重複なしのテスト名リストを作成
+    if "cached_quiz_details" not in st.session_state:
+        st.session_state["cached_quiz_details"] = robust_api_call(get_quiz_master_dict)
+    quiz_details = st.session_state.get("cached_quiz_details", {})
+    
+    quiz_names = []
+    for key in quiz_details.keys():
+        if "_" in key:
+            q_name = key.split("_", 1)[0]
+            if q_name not in quiz_names:
+                quiz_names.append(q_name)
+    if not quiz_names:
+        quiz_names = ["設定なし"]
 
 
     if record_type == "📖 授業":
@@ -232,12 +247,14 @@ def render_multi_input_page(textbook_master):
                                         for q_idx in range(num_quizzes):
                                             with st.container(border=True):
                                                 st.write(f"**【小テスト {q_idx + 1}】**")
-                                                q_name = st.selectbox(f"テストの種類", text_options, index=None, placeholder="テキストを選択", key=f"q_name_{i}_{q_idx}")
                                                 
-                                                # 💡 改善: 章と点数を横並びにして手入力に変更
+                                                # 🌟 小テスト名を quiz_names から選択するように変更！
+                                                q_name = st.selectbox(f"テストの種類", quiz_names, index=None, placeholder="小テストを選択", key=f"q_name_{i}_{q_idx}")
+                                                
+                                                # 🌟 章をテキスト入力に変更（第1回、Unit3 などに対応）
                                                 col_q1, col_q2 = st.columns(2)
                                                 with col_q1:
-                                                    target_chap = st.number_input(f"実施した章/範囲", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
+                                                    target_chap = st.text_input(f"実施した単元/回", placeholder="例: 第1回", key=f"q_chap_{i}_{q_idx}")
                                                 with col_q2:
                                                     score = st.number_input(f"点数", min_value=0, max_value=100, value=100, step=1, key=f"q_score_{i}_{q_idx}")
                                                 
@@ -341,7 +358,7 @@ def render_multi_input_page(textbook_master):
                                 next_hw_pages=data.get("next_hw_pages", ""),
                                 late_time=data.get("late_time", ""),        
                                 concentration=data.get("concentration", ""),
-                                reaction=data.get("reaction", "")           
+                                reaction=data.get("reaction", "")            
                             )
 
                             # 2. 小テストの専用シート保存
