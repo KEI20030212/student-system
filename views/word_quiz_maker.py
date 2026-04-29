@@ -16,68 +16,65 @@ from utils.api_guard import robust_api_call
 
 def render_word_quiz_maker_page():
     st.header("🔤 単語テスト作成・印刷")
-    st.write("単語テスト専用のレイアウトでPDFを作成します。")
+    st.write("キクタン専用のレイアウトでPDFを瞬時に作成します。")
 
-    # 🌟 強化: 既存のリスト取得機能を robust_api_call で保護（失敗時は空の辞書）
+    # 🌟 強化: 既存のリスト取得機能を robust_api_call で保護
     quiz_dict = robust_api_call(get_quiz_maker_sheets, fallback_value={})
 
-    # --- 新規登録機能（既存と同じ） ---
+    # --- 新規登録機能（既存と同じ：必要に応じてキクタンを登録してください） ---
     with st.expander("➕ 新しい単語テストをリストに登録する"):
         with st.form("add_word_quiz_form"):
-            new_name = st.text_input("📝 テスト名 (例: 英単語ターゲット1900)")
+            new_name = st.text_input("📝 テスト名 (例: キクタン8問)")
             new_id = st.text_input("🔑 スプレッドシートID")
             new_full_marks = st.number_input("💯 満点", min_value=1, value=100)
-            # 単語テストは選択肢でサイズが決まるため、登録時はデフォルトでOK
             submit_new = st.form_submit_button("リストに登録する ✨")
             if submit_new and new_name:
-                # 🌟 強化: 新規登録を robust_api_call で保護
-                robust_api_call(add_quiz_maker_sheet, new_name, new_id.strip(), new_full_marks, "B5") # デフォルトB5
+                robust_api_call(add_quiz_maker_sheet, new_name, new_id.strip(), new_full_marks, "B5")
                 st.success(f"「{new_name}」を登録しました！")
                 time.sleep(1)
                 st.rerun()
 
-    if not quiz_dict:
-        st.warning("テストが登録されていません。（または通信エラーによりデータを取得できませんでした）")
+    # --- メイン設定 ---
+    # 🌟 修正1：選択肢を「キクタン」の4つに限定
+    target_options = ["キクタン8問", "キクタン16問", "キクタン32問", "キクタン50問"]
+    
+    # 登録されている中から、対象の4つだけを表示（登録がない場合は警告）
+    available_options = [opt for opt in target_options if opt in quiz_dict]
+    
+    if not available_options:
+        st.warning("⚠️ 「キクタン8問」〜「キクタン50問」がリストに登録されていません。上のプラスボタンから登録してください。")
         return
 
-    # --- メイン設定 ---
-    quiz_name = st.selectbox("📚 ファイルを選択", sorted(quiz_dict.keys()), key="word_quiz_select")
+    quiz_name = st.selectbox("📚 ファイルを選択", available_options, key="word_quiz_select")
     quiz_data = quiz_dict[quiz_name]
     sheet_id = quiz_data.get("id", "") if isinstance(quiz_data, dict) else quiz_data
 
+    # 🌟 修正2：問題数選択ラジオボタンを廃止し、背後で自動設定
     with st.container(border=True):
-        st.markdown("#### ⚙️ 単語テスト設定")
+        st.markdown(f"#### ⚙️ 「{quiz_name}」の設定を適用中")
         
-        # 🌟 ここがポイント：問題数によってサイズと範囲を自動定義
-        word_type = st.radio(
-            "📝 問題数を選択してください",
-            ["8問 (B5)", "16問 (B5)", "32問 (A4)", "50問 (A3)"],
-            horizontal=True
-        )
-
-        # 設定の振り分け
-        if word_type == "8問 (B5)":
+        # 選択された名前に基づいて範囲とサイズを自動決定
+        if quiz_name == "キクタン8問":
             q_range, a_range, p_size = "A1:I18", "J1:R18", "B5"
-        elif word_type == "16問 (B5)":
+        elif quiz_name == "キクタン16問":
             q_range, a_range, p_size = "A1:I18", "J1:R18", "B5"
-        elif word_type == "32問 (A4)":
+        elif quiz_name == "キクタン32問":
             q_range, a_range, p_size = "A1:N18", "O1:AB18", "A4"
-        else: # 50問
+        else: # キクタン50問
             q_range, a_range, p_size = "A1:N27", "O1:AB27", "A3"
 
-        st.info(f"💡 【{word_type}】設定: 範囲 {q_range} / 用紙 {p_size}")
+        st.caption(f"自動設定：範囲 {q_range} / 用紙 {p_size}")
 
-        # 範囲指定（既存の確認テストと同じロジック）
+        # 範囲指定（ここは手動で調整が必要なため残しています）
         target_sheet_name = "確認テスト"
         c1, c2, c3 = st.columns(3)
         start_num = c1.number_input("はじめの番号", min_value=1, value=1, key="word_s")
         end_num = c2.number_input("おわりの番号", min_value=1, value=20, key="word_e")
         shuffle = c3.checkbox("🔀 シャッフルする", value=False, key="word_sh")
 
-        if st.button(f"✨ 単語テスト({word_type})を作成する", type="primary", use_container_width=True):
-            with st.spinner("単語テスト生成中..."):
+        if st.button(f"✨ {quiz_name} を作成する", type="primary", use_container_width=True):
+            with st.spinner(f"{quiz_name} 生成中..."):
                 try:
-                    # 🌟 強化: スプレッドシートへの連続アクセスを関数化し、robust_api_call で一括保護
                     def update_sheet_and_get_gid():
                         gc = get_gc_client()
                         sh = gc.open_by_key(sheet_id)
@@ -95,12 +92,12 @@ def render_word_quiz_maker_page():
                     gid = robust_api_call(update_sheet_and_get_gid, fallback_value=None)
                     
                     if gid is None:
-                        st.error("スプレッドシートの更新に失敗しました。通信状況を確認して再度お試しください。")
+                        st.error("スプレッドシートの更新に失敗しました。")
                         st.stop()
                         
                     time.sleep(3) 
 
-                    # 3. PDF URL作成 (前回の最強設定を適用)
+                    # PDF URL作成
                     base_url = (
                         f"https://docs.google.com/spreadsheets/d/{sheet_id}/export"
                         f"?format=pdf&gid={gid}&size={p_size}&portrait=true"
@@ -121,12 +118,11 @@ def render_word_quiz_maker_page():
                     creds.refresh(google.auth.transport.requests.Request())
                     headers = {"Authorization": f"Bearer {creds.token}"}
                     
-                    # 🌟 強化: PDFダウンロード時の requests.get も robust_api_call で保護
                     res_q = robust_api_call(requests.get, url_q, headers=headers, fallback_value=None)
                     res_a = robust_api_call(requests.get, url_a, headers=headers, fallback_value=None)
                     
                     if res_q is None or res_a is None or res_q.status_code != 200 or res_a.status_code != 200:
-                        st.error("PDFファイルの取得に失敗しました。通信が混雑している可能性があります。")
+                        st.error("PDFファイルの取得に失敗しました。")
                         st.stop()
                     
                     merger = PdfWriter()
@@ -137,8 +133,6 @@ def render_word_quiz_maker_page():
                     merger.write(merged_stream)
                     
                     st.session_state['word_pdf_merged'] = merged_stream.getvalue()
-                    st.session_state['word_pdf_q'] = res_q.content
-                    st.session_state['word_pdf_a'] = res_a.content
                     st.success("✅ 生成完了！")
 
                 except Exception as e:
@@ -147,8 +141,6 @@ def render_word_quiz_maker_page():
     # --- ダウンロードUI ---
     if 'word_pdf_merged' in st.session_state:
         st.divider()
-        def display_pdf(pdf_bytes, filename, color="#28a745"):
-            b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-            st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" download="{filename}" style="display: block; text-align: center; padding: 12px; background-color: {color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin-bottom: 10px;">📥 {filename} を開く</a>', unsafe_allow_html=True)
-
-        display_pdf(st.session_state['word_pdf_merged'], "単語テスト_問題解答セット.pdf")
+        b64_pdf = base64.b64encode(st.session_state['word_pdf_merged']).decode('utf-8')
+        filename = f"{quiz_name}_テスト.pdf"
+        st.markdown(f'<a href="data:application/pdf;base64,{b64_pdf}" download="{filename}" style="display: block; text-align: center; padding: 12px; background-color: #28a745; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin-bottom: 10px;">📥 {filename} を開く</a>', unsafe_allow_html=True)
