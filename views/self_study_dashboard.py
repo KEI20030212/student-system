@@ -351,8 +351,8 @@ def render_self_study_dashboard():
         multiplier = 13    # 31人以上：詰め気味（1人13px）
         bar_size = 10      # 棒を細めに
 
-    # 全体の高さを計算（最低400pxは確保）
-    chart_height = max(400, num_students * multiplier)
+    # 全体の高さを計算（最低300pxは確保）
+    chart_height = max(300, num_students * multiplier)
     # ---------------------------------------
 
     grade_display = " / ".join(selected_grades) if len(selected_grades) <= 4 else "全学年"
