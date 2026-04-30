@@ -38,11 +38,11 @@ def render_self_study_dashboard():
             /* 1. 用紙の強制設定 */
             @page {
                 size: landscape; 
-                margin: 0mm 10mm 5mm 10mm;
+                margin: 5mm 10mm; /* 上下左右の余白を少しだけ確保 */
             }
 
-            /* 🌟 2. 透明な箱の制限を破壊（親の箱自体も横幅270mmにこじ開ける） */
-            html, body, .main, .block-container, 
+            /* 🌟 2. Streamlitの大元の箱の「幅制限」を完全に破壊する */
+            html, body, [data-testid="stApp"], .main, .block-container, 
             [data-testid="stAppViewContainer"], 
             [data-testid="stAppViewBlockContainer"],
             [data-testid="stVerticalBlock"],
@@ -52,12 +52,9 @@ def render_self_study_dashboard():
             [role="tabpanel"] {            
                 display: block !important;
                 width: 100% !important;
-                min-width: 270mm !important; /* 💥 ここも270mmを指定して親箱を強制拡張！ */
-                max-width: none !important;
+                max-width: 100% !important; /* 💥 ここが一番重要：最大幅の制限を解除！ */
                 padding: 0 !important;
                 margin: 0 !important;
-                gap: 0 !important;
-                height: auto !important;
             }
 
             /* 不要なものをすべて非表示（👆アイコン含む） */
@@ -68,7 +65,6 @@ def render_self_study_dashboard():
             [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3, 
             [data-testid="stHeadingWithActionElements"], iframe, .stProgress,
             #vg-tooltip-element, .vg-tooltip, 
-            /* 💥 👆メッセージを完全に消し去るために、Streamlitの裏側のタグを全指定！ */
             [data-testid="stAlert"], [data-baseweb="notification"], div[role="alert"] { 
                 display: none !important; 
             }
@@ -79,52 +75,39 @@ def render_self_study_dashboard():
                 text-align: center !important; 
                 font-size: 24px !important; 
                 font-weight: bold !important; 
-                margin: -90px auto 5px auto !important; 
+                margin: -90 auto 10px auto !important; 
                 padding: 0 !important;
                 page-break-after: avoid !important;
                 break-after: avoid !important;
             }
 
-            /* 🌟 4. グラフを「ページまたぎOK」にし、横幅を限界突破 */
+            /* 🌟 4. グラフの幅を100%に広げ、高さは自動で伸ばす */
             [data-testid="stArrowVegaLiteChart"],
             .vega-embed {
                 display: block !important;
-                width: 270mm !important;
-                min-width: 270mm !important;
-                max-width: 270mm !important;
-                
-                /* 💥 変更：高さを固定していた魔法をすべて削除！ */
-                /* これで人数に応じて自然に縦に伸び、ページをまたぐようになります */
-                height: auto !important;     
-                overflow: visible !important; /* 💥 はみ出した分も隠さず表示 */
-                
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important; /* 縦はPython側で計算した高さまで自由に伸ばす */
                 margin: 0 auto !important;
                 padding: 0 !important;
-                
-                /* 💥 変更：ページまたぎを「許可」する */
                 page-break-inside: auto !important;
                 break-inside: auto !important;
             }
             
-            /* 🌟 5. グラフ画像自体を横幅にフィットさせる */
+            /* 🌟 5. グラフ画像自体を枠いっぱいに広げる */
             [data-testid="stArrowVegaLiteChart"] canvas,
             [data-testid="stArrowVegaLiteChart"] svg,
             .vega-embed canvas,
             .vega-embed svg {
-                width: 270mm !important;       
-                min-width: 270mm !important;   
-                max-width: 270mm !important;   
-                
-                /* 💥 変更：画像の高さを強制指定しない！ */
-                /* Python側で計算した `chart_height = max(300, len(merged) * 30)` の高さをそのまま活かします */
-                
-                object-fit: fill !important;  
-                object-position: top left !important;
+                width: 100% !important;       
+                max-width: 100% !important;   
+                height: auto !important;      
+                object-fit: contain !important; /* 画像の比率を保ったまま広げる */
                 display: block !important;
                 margin: 0 !important;
             }
             
-            /* ② タブの横にあるスクロール用矢印を消す */
+            /* タブの横にあるスクロール用矢印を消す */
             [data-testid="stTabs"] button {
                 display: none !important;
             }
@@ -363,8 +346,8 @@ def render_self_study_dashboard():
     merged = merged.sort_values(by='合計時間(分)', ascending=False)
     sorted_students = merged['生徒名'].tolist() 
 
-    chart_height = max(300, len(merged) * 30)
-    y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=12))
+    chart_height = max(400, len(merged) * 40)
+    y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=12, labelOverlap=False))
 
     if mode == "自習時間 ＋ 授業時間":
         plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
