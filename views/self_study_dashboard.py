@@ -335,6 +335,26 @@ def render_self_study_dashboard():
         st.info("指定された条件のデータがありませんでした。")
         return
 
+    # --- 🌟 人数に応じたサイズ自動調整機能 ---
+    num_students = len(merged)
+    
+    if num_students <= 5:
+        multiplier = 50    # 5人以下：かなり広く（1人50px）
+        bar_size = 30      # 棒を極太に
+    elif num_students <= 10:
+        multiplier = 40    # 6〜10人：広めに（1人40px）
+        bar_size = 22      # 棒を太めに
+    elif num_students <= 30:
+        multiplier = 25    # 11〜30人：標準（1人25px）
+        bar_size = 15      # 棒を標準サイズに
+    else:
+        multiplier = 13    # 31人以上：詰め気味（1人13px）
+        bar_size = 10      # 棒を細めに
+
+    # 全体の高さを計算（最低400pxは確保）
+    chart_height = max(400, num_students * multiplier)
+    # ---------------------------------------
+
     grade_display = " / ".join(selected_grades) if len(selected_grades) <= 4 else "全学年"
     title_html = f"""
     <div class='print-title'>
@@ -346,16 +366,17 @@ def render_self_study_dashboard():
     merged = merged.sort_values(by='合計時間(分)', ascending=False)
     sorted_students = merged['生徒名'].tolist() 
 
-    chart_height = max(300, len(merged) * 10)
+    # 軸の設定（labelOverlap=False で名前の省略を絶対禁止）
     y_encoding = alt.Y('生徒名:N', sort=sorted_students, title=None, axis=alt.Axis(labelFontSize=12, labelOverlap=False))
 
     if mode == "自習時間 ＋ 授業時間":
         plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
         
-        bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, size=14).encode(
+        # size=bar_size を適用
+        bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, size=bar_size).encode(
             x=alt.X('時間:Q', title='学習時間 (分)'),
             y=y_encoding,
-            color=alt.Color('時間の種類:N', scale=alt.Scale(domain=['自習時間(分)', '授業時間(分)'], range=['#ff7f0e', '#1f77b4']), legend=alt.Legend(title=None, orient="top", offset=-5, labelFontSize=7)),
+            color=alt.Color('時間の種類:N', scale=alt.Scale(domain=['自習時間(分)', '授業時間(分)'], range=['#ff7f0e', '#1f77b4']), legend=alt.Legend(title=None, orient="top", offset=-5, labelFontSize=10)),
             tooltip=['生徒名', '時間の種類', '時間', '合計時間(分)']
         )
         
@@ -368,7 +389,8 @@ def render_self_study_dashboard():
         chart = alt.layer(bars, text).properties(height=chart_height)
         
     else:
-        bars = alt.Chart(merged).mark_bar(cornerRadiusEnd=4, size=14).encode(
+        # size=bar_size を適用
+        bars = alt.Chart(merged).mark_bar(cornerRadiusEnd=4, size=bar_size).encode(
             x=alt.X('合計時間(分):Q', title='自習時間 (分)'),
             y=y_encoding,
             color=alt.Color('合計時間(分):Q', scale=alt.Scale(scheme='blues'), legend=None),
@@ -384,7 +406,7 @@ def render_self_study_dashboard():
         chart = alt.layer(bars, text).properties(height=chart_height)
 
     st.altair_chart(chart, use_container_width=True)
-
+    
     # ==========================================
     # 5. 詳細データ表の表示
     # ==========================================
