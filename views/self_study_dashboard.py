@@ -76,7 +76,7 @@ def render_self_study_dashboard():
                 font-size: 24px !important; 
                 font-weight: bold !important; 
                 /* 💥 変更後： 上の余白を「マイナス」にして、強制的に上に引っ張り上げる！ */
-                margin: -60px auto 5px auto !important; 
+                margin: -100px auto 5px auto !important; 
                 padding: 0 !important;
                 /* 💥 追加：タイトルの「直後」で勝手に改ページするのを絶対に禁止する！ */
                 page-break-after: avoid !important;
@@ -91,9 +91,9 @@ def render_self_study_dashboard():
                 max-width: none !important;
                 
                 /* 💥 高さを「物理的な壁」で完全に閉じ込めるギミック */
-                height: 135mm !important;     /* 165mmから少し縮めて余裕を持たせる */
-                min-height: 135mm !important; /* 💥 追加：最低の高さも固定！ */
-                max-height: 135mm !important; /* 💥 追加：最高の高さも固定！ */
+                height: 100mm !important;     /* 165mmから少し縮めて余裕を持たせる */
+                min-height: 100mm !important; /* 💥 追加：最低の高さも固定！ */
+                max-height: 100mm !important; /* 💥 追加：最高の高さも固定！ */
                 
                 margin: 0 auto !important;
                 padding: 0 !important;
