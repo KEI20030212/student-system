@@ -48,13 +48,16 @@ def render_self_study_dashboard():
             [data-testid="stAppViewBlockContainer"],
             [data-testid="stVerticalBlock"],
             [data-testid="stVerticalBlockBorderWrapper"],
-            [data-testid="element-container"] {
-                display: block !important;  /* Flexboxを解除して「自動的な隙間」を無効化 */
+            [data-testid="element-container"],
+            [data-testid="stTabs"],        /* 💥 追加：タブ全体の箱 */
+            [role="tabpanel"] {            /* 💥 追加：タブの中身の箱（ここが横幅を邪魔していた！） */
+                display: block !important;
                 width: 100% !important;
+                min-width: 100% !important; /* 💥 追加：絶対に100%を下回らないようにする */
                 max-width: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
-                gap: 0 !important;          /* ← 💥これが透明な壁（押し出し）の犯人です！ */
+                gap: 0 !important;
                 height: auto !important;
             }
 
@@ -88,6 +91,7 @@ def render_self_study_dashboard():
             .vega-embed {
                 display: block !important;
                 width: 100% !important;
+                min-width: 100% !important;
                 max-width: none !important;
                 
                 /* 💥 高さを「物理的な壁」で完全に閉じ込めるギミック */
@@ -113,6 +117,7 @@ def render_self_study_dashboard():
             .vega-embed canvas,
             .vega-embed svg {
                 width: 100% !important;       /* 💥 横幅をA4の限界(100%)まで広げる */
+                min-width: 100% !important;
                 height: 100% !important;      /* 💥 高さを165mmに合わせる */
                 max-width: none !important;   /* 💥 ここも限界突破 */
                 object-fit: fill !important;  /* 💥 縦画面の細い画像を、横長に無理やり引き伸ばす！ */
