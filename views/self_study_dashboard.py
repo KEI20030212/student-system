@@ -68,7 +68,7 @@ def render_self_study_dashboard():
             [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] h1, 
             [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3, 
             [data-testid="stHeadingWithActionElements"], iframe, .stProgress,
-            #vg-tooltip-element, .vg-tooltip { 
+            #vg-tooltip-element, .vg-tooltip, [data-testid="stAlert"]{ 
                 display: none !important; 
             }
 
@@ -86,23 +86,23 @@ def render_self_study_dashboard():
                 break-after: avoid !important;
             }
 
-            /* 🌟 4. グラフが下を突き破る原因を修正（A4横に強制フィット＆物理閉じ込め版） */
+            /* 🌟 4. グラフが下を突き破る原因を修正（物理サイズで完全固定版） */
             [data-testid="stArrowVegaLiteChart"],
             .vega-embed {
                 display: block !important;
-                width: 100% !important;
-                min-width: 100% !important;
-                max-width: none !important;
                 
-                /* 💥 高さを「物理的な壁」で完全に閉じ込めるギミック */
-                height: 120mm !important;     /* 165mmから少し縮めて余裕を持たせる */
-                min-height: 120mm !important; /* 💥 追加：最低の高さも固定！ */
-                max-height: 120mm !important; /* 💥 追加：最高の高さも固定！ */
+                /* 💥 変更：「100%」ではなく「270mm」で物理的に横幅をこじ開ける！ */
+                width: 270mm !important;
+                min-width: 270mm !important;
+                max-width: 270mm !important;
+                
+                /* 高さは現在の120mmをキープ */
+                height: 120mm !important;     
+                min-height: 120mm !important; 
+                max-height: 120mm !important; 
                 
                 margin: 0 auto !important;
                 padding: 0 !important;
-                
-                /* 💥 最後の砦：もし中の画像が巨大化しても、この壁の外は絶対に表示させない */
                 overflow: hidden !important;
                 
                 page-break-before: avoid !important;
@@ -116,11 +116,13 @@ def render_self_study_dashboard():
             [data-testid="stArrowVegaLiteChart"] svg,
             .vega-embed canvas,
             .vega-embed svg {
-                width: 100% !important;       /* 💥 横幅をA4の限界(100%)まで広げる */
-                min-width: 100% !important;
-                height: 100% !important;      /* 💥 高さを165mmに合わせる */
-                max-width: none !important;   /* 💥 ここも限界突破 */
-                object-fit: fill !important;  /* 💥 縦画面の細い画像を、横長に無理やり引き伸ばす！ */
+                /* 💥 変更：画像の中身も絶対に「270mm」まで引き伸ばす！ */
+                width: 270mm !important;       
+                min-width: 270mm !important;   
+                max-width: 270mm !important;   
+                
+                height: 100% !important;      
+                object-fit: fill !important;  
                 object-position: top center !important;
                 display: block !important;
                 margin: 0 auto !important;
