@@ -31,29 +31,28 @@ def get_all_student_grades():
     return df
 
 def render_self_study_dashboard():
-    # --- 🖨️ 印刷用の魔法（横向き・隙間ゼロ・完全強制フィット版） ---
+    # --- 🖨️ 印刷用の魔法（横向き・横幅最大化・ページまたぎ許可版） ---
     st.markdown("""
         <style>
         @media print {
             /* 1. 用紙の強制設定 */
             @page {
                 size: landscape; 
-                /* 💥 変更後： 上(0mm) 右(10mm) 下(5mm) 左(10mm) にして、上を限界まで詰める */
                 margin: 0mm 10mm 5mm 10mm;
             }
 
-            /* 🌟 2. 真ん中から始まってしまう原因（透明な箱の隙間）を完全に破壊 */
+            /* 🌟 2. 透明な箱の制限を破壊（親の箱自体も横幅270mmにこじ開ける） */
             html, body, .main, .block-container, 
             [data-testid="stAppViewContainer"], 
             [data-testid="stAppViewBlockContainer"],
             [data-testid="stVerticalBlock"],
             [data-testid="stVerticalBlockBorderWrapper"],
             [data-testid="element-container"],
-            [data-testid="stTabs"],        /* 💥 追加：タブ全体の箱 */
-            [role="tabpanel"] {            /* 💥 追加：タブの中身の箱（ここが横幅を邪魔していた！） */
+            [data-testid="stTabs"],        
+            [role="tabpanel"] {            
                 display: block !important;
                 width: 100% !important;
-                min-width: 100% !important; /* 💥 追加：絶対に100%を下回らないようにする */
+                min-width: 270mm !important; /* 💥 ここも270mmを指定して親箱を強制拡張！ */
                 max-width: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
@@ -61,74 +60,71 @@ def render_self_study_dashboard():
                 height: auto !important;
             }
 
-            /* 不要なものをすべて非表示（中身だけでなく外箱も極力消す） */
+            /* 不要なものをすべて非表示（👆アイコン含む） */
             header, footer, [data-testid="stHeader"], [data-testid="stSidebar"], 
             [data-testid="stForm"], .stButton, [data-testid="stCaptionContainer"],
             [data-testid="stTable"], .print-table-title,
             [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] h1, 
             [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3, 
             [data-testid="stHeadingWithActionElements"], iframe, .stProgress,
-            #vg-tooltip-element, .vg-tooltip, [data-testid="stAlert"]{ 
+            #vg-tooltip-element, .vg-tooltip, 
+            /* 💥 👆メッセージを完全に消し去るために、Streamlitの裏側のタグを全指定！ */
+            [data-testid="stAlert"], [data-baseweb="notification"], div[role="alert"] { 
                 display: none !important; 
             }
 
-            /* 🌟 3. タイトルを一番上（隙間ゼロ）に配置 */
+            /* 🌟 3. タイトルを一番上に配置 */
             .print-title { 
                 display: block !important; 
                 text-align: center !important; 
                 font-size: 24px !important; 
                 font-weight: bold !important; 
-                /* 💥 変更後： 上の余白を「マイナス」にして、強制的に上に引っ張り上げる！ */
-                margin: -100px auto 5px auto !important; 
+                margin: -90px auto 5px auto !important; 
                 padding: 0 !important;
-                /* 💥 追加：タイトルの「直後」で勝手に改ページするのを絶対に禁止する！ */
                 page-break-after: avoid !important;
                 break-after: avoid !important;
             }
 
-            /* 🌟 4. グラフが下を突き破る原因を修正（物理サイズで完全固定版） */
+            /* 🌟 4. グラフを「ページまたぎOK」にし、横幅を限界突破 */
             [data-testid="stArrowVegaLiteChart"],
             .vega-embed {
                 display: block !important;
-                
-                /* 💥 変更：「100%」ではなく「270mm」で物理的に横幅をこじ開ける！ */
                 width: 270mm !important;
                 min-width: 270mm !important;
                 max-width: 270mm !important;
                 
-                /* 高さは現在の120mmをキープ */
-                height: 120mm !important;     
-                min-height: 120mm !important; 
-                max-height: 120mm !important; 
+                /* 💥 変更：高さを固定していた魔法をすべて削除！ */
+                /* これで人数に応じて自然に縦に伸び、ページをまたぐようになります */
+                height: auto !important;     
+                overflow: visible !important; /* 💥 はみ出した分も隠さず表示 */
                 
                 margin: 0 auto !important;
                 padding: 0 !important;
-                overflow: hidden !important;
                 
-                page-break-before: avoid !important;
-                break-before: avoid !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
+                /* 💥 変更：ページまたぎを「許可」する */
+                page-break-inside: auto !important;
+                break-inside: auto !important;
             }
             
-            /* 🌟 5. グラフ画像自体を枠の中に完全に広げて収める */
+            /* 🌟 5. グラフ画像自体を横幅にフィットさせる */
             [data-testid="stArrowVegaLiteChart"] canvas,
             [data-testid="stArrowVegaLiteChart"] svg,
             .vega-embed canvas,
             .vega-embed svg {
-                /* 💥 変更：画像の中身も絶対に「270mm」まで引き伸ばす！ */
                 width: 270mm !important;       
                 min-width: 270mm !important;   
                 max-width: 270mm !important;   
                 
-                height: 100% !important;      
+                /* 💥 変更：画像の高さを強制指定しない！ */
+                /* Python側で計算した `chart_height = max(300, len(merged) * 30)` の高さをそのまま活かします */
+                
                 object-fit: fill !important;  
-                object-position: top center !important;
+                object-position: top left !important;
                 display: block !important;
-                margin: 0 auto !important;
+                margin: 0 !important;
             }
             
-            /* ② タブの横にあるスクロール用矢印（＞）を消す */
+            /* ② タブの横にあるスクロール用矢印を消す */
             [data-testid="stTabs"] button {
                 display: none !important;
             }
