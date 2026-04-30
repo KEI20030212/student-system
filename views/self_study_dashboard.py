@@ -38,7 +38,7 @@ def render_self_study_dashboard():
             /* 1. 用紙の強制設定 */
             @page {
                 size: landscape; 
-                margin: 5mm 10mm; /* 上下左右の余白を少しだけ確保 */
+                margin: 0mm 10mm; /* 上下左右の余白を少しだけ確保 */
             }
 
             /* 🌟 2. Streamlitの大元の箱の「幅制限」を完全に破壊する */
