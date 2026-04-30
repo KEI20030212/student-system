@@ -76,7 +76,7 @@ def render_self_study_dashboard():
                 font-size: 24px !important; 
                 font-weight: bold !important; 
                 /* 💥 変更後： 上の余白を「マイナス」にして、強制的に上に引っ張り上げる！ */
-                margin: -30px auto 5px auto !important; 
+                margin: -60px auto 5px auto !important; 
                 padding: 0 !important;
             }
 
