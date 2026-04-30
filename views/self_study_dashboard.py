@@ -346,7 +346,7 @@ def render_self_study_dashboard():
     merged = merged.sort_values(by='合計時間(分)', ascending=False)
     sorted_students = merged['生徒名'].tolist() 
 
-    chart_height = max(400, len(merged) * 13)
+    chart_height = max(350, len(merged) * 13)
     y_encoding = alt.Y('生徒名:N', sort=sorted_students, title=None, axis=alt.Axis(labelFontSize=12, labelOverlap=False))
 
     if mode == "自習時間 ＋ 授業時間":
