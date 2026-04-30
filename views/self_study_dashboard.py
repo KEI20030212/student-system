@@ -88,7 +88,7 @@ def render_self_study_dashboard():
                 width: 100% !important;
                 max-width: 100% !important;
                 height: auto !important; /* 縦はPython側で計算した高さまで自由に伸ばす */
-                margin: 0 20px 0 20px !important;
+                margin: 0 0 0 -20px !important;
                 padding: 0 !important;
                 page-break-inside: auto !important;
                 break-inside: auto !important;
@@ -346,8 +346,8 @@ def render_self_study_dashboard():
     merged = merged.sort_values(by='合計時間(分)', ascending=False)
     sorted_students = merged['生徒名'].tolist() 
 
-    chart_height = max(400, len(merged) * 25)
-    y_encoding = alt.Y('生徒名:N', sort=sorted_students, title='生徒名', axis=alt.Axis(labelFontSize=12, labelOverlap=False))
+    chart_height = max(400, len(merged) * 20)
+    y_encoding = alt.Y('生徒名:N', sort=sorted_students, title=None, axis=alt.Axis(labelFontSize=12, labelOverlap=False))
 
     if mode == "自習時間 ＋ 授業時間":
         plot_df = pd.melt(merged, id_vars=['生徒名', '合計時間(分)'], value_vars=['自習時間(分)', '授業時間(分)'], var_name='時間の種類', value_name='時間')
