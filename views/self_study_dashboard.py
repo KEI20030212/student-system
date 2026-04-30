@@ -95,9 +95,9 @@ def render_self_study_dashboard():
                 max-width: none !important;
                 
                 /* 💥 高さを「物理的な壁」で完全に閉じ込めるギミック */
-                height: 100mm !important;     /* 165mmから少し縮めて余裕を持たせる */
-                min-height: 100mm !important; /* 💥 追加：最低の高さも固定！ */
-                max-height: 100mm !important; /* 💥 追加：最高の高さも固定！ */
+                height: 120mm !important;     /* 165mmから少し縮めて余裕を持たせる */
+                min-height: 120mm !important; /* 💥 追加：最低の高さも固定！ */
+                max-height: 120mm !important; /* 💥 追加：最高の高さも固定！ */
                 
                 margin: 0 auto !important;
                 padding: 0 !important;
