@@ -113,9 +113,9 @@ def render_self_study_dashboard():
                 margin: 0 auto !important;
             }
             
-            /* 🌟 6. タブメニューと「＞」矢印を完全に抹殺する */
-            [data-testid="stTabs"] > div:first-of-type {
-                display: none !important; /* タブの名前一覧と矢印を丸ごと非表示！ */
+            /* ② タブの横にあるスクロール用矢印（＞）を消す */
+            [data-testid="stTabs"] button {
+                display: none !important;
             }
 
             /* 背景色・文字色の調整 */
