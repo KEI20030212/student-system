@@ -93,7 +93,7 @@ def render_self_study_dashboard():
                 width: auto !important;
                 height: 100% !important;      /* 外枠の165mmに強制的に合わせる */
                 max-width: 100% !important;
-                object-fit: contain !important; /* 全体が収まるように自動縮小！ */
+                object-fit: fill !important; /* 全体が収まるように自動縮小！ */
                 display: block !important;
                 margin: 0 auto !important;
             }
