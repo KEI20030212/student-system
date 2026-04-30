@@ -49,6 +49,8 @@ def render_self_study_dashboard():
             [data-testid="stVerticalBlockBorderWrapper"],
             [data-testid="element-container"] {
                 display: block !important;  /* Flexboxを解除して「自動的な隙間」を無効化 */
+                width: 100% !important;
+                max-width: none !important;
                 padding: 0 !important;
                 margin: 0 !important;
                 gap: 0 !important;          /* ← 💥これが透明な壁（押し出し）の犯人です！ */
@@ -77,23 +79,26 @@ def render_self_study_dashboard():
             }
 
             /* 🌟 4. グラフが下を突き破る原因を修正（A4横に強制フィット） */
-            [data-testid="stArrowVegaLiteChart"] {
+            [data-testid="stArrowVegaLiteChart"],
+            .vega-embed {                    /* 💥 追加：グラフを包むもう一つの見えない箱も指定 */
                 display: block !important;
                 width: 100% !important;
-                height: 165mm !important;     /* 💥 A4横の限界の高さに完全固定！ */
-                max-height: 165mm !important; 
+                max-width: none !important;  /* 💥 追加：ここでも最大幅を解除 */
+                height: 165mm !important;
                 margin: 0 auto !important;
                 padding: 0 !important;
-                overflow: hidden !important;  /* はみ出しをカット */
+                overflow: hidden !important;
             }
             
-            /* 🌟 5. グラフ画像自体を枠の中に「縦横比を保って」縮小して収める */
+            /* 🌟 5. グラフ画像自体を枠の中に完全に広げて収める */
             [data-testid="stArrowVegaLiteChart"] canvas,
-            [data-testid="stArrowVegaLiteChart"] svg {
-                width: auto !important;
-                height: 100% !important;      /* 外枠の165mmに強制的に合わせる */
-                max-width: 100% !important;
-                object-fit: fill !important; /* 全体が収まるように自動縮小！ */
+            [data-testid="stArrowVegaLiteChart"] svg,
+            .vega-embed canvas,
+            .vega-embed svg {
+                width: 100% !important;       /* 💥 横幅をA4の限界(100%)まで広げる */
+                height: 100% !important;      /* 💥 高さを165mmに合わせる */
+                max-width: none !important;   /* 💥 ここも限界突破 */
+                object-fit: fill !important;  /* 💥 縦画面の細い画像を、横長に無理やり引き伸ばす！ */
                 display: block !important;
                 margin: 0 auto !important;
             }
