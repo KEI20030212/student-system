@@ -78,15 +78,22 @@ def render_self_study_dashboard():
                 padding: 0 !important;
             }
 
-            /* 🌟 4. グラフが下を突き破る原因を修正（A4横に強制フィット） */
+            /* 🌟 4. グラフが下を突き破る原因を修正（A4横に強制フィット＆物理閉じ込め版） */
             [data-testid="stArrowVegaLiteChart"],
-            .vega-embed {                    /* 💥 追加：グラフを包むもう一つの見えない箱も指定 */
+            .vega-embed {
                 display: block !important;
                 width: 100% !important;
-                max-width: none !important;  /* 💥 追加：ここでも最大幅を解除 */
-                height: 165mm !important;
+                max-width: none !important;
+                
+                /* 💥 高さを「物理的な壁」で完全に閉じ込めるギミック */
+                height: 160mm !important;     /* 165mmから少し縮めて余裕を持たせる */
+                min-height: 160mm !important; /* 💥 追加：最低の高さも固定！ */
+                max-height: 160mm !important; /* 💥 追加：最高の高さも固定！ */
+                
                 margin: 0 auto !important;
                 padding: 0 !important;
+                
+                /* 💥 最後の砦：もし中の画像が巨大化しても、この壁の外は絶対に表示させない */
                 overflow: hidden !important;
             }
             
