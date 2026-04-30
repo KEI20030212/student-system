@@ -38,7 +38,7 @@ def render_self_study_dashboard():
             /* 1. 用紙の強制設定 */
             @page {
                 size: landscape; 
-                margin: 5mm 10mm; /* 上下5mm、左右10mmの限界まで広い余白 */
+                margin: 2mm 5mm; /* 上下2mm、左右5mmの限界まで広い余白 */
             }
 
             /* 🌟 2. 真ん中から始まってしまう原因（透明な箱の隙間）を完全に破壊 */
