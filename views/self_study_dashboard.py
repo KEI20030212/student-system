@@ -88,7 +88,7 @@ def render_self_study_dashboard():
                 width: 100% !important;
                 max-width: 100% !important;
                 height: auto !important; /* 縦はPython側で計算した高さまで自由に伸ばす */
-                margin: 0 0 0 -20px !important;
+                margin: -20px 0 0 0 !important;
                 padding: 0 !important;
                 page-break-inside: auto !important;
                 break-inside: auto !important;
@@ -346,7 +346,7 @@ def render_self_study_dashboard():
     merged = merged.sort_values(by='合計時間(分)', ascending=False)
     sorted_students = merged['生徒名'].tolist() 
 
-    chart_height = max(400, len(merged) * 20)
+    chart_height = max(400, len(merged) * 15)
     y_encoding = alt.Y('生徒名:N', sort=sorted_students, title=None, axis=alt.Axis(labelFontSize=12, labelOverlap=False))
 
     if mode == "自習時間 ＋ 授業時間":
@@ -355,7 +355,7 @@ def render_self_study_dashboard():
         bars = alt.Chart(plot_df).mark_bar(cornerRadiusEnd=4, size=14).encode(
             x=alt.X('時間:Q', title='学習時間 (分)'),
             y=y_encoding,
-            color=alt.Color('時間の種類:N', scale=alt.Scale(domain=['自習時間(分)', '授業時間(分)'], range=['#ff7f0e', '#1f77b4']), legend=alt.Legend(title="学習の種類", orient="top")),
+            color=alt.Color('時間の種類:N', scale=alt.Scale(domain=['自習時間(分)', '授業時間(分)'], range=['#ff7f0e', '#1f77b4']), legend=alt.Legend(title=None, orient="top")),
             tooltip=['生徒名', '時間の種類', '時間', '合計時間(分)']
         )
         
