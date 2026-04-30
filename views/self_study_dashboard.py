@@ -78,6 +78,9 @@ def render_self_study_dashboard():
                 /* 💥 変更後： 上の余白を「マイナス」にして、強制的に上に引っ張り上げる！ */
                 margin: -60px auto 5px auto !important; 
                 padding: 0 !important;
+                /* 💥 追加：タイトルの「直後」で勝手に改ページするのを絶対に禁止する！ */
+                page-break-after: avoid !important;
+                break-after: avoid !important;
             }
 
             /* 🌟 4. グラフが下を突き破る原因を修正（A4横に強制フィット＆物理閉じ込め版） */
@@ -88,15 +91,20 @@ def render_self_study_dashboard():
                 max-width: none !important;
                 
                 /* 💥 高さを「物理的な壁」で完全に閉じ込めるギミック */
-                height: 160mm !important;     /* 165mmから少し縮めて余裕を持たせる */
-                min-height: 160mm !important; /* 💥 追加：最低の高さも固定！ */
-                max-height: 160mm !important; /* 💥 追加：最高の高さも固定！ */
+                height: 145mm !important;     /* 165mmから少し縮めて余裕を持たせる */
+                min-height: 145mm !important; /* 💥 追加：最低の高さも固定！ */
+                max-height: 145mm !important; /* 💥 追加：最高の高さも固定！ */
                 
                 margin: 0 auto !important;
                 padding: 0 !important;
                 
                 /* 💥 最後の砦：もし中の画像が巨大化しても、この壁の外は絶対に表示させない */
                 overflow: hidden !important;
+                
+                page-break-before: avoid !important;
+                break-before: avoid !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }
             
             /* 🌟 5. グラフ画像自体を枠の中に完全に広げて収める */
