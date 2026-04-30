@@ -38,7 +38,8 @@ def render_self_study_dashboard():
             /* 1. 用紙の強制設定 */
             @page {
                 size: landscape; 
-                margin: 5mm 10mm; /* 上下5mm、左右10mmの限界まで広い余白 */
+                /* 💥 変更後： 上(0mm) 右(10mm) 下(5mm) 左(10mm) にして、上を限界まで詰める */
+                margin: 0mm 10mm 5mm 10mm;
             }
 
             /* 🌟 2. 真ん中から始まってしまう原因（透明な箱の隙間）を完全に破壊 */
@@ -74,7 +75,8 @@ def render_self_study_dashboard():
                 text-align: center !important; 
                 font-size: 24px !important; 
                 font-weight: bold !important; 
-                margin: 0 auto 5px auto !important; 
+                /* 💥 変更後： 上の余白を「マイナス」にして、強制的に上に引っ張り上げる！ */
+                margin: -15px auto 5px auto !important; 
                 padding: 0 !important;
             }
 
