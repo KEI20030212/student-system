@@ -15,7 +15,7 @@ from utils.g_sheets import (
     add_new_textbook,        
     get_textbook_master,
     save_quiz_to_dedicated_sheet,
-    get_quiz_master_dict  # 🌟 追加: 小テストマスター取得関数
+    get_quiz_master_dict  
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -31,14 +31,64 @@ def robust_api_call(func, *args, max_retries=3, **kwargs):
             return func(*args, **kwargs)
         except Exception as e:
             if attempt == max_retries - 1:
-                raise e  # 最終試行でも失敗した場合はエラーを投げる
-            # エラー発生時は待機時間を倍に増やして再試行 (Exponential Backoff: 1秒, 2秒...)
+                raise e 
             time.sleep(2 ** attempt)
 
+# 🌟 追加: 一時保存の対象となるウィジェットのキー（接頭辞）リスト
+DRAFT_PREFIXES = (
+    "record_type", "class_date", "class_type", # 今回新しくkeyを追加したもの
+    "sb_", "name_", "new_name_", "att_", "late_", "sub_", "texts_", "new_usage_text_",
+    "adv_start_", "adv_end_", "num_q_", "q_name_", "q_chap_", "q_score_", "w_",
+    "done_start_", "done_end_", "conc_", "reac_", "hw_text_", "new_hw_text_", 
+    "n_start_", "n_end_", "advc_", "p_msg_", "next_h_",
+    "ss_", "d_", "s_", "e_", "b_", "m_"
+)
+
 def render_multi_input_page(textbook_master):
+    
+    # ==========================================
+    # 🌟 新機能: 画面を追従するサイドバー一時保存メニュー
+    # ==========================================
+    with st.sidebar:
+        st.header("💾 一時保存メニュー")
+        st.caption("ページ移動前に保存すると入力内容が消えません！")
+        
+        c1, c2 = st.columns(2)
+        if c1.button("💾 保存", use_container_width=True):
+            draft = {}
+            # 現在のセッションステートから、入力フォームのデータだけを抽出して退避
+            for k, v in st.session_state.items():
+                if k.startswith(DRAFT_PREFIXES):
+                    draft[k] = v
+            st.session_state["draft_data"] = draft
+            st.success("一時保存しました！")
+            
+        if c2.button("📂 復元", use_container_width=True):
+            if "draft_data" in st.session_state and st.session_state["draft_data"]:
+                # 退避しておいたデータをセッションステートに戻す
+                for k, v in st.session_state["draft_data"].items():
+                    st.session_state[k] = v
+                st.success("復元しました！")
+                time.sleep(1)
+                st.rerun() # 画面を再描画して復元を反映
+            else:
+                st.warning("保存データがありません")
+                
+        if st.button("🗑️ 保存データを削除", use_container_width=True):
+            if "draft_data" in st.session_state:
+                del st.session_state["draft_data"]
+                st.success("削除しました！")
+                time.sleep(1)
+                st.rerun()
+        st.divider()
+
+    # ==========================================
+    # メイン画面
+    # ==========================================
     st.header("📝 授業・自習記録の入力")
 
-    record_type = st.radio("✍️ 記録の種類を選択してください", ["📖 授業", "📝 自習"], horizontal=True)
+    # 💡 改善: 復元対象にするため key="record_type" を追加
+    record_type = st.radio("✍️ 記録の種類を選択してください", ["📖 授業", "📝 自習"], horizontal=True, key="record_type")
     st.divider()
 
     if "cached_student_names" not in st.session_state:
@@ -53,7 +103,6 @@ def render_multi_input_page(textbook_master):
         st.session_state["cached_text_options"] = list(robust_api_call(get_textbook_master).keys())
     text_options = st.session_state["cached_text_options"]
 
-    # 🌟 追加: 小テスト設定を取得し、重複なしのテスト名リストを作成
     if "cached_quiz_details" not in st.session_state:
         st.session_state["cached_quiz_details"] = robust_api_call(get_quiz_master_dict)
     quiz_details = st.session_state.get("cached_quiz_details", {})
@@ -71,9 +120,10 @@ def render_multi_input_page(textbook_master):
     if record_type == "📖 授業":
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([1.5, 1.5, 1.5, 2])
-            date = c1.date_input("授業日", datetime.date.today())
             
-            # 💡 改善: 「--選択--」を排除！ index=None と placeholder を使って美しく！
+            # 💡 改善: 復元対象にするため key="class_date" を追加
+            date = c1.date_input("授業日", datetime.date.today(), key="class_date")
+            
             teacher_name = c2.selectbox(
                 "👨‍🏫 担当講師", 
                 teacher_names, 
@@ -82,7 +132,8 @@ def render_multi_input_page(textbook_master):
                 key="sb_teacher"
             )
             
-            class_type = c3.radio("👥 授業形態", ["1:1", "1:2", "1:3"], horizontal=True)
+            # 💡 改善: 復元対象にするため key="class_type" を追加
+            class_type = c3.radio("👥 授業形態", ["1:1", "1:2", "1:3"], horizontal=True, key="class_type")
             
             time_slots = [
                 "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
@@ -90,7 +141,6 @@ def render_multi_input_page(textbook_master):
                 "2コマ目 (16:40~18:10)", "3コマ目 (18:20~19:50)", "4コマ目 (20:00~21:30)"
             ]
             
-            # 💡 改善: ここも「--選択--」を排除！
             class_slot = c4.selectbox(
                 "⏰ 授業コマ", 
                 time_slots, 
@@ -99,7 +149,6 @@ def render_multi_input_page(textbook_master):
                 key="sb_class_slot"
             )
 
-        # 講師かコマが未選択なら、入力をブロック
         if not teacher_name or not class_slot:
             st.info("👆 まずは「担当講師」と「授業コマ」を選択してください。")
         else:
@@ -112,7 +161,6 @@ def render_multi_input_page(textbook_master):
             for i in range(num_students):
                 with cols[i]:
                     with st.container(border=True):
-                        # 💡 改善: 生徒名も「--選択--」を排除！
                         name = st.selectbox("生徒名", options, index=None, placeholder="生徒を選択", key=f"name_{i}")
                         if name == "🆕 新規登録": 
                             name = st.text_input("新しい生徒の名前", key=f"new_name_{i}")
@@ -120,7 +168,6 @@ def render_multi_input_page(textbook_master):
                         if name:
                             attendance = st.selectbox("📅 出欠状況", ["出席（通常）", "出席（振替授業を消化）", "欠席（後日振替あり）", "欠席（振替なし）"], key=f"att_{i}")
                             
-                            # 💡 改善: 遅刻時間の入力欄を追加
                             late_time = st.number_input("⏰ 遅刻時間 (分)", min_value=0, value=0, step=5, key=f"late_{i}")
 
                             if "欠席" in attendance:
@@ -134,10 +181,8 @@ def render_multi_input_page(textbook_master):
                                     "next_hw_text": "-", "next_hw_pages": "-"
                                 })
                             else:
-                                # 💡 改善: 科目の選択。「--選択--」を排除。
                                 subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], index=None, placeholder="科目を選択", key=f"sub_{i}")
                                 
-                                # 💡 改善: 科目が選ばれるまで下を隠す（ブロックする）！
                                 if not subject:
                                     st.info("👆 科目を選択すると詳細入力が開きます")
                                 else:
@@ -155,7 +200,6 @@ def render_multi_input_page(textbook_master):
                                     last_hw_text, last_hw_pages = cached_data["hw_info"]
                                     last_page = cached_data["page"]
                                     
-                                    # 数字以外（"プリント"等）が入っている場合の安全対策
                                     last_page_num = int(last_page) if str(last_page).isdigit() else 0
 
                                     st.info(
@@ -165,16 +209,13 @@ def render_multi_input_page(textbook_master):
                                         f"💬 **引継ぎメモ:**\n{last_note}"
                                     )
                                     
-                                    # 🤖 【賢く進化】「出した宿題P」の自動計算ロジック
                                     assigned_p = 0
-                                    # "P.10〜20" や "10-20" などの文字列から、開始と終了の数字を抜き出す
                                     match = re.search(r'(\d+)\s*[〜~-]\s*(\d+)', str(last_hw_pages))
                                     if match:
                                         a_start, a_end = int(match.group(1)), int(match.group(2))
                                         if a_end >= a_start:
                                             assigned_p = a_end - a_start + 1
 
-                                    # 🌟 【完全復活】宿題の達成状況入力（入力は「やった分」だけ！）
                                     st.write("📝 **今回の宿題達成状況**")
                                     c_hw1, c_hw2 = st.columns(2)
                                     
@@ -183,7 +224,6 @@ def render_multi_input_page(textbook_master):
                                     with c_hw2:
                                         done_end = st.number_input("やった宿題 終了P", min_value=0, value=0, key=f"done_end_{i}")
                                     
-                                    # 開始Pと終了Pから「何ページやってきたか（completed_p）」を自動計算
                                     if done_end >= done_start and done_end > 0:
                                         completed_p = done_end - done_start + 1
                                     else:
@@ -191,25 +231,20 @@ def render_multi_input_page(textbook_master):
                                         
                                     st.caption(f"📊 シートに保存されるデータ ➡ 出した宿題(自動計算): **{assigned_p}** P / やった宿題: **{completed_p}** P")
 
-                                    st.divider() # 区切り線
+                                    st.divider() 
 
-                                    # 🌟 さらに改善: 複数テキスト対応＆個別の進捗入力 ＋ 新規テキスト入力機能！
                                     st.write("📚 **使用テキストと進捗**")
                                     usage_text_options = ["🆕 新規テキスト入力"] + text_options
                                     selected_texts = st.multiselect("使用テキスト (複数可)", usage_text_options, key=f"texts_{i}")
                                     
-                                    # 🆕 「新規テキスト入力」が選ばれた場合の処理
                                     if "🆕 新規テキスト入力" in selected_texts:
                                         new_usage_text = st.text_input("📝 新しいテキスト名を入力 (授業使用)", key=f"new_usage_text_{i}")
                                         if new_usage_text:
-                                            # マスターに登録
                                             robust_api_call(add_new_textbook, new_usage_text)
-                                            # リストから "🆕 新規テキスト入力" を外し、新しいテキスト名を追加
                                             selected_texts.remove("🆕 新規テキスト入力")
                                             if new_usage_text not in selected_texts:
                                                 selected_texts.append(new_usage_text)
                                             
-                                            # キャッシュをクリアして、他の入力欄や次回以降の選択肢に反映させる
                                             if "cached_text_options" in st.session_state:
                                                 del st.session_state["cached_text_options"]
 
@@ -237,7 +272,6 @@ def render_multi_input_page(textbook_master):
                                     
                                     st.divider()
                                     
-                                    # 🌟 さらに改善: 小テストを複数回＆それぞれテキスト選択
                                     num_quizzes = st.number_input("💯 小テスト実施回数", min_value=0, max_value=5, value=0, step=1, key=f"num_q_{i}")
                                     quiz_records = []
                                     w_nums_for_sheet_list = []
@@ -248,10 +282,8 @@ def render_multi_input_page(textbook_master):
                                             with st.container(border=True):
                                                 st.write(f"**【小テスト {q_idx + 1}】**")
                                                 
-                                                # 🌟 小テスト名を quiz_names から選択するように変更！
                                                 q_name = st.selectbox(f"テストの種類", quiz_names, index=None, placeholder="小テストを選択", key=f"q_name_{i}_{q_idx}")
                                                 
-                                                # 🌟 章をテキスト入力に変更（第1回、Unit3 などに対応）
                                                 col_q1, col_q2 = st.columns(2)
                                                 with col_q1:
                                                     target_chap = st.number_input(f"実施した単元/回", min_value=1, value=1, step=1, key=f"q_chap_{i}_{q_idx}")
@@ -271,13 +303,11 @@ def render_multi_input_page(textbook_master):
                                     
                                     w_nums_for_sheet = ",".join(w_nums_for_sheet_list)
 
-                                    # 💡 改善: 宿題のデータがない（変数が存在しない）場合は 0 として扱う安全対策
                                     safe_hw_rate = current_hw_rate if 'current_hw_rate' in locals() else 0
                                     motivation_rank = calculate_motivation_rank(safe_hw_rate, current_quiz_pts)
 
                                     st.divider()
                                     
-                                    # 💡 改善: 集中力とミスへの反応の評価を追加！
                                     st.write("🧠 **授業中の様子・評価**")
                                     col_eval1, col_eval2 = st.columns(2)
                                     with col_eval1:
@@ -335,7 +365,6 @@ def render_multi_input_page(textbook_master):
                     with st.status("データを保存中...", expanded=True) as status:
                         for data in input_data_list:
                             
-                            # 1. いつも通りの授業記録を保存
                             robust_api_call(
                                 save_to_spreadsheet,
                                 name=data.get("name", ""),
@@ -361,7 +390,6 @@ def render_multi_input_page(textbook_master):
                                 reaction=data.get("reaction", "")            
                             )
 
-                            # 2. 小テストの専用シート保存
                             if data.get("quiz_records") and len(data["quiz_records"]) > 0:
                                 for q in data["quiz_records"]:
                                     robust_api_call(
@@ -388,6 +416,10 @@ def render_multi_input_page(textbook_master):
 
                     st.success(f"✅ {num_students}名全員の記録を保存しました！")
                     
+                    # 🌟 改善: 無事に保存完了したら、一時保存のデータも綺麗に消去する
+                    if "draft_data" in st.session_state:
+                        del st.session_state["draft_data"]
+                    
                     st.cache_data.clear()
                     time.sleep(2)
 
@@ -403,7 +435,6 @@ def render_multi_input_page(textbook_master):
                             f"advc_{i}", f"p_msg_{i}", f"next_h_{i}",
                             f"new_usage_text_{i}"
                         ]
-                        # 動的に増える小テストのキーもリセット（q_scoreを追加！）
                         for q_idx in range(5):
                             keys_to_reset.extend([f"q_name_{i}_{q_idx}", f"q_chap_{i}_{q_idx}", f"q_score_{i}_{q_idx}", f"w_{i}_{q_idx}"])
 
@@ -416,8 +447,9 @@ def render_multi_input_page(textbook_master):
                             del st.session_state[key]
 
                     st.rerun() 
+
     # ==========================================
-    # 📝 自習記録の入力画面（複数日・休憩・ポイント計算対応＆絶対エラー防護版）
+    # 📝 自習記録の入力画面
     # ==========================================
     elif record_type == "📝 自習":
         with st.container(border=True):
@@ -447,15 +479,14 @@ def render_multi_input_page(textbook_master):
                     e_time = col_e.time_input("🛬 終了", datetime.time(19, 0), key=f"e_{d}")
                     b_min = col_b.number_input("☕ 休憩(分)", min_value=0, value=0, step=5, key=f"b_{d}")
                     
-                    # 時間計算ロジック
                     start_dt = datetime.datetime.combine(ss_date, s_time)
                     end_dt = datetime.datetime.combine(ss_date, e_time)
                     diff_min = (end_dt - start_dt).seconds // 60
-                    if end_dt < start_dt: # 日を跨ぐ場合（念のため）
+                    if end_dt < start_dt: 
                         diff_min = 0
                         
                     actual_min = max(0, diff_min - b_min)
-                    pts = int(actual_min // 30) # 30分につき1pt
+                    pts = int(actual_min // 30) 
                     total_earned_points += pts
                     
                     st.caption(f"⏱️ 滞在: {diff_min}分 ／ 🔥 実質勉強時間: **{actual_min}分** （獲得: {pts}pt）")
@@ -471,7 +502,6 @@ def render_multi_input_page(textbook_master):
                     with st.status("Googleスプレッドシートに送信中...", expanded=True) as status:
                         success_count = 0
                         for idx, rec in enumerate(ss_records):
-                            # 🛡️ 堅牢化: APIエラー対策のラッパーを使用
                             ok, msg = robust_api_call(
                                 save_self_study_record,
                                 rec["date"], ss_name, rec["start"], rec["end"], 
@@ -479,19 +509,22 @@ def render_multi_input_page(textbook_master):
                             )
                             if ok:
                                 success_count += 1
-                                # 🛡️ APIエラー対策: 1件ごとに2秒待機してGoogleを怒らせないようにする
                                 if idx < len(ss_records) - 1:
                                     time.sleep(2)
                             else:
                                 st.error(f"❌ {idx+1}件目でエラー: {msg}")
-                                break # 1つ失敗したら止める
+                                break 
                                 
                         if success_count == len(ss_records):
                             status.update(label="すべて正常に保存されました！", state="complete", expanded=False)
                             st.success(f"✅ {ss_name}さんの{success_count}日分の記録を保存！ 合計 {total_earned_points}pt 獲得！")
                             st.balloons()
+                            
+                            # 🌟 改善: 無事に保存完了したら、一時保存のデータも綺麗に消去する
+                            if "draft_data" in st.session_state:
+                                del st.session_state["draft_data"]
+                                
                             time.sleep(2)
-                            # リセット処理
                             for k in list(st.session_state.keys()):
                                 if k.startswith(("d_","s_","e_","b_","m_","ss_")): del st.session_state[k]
                             st.rerun()
