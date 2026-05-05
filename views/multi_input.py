@@ -201,7 +201,7 @@ def render_multi_input_page(textbook_master):
                                     last_note = cached_data["note"]
                                     last_hw_text, last_hw_pages = cached_data["hw_info"]
                                     last_page = cached_data["page"]
-                                    
+                                    last_progress = cached_data.get("progress", "記録なし")
                                     last_page_num = int(last_page) if str(last_page).isdigit() else 0
 
                                     st.info(
