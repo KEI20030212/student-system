@@ -15,7 +15,8 @@ from utils.g_sheets import (
     add_new_textbook,        
     get_textbook_master,
     save_quiz_to_dedicated_sheet,
-    get_quiz_master_dict  
+    get_quiz_master_dict,
+    get_last_class_progress
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -192,7 +193,8 @@ def render_multi_input_page(textbook_master):
                                             st.session_state[cache_key] = {
                                                 "note": robust_api_call(get_last_handover, name, subject),
                                                 "hw_info": robust_api_call(get_last_homework_info, name, subject),
-                                                "page": robust_api_call(get_last_page_from_sheet, name)
+                                                "page": robust_api_call(get_last_page_from_sheet, name),
+                                                "progress": robust_api_call(get_last_class_progress, name, subject)
                                             }
                                     
                                     cached_data = st.session_state[cache_key]
@@ -203,7 +205,8 @@ def render_multi_input_page(textbook_master):
                                     last_page_num = int(last_page) if str(last_page).isdigit() else 0
 
                                     st.info(
-                                        f"💡 **【前回 ({subject}) の引継ぎ・宿題】**\n\n"
+                                        f"💡 **【前回 ({subject}) の進捗・宿題・引継ぎ】**\n\n"
+                                        f"📖 **前回の進捗:**\n{last_progress}\n\n"
                                         f"📚 **宿題テキスト:** {last_hw_text}\n"
                                         f"🎯 **宿題の範囲:** {last_hw_pages}\n\n"
                                         f"💬 **引継ぎメモ:**\n{last_note}"
