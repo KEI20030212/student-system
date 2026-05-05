@@ -82,7 +82,9 @@ def render_student_details_page(selected_student):
                                     update_student_info(
                                         selected_student, 
                                         new_grade, 
-                                        new_school, 
+                                        new_school,
+                                        new_school_type, 
+                                        new_exam,
                                         new_target, 
                                         new_subjects, 
                                         info.get('能力', 3), 
@@ -90,8 +92,6 @@ def render_student_details_page(selected_student):
                                         info.get('内申点', 3), 
                                         info.get('最新偏差値', 50), 
                                         info.get('宿題履行率', 100),
-                                        new_exam,        # 🌟 追加
-                                        new_school_type  # 🌟 追加
                                     )
                                     return True
                                 
