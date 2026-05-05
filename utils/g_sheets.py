@@ -421,7 +421,7 @@ def delete_quiz_maker_sheet(test_name):
     cell = ws.find(test_name, in_column=1)
     if cell: ws.delete_rows(cell.row)
     st.cache_data.clear()
-def update_student_info(name, grade, school, school_type="未設定", exam_status="未設定", target, subjects, ability, motivation, naishin, dev_score, hw_rate):
+def update_student_info(name, grade, school, school_type, exam_status, target, subjects, ability, motivation, naishin, dev_score, hw_rate):
     # 🌟 ↑引数に exam_status と school_type を追加しました
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
@@ -430,7 +430,7 @@ def update_student_info(name, grade, school, school_type="未設定", exam_statu
     header = ws.row_values(1)
     
     # 🌟 新しい2つの列名を追加（もしスプレッドシートに列がなければ、自動で作ってくれます！）
-    required_cols = ['内申点', '最新偏差値', '宿題履行率', '受験区分', '学校区分']
+    required_cols = ['内申点', '最新偏差値', '宿題履行率']
     missing_cols = [col for col in required_cols if col not in header]
     
     if missing_cols:
