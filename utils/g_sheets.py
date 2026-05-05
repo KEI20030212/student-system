@@ -444,24 +444,22 @@ def update_student_info(name, grade, school, school_type="未設定", exam_statu
     if cell:
         ws.update_cell(cell.row, 2, grade)
         ws.update_cell(cell.row, 3, school)
-        ws.update_cell(cell.row, 4, target)
-        ws.update_cell(cell.row, 5, subjects)
-        ws.update_cell(cell.row, 6, ability)
-        ws.update_cell(cell.row, 7, motivation)
+        ws.update_cell(cell.row, 4, school_type)
+        ws.update_cell(cell.row, 5, exam_status)
+        ws.update_cell(cell.row, 6, target)
+        ws.update_cell(cell.row, 7, subjects)
+        ws.update_cell(cell.row, 8, ability)
+        ws.update_cell(cell.row, 9, motivation)
         ws.update_cell(cell.row, header.index('内申点') + 1, naishin)
         ws.update_cell(cell.row, header.index('最新偏差値') + 1, dev_score)
         ws.update_cell(cell.row, header.index('宿題履行率') + 1, hw_rate)
         
-        # 🌟 既存の生徒データを更新するときに、新しい2項目も書き込む
-        ws.update_cell(cell.row, header.index('受験区分') + 1, exam_status)
-        ws.update_cell(cell.row, header.index('学校区分') + 1, school_type)
     else:
         # 🌟 新しい生徒を登録するときに、新しい2項目も書き込む
         row_dict = {
             header[0]: name, header[1]: grade, header[2]: school, 
-            header[3]: target, header[4]: subjects, header[5]: ability, header[6]: motivation,
+            header[3]: school_type, header[4]: exam_status, header[5]: target, header[6]: subjects, header[7]: ability, header[8]: motivation,
             '内申点': naishin, '最新偏差値': dev_score, '宿題履行率': hw_rate,
-            '受験区分': exam_status, '学校区分': school_type
         }
         row_to_append = [row_dict.get(col, "") for col in header]
         ws.append_row(row_to_append)
