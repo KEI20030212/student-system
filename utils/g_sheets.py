@@ -1481,3 +1481,37 @@ def load_fixed_costs():
         return pd.DataFrame(columns=["項目", "金額"])
         
     return pd.DataFrame(worksheet.get_all_records())
+
+def get_last_class_progress(name, subject):
+    """指定した生徒・科目の前回の進捗（テキスト名と終了ページ）を取得する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        # 🌟 生徒ごとの専用シートを開く
+        ws = sh.worksheet(name)
+        
+        # 1行目をキーとした辞書のリストとして全データを取得
+        records = ws.get_all_records() 
+        
+        if not records:
+            return "前回の記録なし"
+            
+        # 最新の記録から探すため、下（後ろ）から順にループ
+        for row in reversed(records):
+            # 辞書のキーを使ってアクセス（列名と完全一致させる）
+            if row.get("科目") == subject:
+                text_name = row.get("テキスト", "")
+                end_page = row.get("終了ページ", "")
+                
+                # テキスト名か終了ページのどちらかがあれば返す
+                if text_name or str(end_page):
+                    return f"📘 {text_name}\n🎯 P.{end_page} まで"
+                else:
+                    return "進捗の記録なし"
+                    
+        return "前回の科目記録なし"
+        
+    except Exception as e:
+        # シートが存在しない場合などのエラー回避
+        return "前回の記録なし"
