@@ -111,15 +111,13 @@ def render_student_details_page(selected_student_option):
                         
                         cc1, cc2 = st.columns(2)
                         b_val = cc1.number_input("Bコース", min_value=0, value=b_default, step=1)
-                        q_val = cc2.number_input("Qコース", min_value=0, value=q_default, step=1)
-                                                
-                            # 🌟 追加：入力された数字をスプレッドシート保存用の文字列に再結合
-                            course_parts = []
-                            if b_val and b_val > 0:
-                                course_parts.append(f"Bコース:{b_val}")
-                            if q_val and q_val > 0:
-                                course_parts.append(f"Qコース:{q_val}")
-                            new_contract_str = "、".join(course_parts)
+                        q_val = cc2.number_input("Qコース", min_value=0, value=q_default, step=1)                    
+                        course_parts = []
+                        if b_val and b_val > 0:
+                            course_parts.append(f"Bコース:{b_val}")
+                        if q_val and q_val > 0:
+                            course_parts.append(f"Qコース:{q_val}")
+                        new_contract_str = "、".join(course_parts)
                             
                         type_opts = ["充実", "訓練", "実用", "関係", "自尊", "報酬"]
 
@@ -130,8 +128,7 @@ def render_student_details_page(selected_student_option):
 
                         if st.form_submit_button("💾 基本情報を保存", type="primary"):
                             new_type_str = "、".join(new_types)
-
-
+                            
                             with st.spinner("☁️ 情報を保存中...（混雑時は自動で再試行します）"):
                                 def _update_info():
                                     update_student_info(
