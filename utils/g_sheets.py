@@ -311,7 +311,7 @@ def update_student_info(student_id, name, grade, school, target, subjects, abili
         '宿題履行率': hw_rate,
         '受験区分': exam_status,
         '学校区分': school_type,
-        '契約コース': contract_course
+        '契約コース': contract_course,
         'タイプ': student_type
     }
 
