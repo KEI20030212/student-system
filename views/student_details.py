@@ -146,7 +146,7 @@ def render_student_details_page(selected_student_option):
                                         new_exam,        
                                         new_school_type,
                                         new_contract_str,
-                                        new_type
+                                        new_type_str
                                     )
                                     return True
                                 
