@@ -36,7 +36,7 @@ def render_word_quiz_maker_page():
 
     # --- メイン設定 ---
     # 🌟 修正1：選択肢を「キクタン」の4つに限定
-    target_options = ["キクタン8問", "キクタン16問", "キクタン32問", "キクタン50問", "WordCup20問", "WordCup100問"]
+    target_options = ["キクタン8問", "キクタン16問", "キクタン32問", "キクタン50問", "WordCup20問", "WordCup100問", "WordCup200問"]
     
     # 登録されている中から、対象の4つだけを表示（登録がない場合は警告）
     available_options = [opt for opt in target_options if opt in quiz_dict]
@@ -65,6 +65,9 @@ def render_word_quiz_maker_page():
             q_range, a_range, p_size = "A1:M18", "N1:Z18", "A4"
         elif quiz_name == "WordCup100問":
             q_range, a_range, p_size = "A1:AB27", "AC1:BD27", "A3"
+            portrait_val = "false"
+        elif quiz_name == "WordCup200問":
+            q_range, a_range, p_size = "A1:AB54", "AC1:BD54", "A3"
             portrait_val = "false"  
         else: # キクタン50問
             q_range, a_range, p_size = "A1:N27", "O1:AB27", "A3"
