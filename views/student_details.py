@@ -67,15 +67,16 @@ def render_student_details_page(selected_student_option):
             if disp_school:
                 st.markdown(f"**🏫 学校区分**: {disp_school}")
             
-            st.markdown(f"**🏫 学校名**: {info.get('学校名', '') or '未設定'}")
-            st.markdown(f"**🎯 志望校・目的**: {info.get('志望校・目的', '') or '未設定'}")
-            st.markdown(f"**📚 受講科目**: {info.get('受講科目', '') or '未設定'}")
-            st.markdown(f"**📋 契約コース**: {info.get('契約コース', '') or '未設定'}")
             disp_types = info.get('タイプ', '')
             if disp_types:
                 st.markdown(f"**🎯 生徒タイプ**: {disp_types.replace('、', ' / ')}")
             else:
                 st.markdown("**🎯 生徒タイプ**: 未設定")
+            
+            st.markdown(f"**🏫 学校名**: {info.get('学校名', '') or '未設定'}")
+            st.markdown(f"**🎯 志望校・目的**: {info.get('志望校・目的', '') or '未設定'}")
+            st.markdown(f"**📚 受講科目**: {info.get('受講科目', '') or '未設定'}")
+            st.markdown(f"**📋 契約コース**: {info.get('契約コース', '') or '未設定'}")
             
             if st.session_state.get('role') in ['admin', 'owner', 'head_teacher']:
                 with st.expander("✏️ 基本情報を編集する (教室長のみ)"):
