@@ -176,11 +176,9 @@ def render_multi_input_page():
                         saved_name = st.session_state.get(f"saved_name_{b}_{i}", "生徒")
 
                         if is_saved:
-                            # 保存済みの場合は入力フォームを出さず、メッセージと「入力に戻す」ボタンだけ表示
+                            # 保存済みの場合は入力フォームを出さず、ステータスのみ表示（ボタンを撤去）
                             st.success(f"✅ {saved_name} さんの記録は保存済みです。")
-                            if st.button("📝 再入力（修正）する", key=f"re_input_{b}_{i}"):
-                                st.session_state[f"saved_flag_{b}_{i}"] = False
-                                st.rerun()
+                            st.info("💡 修正が必要な場合は、左メニューの「🛠️ 授業記録の修正」から行ってください。")
                         else:
                             # 🔽 ここから下は通常の入力フォーム
                             selected_student = st.selectbox("生徒名", ["🆕 新規登録"] + student_options, index=None, placeholder="生徒を選択", key=f"sel_student_{b}_{i}")
