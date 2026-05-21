@@ -5,6 +5,8 @@ import streamlit.components.v1 as components
 
 # 🌟 APIガードをインポート
 from utils.api_guard import robust_api_call
+# 🌟 計算専門の関数をインポート！
+from utils.calc_logic import calculate_score_ratio
 
 # ==========================================
 # 🛡️ APIエラー対策：データ読み込み関数群
@@ -83,7 +85,6 @@ def cached_get_student_master_for_report():
     from utils.g_sheets import get_student_master
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-# 🌟 新規追加：弱点判定のために小テストの満点マスタを取得
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_quiz_details_for_report():
     from utils.g_sheets import get_quiz_master_dict
@@ -139,7 +140,7 @@ def render_conference_report(selected_student_option, info):
         df_quiz = cached_load_quiz_data(student_name)
         df_test_all = safe_load_test_scores()
         df_monthly_ss = cached_load_self_study_by_student(student_name)
-        quiz_details = cached_get_quiz_details_for_report() # 🌟 追加
+        quiz_details = cached_get_quiz_details_for_report() 
 
     df_student_tests = pd.DataFrame()
     if not df_test_all.empty and "APIエラー発生" not in df_test_all.columns:
@@ -298,22 +299,11 @@ def render_conference_report(selected_student_option, info):
     # ==========================================
     st.subheader("💡 優先して復習すべき単元（自動ピックアップ）")
     if not df_quiz.empty:
-        # 🌟 【アップデート】満点設定を考慮して「正答率」を計算し、60%未満を弱点とする魔法！
-        def calculate_score_ratio(row):
-            q_name = str(row.get('テキスト', ''))
-            score = pd.to_numeric(row.get('点数', 100), errors='coerce')
-            if pd.isna(score): return 1.0 # 点数がない行は無視
-            
-            # そのテストの満点を探す
-            full_m = 100
-            matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{q_name}_")]
-            if matched_marks:
-                full_m = int(pd.Series(matched_marks).mode()[0])
-            
-            return score / full_m if full_m > 0 else 1.0
-
-        # 正答率列を作って、60%未満（0.6未満）をフィルタリング
-        df_quiz['正答率'] = df_quiz.apply(calculate_score_ratio, axis=1)
+        # 🌟 外部から持ってきた計算専門の関数（calculate_score_ratio）を使う！
+        # 引数として「各行(row)」と「マスタ(quiz_details)」を渡す
+        df_quiz['正答率'] = df_quiz.apply(lambda row: calculate_score_ratio(row, quiz_details), axis=1)
+        
+        # 正答率60%未満を弱点として抽出
         df_weak = df_quiz[df_quiz['正答率'] < 0.6].sort_values(by='日時', ascending=False).head(5)
         
         if not df_weak.empty:
