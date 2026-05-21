@@ -70,9 +70,9 @@ def render_word_quiz_maker_page():
             ranges, p_size = ["A1:AB27", "A28:AB54", "AC1:BD27", "AC28:BD54"], "A3"
             portrait_val = "false"  
         else: # キクタン50問
-            q_range, a_range, p_size = "A1:N27", "O1:AB27", "A3"
+            ranges, p_size = ["A1:N27", "O1:AB27"], "A3"
 
-        st.caption(f"自動設定：範囲 {q_range} / 用紙 {p_size}")
+        st.caption(f"自動設定：範囲 {ranges} / 用紙 {p_size}")
 
         # 範囲指定（ここは手動で調整が必要なため残しています）
         target_sheet_name = "確認テスト"
