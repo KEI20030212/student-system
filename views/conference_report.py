@@ -78,18 +78,22 @@ def cached_calculate_attendance_rate(student_id, student_name):
     rate = (attend_count / total_lessons) * 100
     return f"{int(rate)}%"
 
-# 🌟 新規追加：生徒マスタを自分で取りに行く魔法
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_student_master_for_report():
     from utils.g_sheets import get_student_master
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+
+# 🌟 新規追加：弱点判定のために小テストの満点マスタを取得
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_get_quiz_details_for_report():
+    from utils.g_sheets import get_quiz_master_dict
+    return robust_api_call(get_quiz_master_dict, fallback_value={})
 
 # ==========================================
 # 🎯 面談レポート画面のメイン関数
 # ==========================================
 def render_conference_report(selected_student_option, info):
     
-    # 🌟 IDと名前の分割
     if " - " in selected_student_option:
         student_id = selected_student_option.split(" - ")[0]
         student_name = selected_student_option.split(" - ")[1]
@@ -100,17 +104,13 @@ def render_conference_report(selected_student_option, info):
     if student_id == "未設定" and "生徒ID" in info:
         student_id = str(info["生徒ID"]).strip()
 
-    # 🌟🌟 【最強の自己修復機能】 info が空っぽなら、自分でデータを取りに行く！ 🌟🌟
     if not info:
         df_students = cached_get_student_master_for_report()
         if not df_students.empty and '生徒名' in df_students.columns:
-            # 自分の名前の行を探し出す
             student_row = df_students[df_students['生徒名'] == student_name]
             if not student_row.empty:
-                # pandasの行データを、infoと同じ「辞書型」に変換して完全復元！
                 info = student_row.iloc[0].to_dict()
 
-    # --- 🖨️ 印刷用の魔法 ---
     st.markdown("""
         <style>
         @media print {
@@ -139,6 +139,7 @@ def render_conference_report(selected_student_option, info):
         df_quiz = cached_load_quiz_data(student_name)
         df_test_all = safe_load_test_scores()
         df_monthly_ss = cached_load_self_study_by_student(student_name)
+        quiz_details = cached_get_quiz_details_for_report() # 🌟 追加
 
     df_student_tests = pd.DataFrame()
     if not df_test_all.empty and "APIエラー発生" not in df_test_all.columns:
@@ -167,7 +168,6 @@ def render_conference_report(selected_student_option, info):
     total_quiz_attempts = len(df_quiz) if not df_quiz.empty else 0
     col3.metric("📝 小テスト総回数", f"{total_quiz_attempts} 回")
     
-    # 志望校・目標の検索ロジック
     target_goal = "未設定"
     for key, value in info.items():
         if "志望校" in str(key) or "目的" in str(key) or "目標" in str(key):
@@ -298,8 +298,23 @@ def render_conference_report(selected_student_option, info):
     # ==========================================
     st.subheader("💡 優先して復習すべき単元（自動ピックアップ）")
     if not df_quiz.empty:
-        df_quiz['点数'] = pd.to_numeric(df_quiz['点数'], errors='coerce').fillna(100)
-        df_weak = df_quiz[df_quiz['点数'] < 60].sort_values(by='日時', ascending=False).head(5)
+        # 🌟 【アップデート】満点設定を考慮して「正答率」を計算し、60%未満を弱点とする魔法！
+        def calculate_score_ratio(row):
+            q_name = str(row.get('テキスト', ''))
+            score = pd.to_numeric(row.get('点数', 100), errors='coerce')
+            if pd.isna(score): return 1.0 # 点数がない行は無視
+            
+            # そのテストの満点を探す
+            full_m = 100
+            matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{q_name}_")]
+            if matched_marks:
+                full_m = int(pd.Series(matched_marks).mode()[0])
+            
+            return score / full_m if full_m > 0 else 1.0
+
+        # 正答率列を作って、60%未満（0.6未満）をフィルタリング
+        df_quiz['正答率'] = df_quiz.apply(calculate_score_ratio, axis=1)
+        df_weak = df_quiz[df_quiz['正答率'] < 0.6].sort_values(by='日時', ascending=False).head(5)
         
         if not df_weak.empty:
             st.write("以下の単元は、直近のテストで点数が伸び悩んだため、次回の授業や講習で優先的に対策を行います。")
@@ -314,4 +329,4 @@ def render_conference_report(selected_student_option, info):
             else:
                 st.table(display_weak)
         else:
-            st.success("現在、極端に点数が低い（苦手な）単元は見当たりません！順調です。")
+            st.success("現在、極端に正答率が低い（苦手な）単元は見当たりません！順調です。")
