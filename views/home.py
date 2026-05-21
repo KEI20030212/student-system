@@ -1,20 +1,26 @@
 import streamlit as st
+import pandas as pd
 import time
 
 # 裏方部隊
+# 🌟 変更: get_all_student_names を get_student_master に変更
 from utils.g_sheets import (
     load_board_message,
     save_board_message,
     get_my_messages,
     get_all_accounts,
     mark_messages_as_read,
-    get_all_student_names,
+    get_student_master,
     load_seating_data,
     save_seating_data
 )
 
-# 🌟 APIガードをインポート（独自定義のsafe_api_callとgspreadのimportは削除しました）
 from utils.api_guard import robust_api_call
+
+# 🌟 追加: キャッシュして高速化
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_get_student_master():
+    return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
 def render_home_page():
     st.header("📢 ホーム・連絡掲示板")
@@ -28,7 +34,6 @@ def render_home_page():
     st.subheader("💌 あなた宛てのメッセージ")
     
     if my_user_id:
-        # 🛡️ 安全にメッセージを取得（引数がある場合は lambda を使って渡します）
         messages = robust_api_call(lambda: get_my_messages(my_user_id), fallback_value=[])
         
         if not messages or (isinstance(messages, dict) and "APIエラー発生" in messages):
@@ -93,27 +98,28 @@ def render_home_page():
     st.divider() 
     
     # ==========================================
-    # 🌟 座席管理エリア（プログレスバー搭載）
+    # 🌟 座席管理エリア
     # ==========================================
     st.subheader("🗺️ 本日の教室状況・座席管理")
     
-    # 🌟 読み込みプログレスバーの実装
     loading_progress = st.progress(0, text="☁️ クラウドからデータを読み込み中...")
     
-    # STEP1: 生徒名リストの取得
+    # 🌟 STEP1: 生徒マスターの取得（ID付きリスト作成）
     loading_progress.progress(30, text="📋 生徒名簿を確認中...")
-    student_names = robust_api_call(get_all_student_names, fallback_value=[])
-    time.sleep(0.2) # APIの負荷軽減
+    df_students = cached_get_student_master()
+    student_options = []
+    if not df_students.empty and '生徒ID' in df_students.columns and '生徒名' in df_students.columns:
+        student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
+    time.sleep(0.2)
     
     # STEP2: 座席データの取得
     loading_progress.progress(70, text="🪑 今日の座席表を広げています...")
     all_seating_data = robust_api_call(load_seating_data, fallback_value={})
     time.sleep(0.2)
     
-    # 完了！
     loading_progress.progress(100, text="✨ 読み込み完了！")
     time.sleep(0.5)
-    loading_progress.empty() # バーを消去
+    loading_progress.empty()
 
     time_slots = [
         "Aコマ (9:30~)", "Bコマ (11:10~)", "0コマ (13:10~)", 
@@ -122,7 +128,6 @@ def render_home_page():
     
     can_edit_seat = user_role in ['admin', 'owner']
     
-    # ブース数の管理
     if 'num_booths' not in st.session_state:
         st.session_state['num_booths'] = 6
 
@@ -135,7 +140,6 @@ def render_home_page():
             st.session_state['num_booths'] -= 1
             st.rerun()
 
-    # タブ生成
     tab_names = [slot.split(" ")[0] for slot in time_slots]
     tabs = st.tabs(tab_names)
 
@@ -143,12 +147,10 @@ def render_home_page():
         with tabs[slot_idx]:
             st.markdown(f"#### 🕒 {slot_name}")
             
-            # 当該コマのデータを抽出
             slot_data = {k.split("||")[1]: v for k, v in all_seating_data.items() if f"{slot_name}||" in str(k)}
 
             if can_edit_seat:
                 new_seating_for_slot = {}
-                # 座席配置
                 for i in range(0, st.session_state['num_booths'], 3):
                     cols = st.columns(3)
                     for j in range(3):
@@ -160,10 +162,19 @@ def render_home_page():
                                     st.write(f"**{booth_name}**")
                                     current_info = slot_data.get(booth_name, {"生徒名": "-- 空席 --", "状態": "出席"})
                                     
+                                    # 🌟 古いデータ（名前のみ）の自己修復ロジック
+                                    current_seat = current_info["生徒名"]
+                                    if current_seat != "-- 空席 --" and " - " not in current_seat:
+                                        matching_opt = next((opt for opt in student_options if opt.endswith(f" - {current_seat}")), None)
+                                        if matching_opt:
+                                            current_seat = matching_opt
+                                    
                                     # 生徒選択
-                                    options = ["-- 空席 --"] + student_names
+                                    options = ["-- 空席 --"] + student_options
+                                    safe_index = options.index(current_seat) if current_seat in options else 0
+                                    
                                     sel_name = st.selectbox("生徒", options, 
-                                                            index=options.index(current_info["生徒名"]) if current_info["生徒名"] in options else 0,
+                                                            index=safe_index,
                                                             key=f"sel_{slot_idx}_{idx}")
                                     
                                     # 状態選択
@@ -205,19 +216,20 @@ def render_home_page():
                                         if info["生徒名"] == "-- 空席 --":
                                             st.caption("-- 空席 --")
                                         else:
+                                            # 🌟 閲覧モード時もID部分を消して名前だけを綺麗に表示する
+                                            display_name = info['生徒名'].split(" - ")[1] if " - " in info['生徒名'] else info['生徒名']
                                             color = "#28a745" if info["状態"]=="出席" else "#dc3545"
-                                            st.markdown(f"### {info['生徒名']}")
+                                            st.markdown(f"### {display_name}")
                                             st.markdown(f"<span style='color:{color}'>{info['状態']}</span>", unsafe_allow_html=True)
 
     # ==========================================
-    # 🚀 一括保存ボタン（超・安全＆プログレスバー版）
+    # 🚀 一括保存ボタン
     # ==========================================
     if can_edit_seat:
         st.divider()
         if st.button("💾 全コマの座席表をまとめて一括保存", type="primary", use_container_width=True):
             save_progress = st.progress(0, text="📦 全データを集計中...")
             
-            # 1. セッションステートから全データを収集
             new_all_data = {}
             total_steps = len(time_slots)
             
@@ -228,9 +240,8 @@ def render_home_page():
                     s_val = st.session_state.get(f"sel_{s_idx}_{b_idx}", "-- 空席 --")
                     r_val = st.session_state.get(f"rad_{s_idx}_{b_idx}", "出席")
                     new_all_data[f"{s_name}||{b_name}"] = {"生徒名": s_val, "状態": r_val}
-                time.sleep(0.05) # 画面更新のための微小な待ち
+                time.sleep(0.05)
             
-            # 2. API送信（ここでrobust_api_callを使用）
             save_progress.progress(0.95, text="🚀 Googleスプレッドシートに送信中...（APIエラー回避待機含む☕）")
             success = robust_api_call(lambda: save_seating_data(new_all_data), fallback_value=False)
             

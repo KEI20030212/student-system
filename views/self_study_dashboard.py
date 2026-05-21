@@ -3,32 +3,9 @@ import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
 import time 
-import gspread 
-from utils.g_sheets import load_self_study_data, load_entire_log_data, get_gc_client, SPREADSHEET_ID
 
-# 🌟 api_guard をインポート
+from utils.g_sheets import load_self_study_data, get_all_logs, get_student_master
 from utils.api_guard import robust_api_call
-
-@st.cache_data(ttl=600)
-def get_all_student_grades():
-    """生徒情報から学年データを取得する魔法（APIエラー完全対策版）"""
-    
-    # 🌟 内部でAPIを叩く処理だけを関数としてまとめる
-    def _fetch_grades():
-        gc = get_gc_client()
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        ws = sh.worksheet("設定_生徒情報")
-        return pd.DataFrame(ws.get_all_records())
-
-    # 🌟 まとめた処理を robust_api_call で包み込んで実行！ループもSleepも全部お任せ
-    df = robust_api_call(_fetch_grades, fallback_value=pd.DataFrame())
-
-    # 無事にデータが取れなかった場合（空、またはエラーDataFrame）はキャッシュを破棄
-    if df.empty or 'APIエラー発生' in df.columns:
-        get_all_student_grades.clear()
-        return pd.DataFrame()
-        
-    return df
 
 def render_self_study_dashboard():
     # --- 🖨️ 印刷用の魔法（横向き・横幅最大化・ページまたぎ許可版） ---
@@ -131,8 +108,8 @@ def render_self_study_dashboard():
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             if st.button("🔄 最新データに更新"):
-                get_all_student_grades.clear() # キャッシュを消去
-                st.rerun() # 画面をリロード
+                st.cache_data.clear() # 🌟 変更: アプリ全体のキャッシュをクリアしてリロード
+                st.rerun() 
                 
         with btn_col2:
             # 🌟 【修正箇所】枠線が切れないように高さを広げ、見えない余白をリセット！
@@ -174,8 +151,8 @@ def render_self_study_dashboard():
     today = pd.Timestamp.today()
     month_list = [(today - pd.DateOffset(months=i)).strftime('%Y年%m月') for i in range(12)]
     
-    # 学年データは軽いので先に取得（ここで robust_api_call 版が走る）
-    df_grades = get_all_student_grades()
+    # 🌟 変更: 学年データを get_student_master から取得！
+    df_grades = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
     # 🌟 フォームを追加して、ボタンを押すまで読み込まないようにする
     with st.form("self_study_filter_form"):
@@ -230,8 +207,8 @@ def render_self_study_dashboard():
         # プログレスバー更新：60%
         progress_bar.progress(60, text="☁️ 授業データを取得中...")
         
-        # 🛡️ ガード適用 2: 授業データの取得
-        df_classes = robust_api_call(load_entire_log_data, fallback_value=pd.DataFrame())
+        # 🌟 変更: load_entire_log_data ではなく get_all_logs を使用！
+        df_classes = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
         
         # エラー専用のDataFrameじゃないことを確認してから処理
         if not df_classes.empty and 'APIエラー発生' not in df_classes.columns:

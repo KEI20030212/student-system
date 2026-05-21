@@ -4,16 +4,15 @@ import altair as alt
 import datetime 
 import time 
 import random
-import gspread 
 import re
 
-# 🌟 api_guard.py から robust_api_call を呼び出す（ファイルの場所に合わせて変更してください）
+# 🌟 api_guard.py から robust_api_call を呼び出す
 from utils.api_guard import robust_api_call 
 
+# 🌟 変更: 不要な関数を削り、マスター取得関数(get_student_master)と統合ログ(get_all_logs)を追加！
 from utils.g_sheets import (
-    get_all_student_names,
-    get_all_student_info_dict,
-    load_all_data,
+    get_student_master,
+    get_all_logs,
     load_quiz_records,
     get_quiz_maker_sheets,
     get_student_self_study_points,
@@ -22,16 +21,9 @@ from utils.g_sheets import (
 from utils.calc_logic import (
     calculate_quiz_points,
     calculate_ability_rank,
-    calculate_motivation_rank
+    calculate_motivation_rank,
+    calc_pages_from_text
 )
-
-def calc_pages_from_text(text):
-    if pd.isna(text): return 0
-    matches = re.findall(r'(\d+)\s*[~〜\-ー]\s*(\d+)', str(text))
-    total = 0
-    for start_str, end_str in matches:
-        total += abs(int(end_str) - int(start_str)) + 1
-    return total
 
 def render_dashboard_page():
     st.subheader("🌐 クラス全体ダッシュボード") 
@@ -40,25 +32,22 @@ def render_dashboard_page():
     month_options = [(today - datetime.timedelta(days=i*30)).strftime("%Y年%m月") for i in range(12)]
     month_options.insert(0, "全期間") 
 
-    # 🛡️ ガード適用 1: 生徒名リストの取得
-    student_names = robust_api_call(get_all_student_names, fallback_value=[])
-    if not student_names: return
-    
     all_grades = ["すべて"]
     all_subjects = ["すべて"]
     
+    # 🌟 変更: 生徒マスター(DataFrame)を1回だけ読み込む！
     with st.spinner("☁️ 生徒基本データを一括読み込み中...（通信は1回だけ！一瞬で終わります🚀）"):
-        # 🛡️ ガード適用 2: 生徒情報の取得
-        student_info_dict = robust_api_call(get_all_student_info_dict, fallback_value={})
-        
-        for s_name in student_names:
-            info = student_info_dict.get(s_name, {})
+        df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+        if df_students.empty:
+            st.warning("生徒データが見つかりません。設定シートを確認してください。")
+            return
             
-            grade = info.get('学年', '未設定')
+        for _, row in df_students.iterrows():
+            grade = row.get('学年', '未設定')
             if grade not in all_grades and grade != "未設定" and str(grade).strip() != "":
                 all_grades.append(grade)
                 
-            subject_raw = str(info.get('受講科目', '未設定'))
+            subject_raw = str(row.get('受講科目', '未設定'))
             if subject_raw != "未設定" and subject_raw.strip() != "":
                 for sub in subject_raw.replace('、', ',').split(','):
                     sub = sub.strip()
@@ -80,16 +69,20 @@ def render_dashboard_page():
         st.info("👆 上のメニューから条件を選んで、「集計を開始する」ボタンを押してください。")
         return
     
+    # 🌟 ターゲット生徒のリストアップ（生徒IDと情報も一緒に保持して使い回す）
     target_students = []
-    for s in student_names:
-        info = student_info_dict.get(s, {})
-        
-        match_grade = (selected_grade == "すべて" or info.get('学年') == selected_grade)
-        student_subject_str = str(info.get('受講科目', ''))
+    for _, row in df_students.iterrows():
+        match_grade = (selected_grade == "すべて" or row.get('学年') == selected_grade)
+        student_subject_str = str(row.get('受講科目', ''))
         match_subject = (selected_subject == "すべて" or selected_subject in student_subject_str)
         
         if match_grade and match_subject:
-            target_students.append(s)
+            target_students.append({
+                "id": str(row.get('生徒ID', '')).strip(),
+                "name": str(row.get('生徒名', '')).strip(),
+                "hw_rate": str(row.get('宿題履行率', '0.0')),
+                "info": row 
+            })
 
     if not target_students:
         st.warning("該当する生徒がいません。")
@@ -103,34 +96,36 @@ def render_dashboard_page():
     summary_data = []
     matrix_data = []
 
-    with st.spinner('☁️ 全生徒の共通テスト記録を読み込み中...'):
-        # 🛡️ ガード適用 3: 小テスト記録（ごちゃごちゃしたtry-exceptは削除し、一行に！）
+    # 🌟 変更: ループの外で、すべての必要なデータを一括取得！！（これが超高速化の鍵）
+    with st.spinner('☁️ 授業ログ統合・小テスト・模試データを一括取得中...（超高速処理🚀）'):
+        df_all_logs = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
+        if not df_all_logs.empty and '日時' in df_all_logs.columns and 'APIエラー発生' not in df_all_logs.columns:
+            df_all_logs['日時'] = pd.to_datetime(df_all_logs['日時'], format='mixed', errors='coerce')
+
         df_all_quizzes = robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
-        # APIエラーで返ってきたダミーのDataFrameじゃないか確認してから処理する
         if not df_all_quizzes.empty and '日時' in df_all_quizzes.columns and 'APIエラー発生' not in df_all_quizzes.columns:
             df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
 
-    with st.spinner("☁️ 小テストの満点データを読み込み中..."):
-        # 🛡️ ガード適用 4: 小テスト設定データの取得
         quiz_master_dict = robust_api_call(get_quiz_maker_sheets, fallback_value={})
-
-    with st.spinner("☁️ 模試・内申点データを照合中..."):
-        # 🛡️ ガード適用 5: 模試・内申データの取得
         df_all_tests = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
 
-    with st.spinner(f'☁️ {current_month_str} のデータを集計中...（※途中でAPIが混み合っても自動復帰します）'):
+    with st.spinner(f'☁️ {current_month_str} のデータを集計中...'):
         progress_bar_data = st.progress(0)
         total_targets = len(target_students)
         
-        for i, s_name in enumerate(target_students):
-            info = student_info_dict.get(s_name, {})
+        for i, student in enumerate(target_students):
+            s_id = student["id"]
+            s_name = student["name"]
             
-            # 🛡️ ガード適用 6: 個人データの取得（引数s_nameを渡す）
-            # 万が一ダメでも、画面が止まらないように notify=False にしてトースト通知だけに留めることも可能ですが、
-            # dashboardの根幹なので通常の通知（notify=True）でお任せします。
-            df_personal = robust_api_call(load_all_data, s_name, fallback_value=pd.DataFrame())
+            # 🌟 変更: 通信せず、事前に取得した統合シート(df_all_logs)から生徒IDで抜き出すだけ！
+            df_personal = pd.DataFrame()
+            if not df_all_logs.empty:
+                if s_id and '生徒ID' in df_all_logs.columns:
+                    df_personal = df_all_logs[df_all_logs['生徒ID'].astype(str) == s_id].copy()
+                elif '名前' in df_all_logs.columns: # IDが無い場合の念のためのフォールバック
+                    df_personal = df_all_logs[df_all_logs['名前'] == s_name].copy()
 
-            # B. 小テストとポイントは、共通シート(df_all_quizzes)からその子の分だけ抜き出す
+            # 小テスト
             if not df_all_quizzes.empty and '名前' in df_all_quizzes.columns:
                 df_student_quizzes = df_all_quizzes[df_all_quizzes['名前'] == s_name].copy()
             else:
@@ -165,29 +160,27 @@ def render_dashboard_page():
                     if valid_scores:
                         avg_score = sum(valid_scores) / len(valid_scores)
             
-            # 🛡️ ガード適用 7: 自習ポイントの取得
+            # 自習ポイント（※ここは今後の改修で一括取得にする余地がありますが、今回はこのまま）
             self_study_pts = robust_api_call(get_student_self_study_points, s_name, fallback_value=0)
 
             final_total_points = total_quiz_pts + self_study_pts
 
-            # --- 進捗の計算 (個別シートを使用) ---
-            if not df_personal.empty and 'APIエラー発生' not in df_personal.columns:
+            # --- 🌟 進捗の計算 (統合シートから抽出したデータを使用) ---
+            if not df_personal.empty:
                 df_p_filtered = df_personal.copy()
 
                 if selected_subject != "すべて" and '科目' in df_p_filtered.columns:
                     df_p_filtered = df_p_filtered[df_p_filtered['科目'].str.contains(selected_subject, na=False)]
                 
-                if '日時' in df_p_filtered.columns:
-                    df_p_filtered['日時'] = pd.to_datetime(df_p_filtered['日時'], format='mixed', errors='coerce')
-                    if selected_period != "全期間":
-                        df_p_filtered = df_p_filtered[df_p_filtered['日時'].dt.strftime("%Y年%m月") == selected_period]
-                        
+                if selected_period != "全期間" and '日時' in df_p_filtered.columns:
+                    df_p_filtered = df_p_filtered[df_p_filtered['日時'].dt.strftime("%Y年%m月") == selected_period]
+                    
                 try:
-                    if '終了ページ' in df_p_filtered.columns:
-                        df_p_filtered['今回の進捗'] = df_p_filtered['終了ページ'].apply(calc_pages_from_text)
+                    # 🌟 統合シートの「終了ページ」列を処理
+                    col_target = '終了ページ' if '終了ページ' in df_p_filtered.columns else 'ページ数' if 'ページ数' in df_p_filtered.columns else None
+                    if col_target:
+                        df_p_filtered['今回の進捗'] = df_p_filtered[col_target].apply(calc_pages_from_text)
                         adv_pages = int(df_p_filtered['今回の進捗'].sum())
-                    else:
-                        adv_pages = 0
                 except Exception as e:
                     adv_pages = 0
 
@@ -209,7 +202,7 @@ def render_dashboard_page():
             ability_x = calculate_ability_rank(latest_naishin, latest_dev)
 
             # ② やる気 (Y) を計算する
-            raw_hw_rate = str(info.get('宿題履行率', '0.0')).replace('%', '').strip()
+            raw_hw_rate = str(student["hw_rate"]).replace('%', '').strip()
             try: hw_rate = float(raw_hw_rate)
             except ValueError: hw_rate = 0.0
             
