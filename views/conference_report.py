@@ -300,7 +300,6 @@ def render_conference_report(selected_student_option, info):
     st.subheader("💡 優先して復習すべき単元（自動ピックアップ）")
     if not df_quiz.empty:
         # 🌟 外部から持ってきた計算専門の関数（calculate_score_ratio）を使う！
-        # 引数として「各行(row)」と「マスタ(quiz_details)」を渡す
         df_quiz['正答率'] = df_quiz.apply(lambda row: calculate_score_ratio(row, quiz_details), axis=1)
         
         # 正答率60%未満を弱点として抽出
@@ -308,6 +307,23 @@ def render_conference_report(selected_student_option, info):
         
         if not df_weak.empty:
             st.write("以下の単元は、直近のテストで点数が伸び悩んだため、次回の授業や講習で優先的に対策を行います。")
+            
+            # 🌟 【新機能】単元（章数）にテキストマスタの単元名を合体させる魔法！
+            def format_weak_unit(row):
+                t_name = str(row.get('テキスト', ''))
+                chap_str = str(row.get('単元', ''))
+                
+                # そのテスト（テキスト）の単元マスタを引っ張ってくる
+                t_master = master_dict.get(t_name, {})
+                chap_name = t_master.get(chap_str, "")
+                
+                if chap_name:
+                    return f"{chap_str}: {chap_name}"
+                else:
+                    return f"第{chap_str}回"
+                    
+            # 弱点データフレームの「単元」列を一括で書き換え
+            df_weak['単元'] = df_weak.apply(format_weak_unit, axis=1)
             
             desired_columns = ['日時', 'テキスト', '単元', '点数', 'ミス番号', '間違えた問題', 'ミス問題番号', 'ミス']
             available_columns = [col for col in desired_columns if col in df_weak.columns]
