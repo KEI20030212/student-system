@@ -17,7 +17,8 @@ from utils.g_sheets import (
     add_new_textbook,        
     get_textbook_master,
     save_quiz_to_dedicated_sheet,
-    get_quiz_master_dict 
+    get_quiz_master_dict,
+    get_type_advice_dict
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -25,18 +26,6 @@ from utils.calc_logic import (
     calculate_motivation_rank
 )
 from utils.api_guard import robust_api_call
-
-# ==========================================
-# 🎯 生徒タイプ別・指導マニュアル（自動アドバイス用）
-# ==========================================
-TYPE_ADVICE = {
-    "充実": "【充実タイプ】成長を実感できる小さなステップを提示し、達成感を味わわせましょう。",
-    "訓練": "【訓練タイプ】日々のルーチンや計画ができているかをチェックし、継続を褒めましょう。",
-    "実用": "【実用タイプ】この単元が将来どう役立つか、試験でどう活きるか目的を伝えましょう。",
-    "関係": "【関係タイプ】まずは感情に寄り添い、安心感と信頼関係を築く声かけをしましょう。",
-    "自尊": "【自尊タイプ】本人の工夫や個性を尊重し、できるだけ本人に考えさせて認めましょう。",
-    "報酬": "【報酬タイプ】頑張ったことに対して、明確なご褒美（ポイントや称賛）を与えましょう。"
-}
 
 # --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
 @st.cache_data(ttl=600, show_spinner=False)
@@ -54,6 +43,10 @@ def cached_get_textbook_master():
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_quiz_master():
     return robust_api_call(get_quiz_master_dict, fallback_value={})
+
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_get_type_advice():
+    return robust_api_call(get_type_advice_dict, fallback_value={})
 
 # 🌟 一時保存対象のキー（プレフィックス）
 DRAFT_PREFIXES = (
@@ -203,6 +196,7 @@ def render_multi_input_page():
                                 name = selected_student.split(" - ")[1]
 
                             if name:
+                                type_advice_dict = cached_get_type_advice()
                                 # 🌟 【新機能】生徒のタイプに応じた「声かけマニュアル」の自動表示
                                 student_type_str = ""
                                 if not student_df.empty and 'タイプ' in student_df.columns:
@@ -212,7 +206,8 @@ def render_multi_input_page():
                                 
                                 if student_type_str and student_type_str.lower() != "nan":
                                     advices = []
-                                    for t_key, t_adv in TYPE_ADVICE.items():
+                                    # 🌟 直書きの TYPE_ADVICE ではなく、取得した type_advice_dict を使う
+                                    for t_key, t_adv in type_advice_dict.items():
                                         if t_key in student_type_str:
                                             advices.append(f"・{t_adv}")
                                     
