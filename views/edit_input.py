@@ -60,7 +60,6 @@ def render_edit_input_page():
             st.write("📚 **授業進捗・宿題（直接テキストを編集できます）**")
             st.caption("※複雑なページ数も、ここのテキストを直接書き換えるだけで簡単に修正・上書きが可能です。")
             
-            # 🌟 スプレッドシートの実際の列名（テキスト、終了ページ、次回の宿題、次回の宿題範囲）に合わせて呼び出し
             c_txt1, c_txt2 = st.columns(2)
             with c_txt1:
                 new_used_text = st.text_area("📘 今回使用したテキスト", value=str(record.get('テキスト', '')), height=68)
@@ -69,6 +68,34 @@ def render_edit_input_page():
                 new_hw_text = st.text_area("📘 次回の宿題テキスト", value=str(record.get('次回の宿題テキスト', '')), height=68)
                 new_hw = st.text_area("🚀 次回の宿題範囲 (P.〇〜〇)", value=str(record.get('次回の宿題ページ数', '')), height=68)
 
+            # 🌟 【新機能】小テストの修正枠を追加
+            st.divider()
+            st.write("💯 **小テストの記録**")
+            
+            # Noneやnanを綺麗に空欄にするための便利ツール
+            def clean_val(key):
+                v = str(record.get(key, ''))
+                return "" if v.lower() == 'nan' or v == 'none' else v
+
+            # 小テスト1
+            cq1_1, cq1_2, cq1_3 = st.columns(3)
+            q1_name = cq1_1.text_input("小テスト1 種類", value=clean_val('小テスト1'))
+            q1_chap = cq1_2.text_input("小テスト1 単元", value=clean_val('小テスト1単元'))
+            q1_score = cq1_3.text_input("小テスト1 点数", value=clean_val('小テスト1点数'))
+
+            # 小テスト2
+            cq2_1, cq2_2, cq2_3 = st.columns(3)
+            q2_name = cq2_1.text_input("小テスト2 種類", value=clean_val('小テスト2'))
+            q2_chap = cq2_2.text_input("小テスト2 単元", value=clean_val('小テスト2単元'))
+            q2_score = cq2_3.text_input("小テスト2 点数", value=clean_val('小テスト2点数'))
+
+            # 小テスト3
+            cq3_1, cq3_2, cq3_3 = st.columns(3)
+            q3_name = cq3_1.text_input("小テスト3 種類", value=clean_val('小テスト3'))
+            q3_chap = cq3_2.text_input("小テスト3 単元", value=clean_val('小テスト3単元'))
+            q3_score = cq3_3.text_input("小テスト3 点数", value=clean_val('小テスト3点数'))
+
+            st.divider()
             st.write("🧠 **授業中の様子・評価**")
             c_eval1, c_eval2 = st.columns(2)
             eval_opts = ["超集中", "前向き", "疲労気味", "ムラあり", "集中できない"]
@@ -88,7 +115,7 @@ def render_edit_input_page():
 
             if submitted:
                 with st.spinner("データを上書き保存中..."):
-                    # 🌟 保存時の列名もスプレッドシートに合わせる
+                    # 🌟 保存時のデータに小テストの内容も追加
                     update_data = {
                         "出欠": new_att,
                         "科目": new_sub,
@@ -97,6 +124,15 @@ def render_edit_input_page():
                         "終了ページ": new_adv,
                         "次回の宿題テキスト": new_hw_text,
                         "次回の宿題ページ数": new_hw,
+                        "小テスト1": q1_name,
+                        "小テスト1単元": q1_chap,
+                        "小テスト1点数": q1_score,
+                        "小テスト2": q2_name,
+                        "小テスト2単元": q2_chap,
+                        "小テスト2点数": q2_score,
+                        "小テスト3": q3_name,
+                        "小テスト3単元": q3_chap,
+                        "小テスト3点数": q3_score,
                         "集中力": new_conc,
                         "ミスへの反応": new_reac,
                         "授業アドバイス": new_advc,
