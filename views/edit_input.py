@@ -2,7 +2,13 @@ import streamlit as st
 import pandas as pd
 import datetime
 import time
-from utils.g_sheets import get_all_logs, update_lesson_record_in_sheet
+from utils.g_sheets import (
+    get_all_logs, 
+    update_lesson_record_in_sheet,
+    load_quiz_records,             # 🌟 追加
+    get_quiz_master_dict,          # 🌟 追加
+    update_quiz_record_in_sheet    # 🌟 追加
+)
 from utils.api_guard import robust_api_call
 
 def render_edit_input_page():
@@ -68,32 +74,50 @@ def render_edit_input_page():
                 new_hw_text = st.text_area("📘 次回の宿題テキスト", value=str(record.get('次回の宿題テキスト', '')), height=68)
                 new_hw = st.text_area("🚀 次回の宿題範囲 (P.〇〜〇)", value=str(record.get('次回の宿題ページ数', '')), height=68)
 
-            # 🌟 【新機能】小テストの修正枠を追加
             st.divider()
-            st.write("💯 **小テストの記録**")
+            st.write("💯 **実施した小テストの修正**")
             
-            # Noneやnanを綺麗に空欄にするための便利ツール
-            def clean_val(key):
-                v = str(record.get(key, ''))
-                return "" if v.lower() == 'nan' or v == 'none' else v
-
-            # 小テスト1
-            cq1_1, cq1_2, cq1_3 = st.columns(3)
-            q1_name = cq1_1.text_input("小テスト1 種類", value=clean_val('小テスト1'))
-            q1_chap = cq1_2.text_input("小テスト1 単元", value=clean_val('小テスト1単元'))
-            q1_score = cq1_3.text_input("小テスト1 点数", value=clean_val('小テスト1点数'))
-
-            # 小テスト2
-            cq2_1, cq2_2, cq2_3 = st.columns(3)
-            q2_name = cq2_1.text_input("小テスト2 種類", value=clean_val('小テスト2'))
-            q2_chap = cq2_2.text_input("小テスト2 単元", value=clean_val('小テスト2単元'))
-            q2_score = cq2_3.text_input("小テスト2 点数", value=clean_val('小テスト2点数'))
-
-            # 小テスト3
-            cq3_1, cq3_2, cq3_3 = st.columns(3)
-            q3_name = cq3_1.text_input("小テスト3 種類", value=clean_val('小テスト3'))
-            q3_chap = cq3_2.text_input("小テスト3 単元", value=clean_val('小テスト3単元'))
-            q3_score = cq3_3.text_input("小テスト3 点数", value=clean_val('小テスト3点数'))
+            # 🌟 その生徒がその日に受けた小テストのデータを自動で取得
+            df_quizzes = robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
+            quiz_details = robust_api_call(get_quiz_master_dict, fallback_value={})
+            
+            day_quizzes = []
+            if not df_quizzes.empty and '名前' in df_quizzes.columns and '日時' in df_quizzes.columns:
+                mask = (df_quizzes['名前'] == record.get('名前')) & (df_quizzes['日時'].astype(str).str.startswith(date_str))
+                day_quizzes = df_quizzes[mask].to_dict('records')
+            
+            edited_quizzes = []
+            if day_quizzes:
+                for q_idx, q in enumerate(day_quizzes):
+                    q_name = q.get('テキスト', '不明') 
+                    old_unit = q.get('単元', 1)
+                    old_score = q.get('点数', 100)
+                    
+                    # 満点の自動計算（multi_inputと同じ魔法）
+                    current_max = 100
+                    matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{q_name}_")]
+                    if matched_marks:
+                        current_max = int(pd.Series(matched_marks).mode()[0])
+                        
+                    st.caption(f"📝 **{q_name}**")
+                    col_q1, col_q2 = st.columns(2)
+                    with col_q1:
+                        new_unit = st.number_input(f"単元/回", value=int(old_unit) if str(old_unit).isdigit() else 1, key=f"edit_q_unit_{q_idx}")
+                    with col_q2:
+                        safe_old_score = int(old_score) if str(old_score).isdigit() else 0
+                        # 既存の点数が満点を上回っていた場合のエラー防止
+                        safe_max = max(current_max, safe_old_score)
+                        new_score = st.number_input(f"点数 (/{current_max}点満点)", min_value=0, max_value=safe_max, value=safe_old_score, key=f"edit_q_score_{q_idx}")
+                    
+                    edited_quizzes.append({
+                        "quiz_name": q_name,
+                        "old_unit": old_unit,
+                        "new_unit": new_unit,
+                        "old_score": old_score,
+                        "new_score": new_score
+                    })
+            else:
+                st.info("この日の小テスト記録はありません。")
 
             st.divider()
             st.write("🧠 **授業中の様子・評価**")
@@ -115,7 +139,6 @@ def render_edit_input_page():
 
             if submitted:
                 with st.spinner("データを上書き保存中..."):
-                    # 🌟 保存時のデータに小テストの内容も追加
                     update_data = {
                         "出欠": new_att,
                         "科目": new_sub,
@@ -124,15 +147,6 @@ def render_edit_input_page():
                         "終了ページ": new_adv,
                         "次回の宿題テキスト": new_hw_text,
                         "次回の宿題ページ数": new_hw,
-                        "小テスト1": q1_name,
-                        "小テスト1単元": q1_chap,
-                        "小テスト1点数": q1_score,
-                        "小テスト2": q2_name,
-                        "小テスト2単元": q2_chap,
-                        "小テスト2点数": q2_score,
-                        "小テスト3": q3_name,
-                        "小テスト3単元": q3_chap,
-                        "小テスト3点数": q3_score,
                         "集中力": new_conc,
                         "ミスへの反応": new_reac,
                         "授業アドバイス": new_advc,
@@ -140,7 +154,7 @@ def render_edit_input_page():
                         "次回への引継ぎ": new_next_h
                     }
                     
-                    success = robust_api_call(
+                    success_main = robust_api_call(
                         update_lesson_record_in_sheet,
                         date_str=date_str,
                         student_name=record.get('名前'),
@@ -149,8 +163,22 @@ def render_edit_input_page():
                         fallback_value=False
                     )
 
-                    if success:
-                        st.success("✅ 修正を上書き保存しました！")
+                    # 🌟 小テストが変更されていたら、そっちも更新する！
+                    for eq in edited_quizzes:
+                        if str(eq['old_unit']) != str(eq['new_unit']) or str(eq['old_score']) != str(eq['new_score']):
+                            robust_api_call(
+                                update_quiz_record_in_sheet,
+                                date_str=date_str,
+                                student_name=record.get('名前'),
+                                quiz_name=eq['quiz_name'],
+                                old_unit=eq['old_unit'],
+                                new_unit=eq['new_unit'],
+                                new_score=eq['new_score'],
+                                fallback_value=False
+                            )
+
+                    if success_main:
+                        st.success("✅ 授業記録と小テストの修正を保存しました！")
                         st.cache_data.clear()
                         time.sleep(1.5)
                         st.rerun()
