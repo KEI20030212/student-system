@@ -10,7 +10,7 @@ def render_combined_input_page():
 
     record_type = st.radio(
         "✍️ 記録の種類を選択してください", 
-        ["📖 授業記録（新規）", "体験授業の入力", "📝 自習記録", "🛠️ 授業記録の修正"], 
+        ["📖 授業記録（新規）", "🔰 体験授業の入力", "📝 自習記録", "🛠️ 授業記録の修正"], 
         horizontal=True, 
         key="record_type_combined"
     )
@@ -18,7 +18,7 @@ def render_combined_input_page():
 
     if record_type == "📖 授業記録（新規）":
         render_multi_input_page()
-    elif menu == "🔰 体験授業の入力":
+    elif record_type == "🔰 体験授業の入力":
         render_trial_input_page()
     elif record_type == "📝 自習記録":
         render_self_study_input_page()
