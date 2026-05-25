@@ -131,7 +131,7 @@ def render_edit_input_page():
             new_reac = c_eval2.selectbox("ミスへの反応", reac_opts, index=reac_opts.index(current_reac) if current_reac in reac_opts else 0)
 
             st.write("💬 **コメント事項**")
-            new_advc = st.text_area("🗣️ 授業でのアドバイス", value=str(record.get('授業アドバイス', '')), height=100)
+            new_advc = st.text_area("🗣️ 授業でのアドバイス", value=str(record.get('アドバイス', '')), height=100)
             new_pmsg = st.text_area("👪 保護者への連絡事項", value=str(record.get('保護者への連絡', '')), height=100)
             new_next_h = st.text_area("🔄 次回への引継ぎ事項", value=str(record.get('次回への引継ぎ', '')), height=100)
 
@@ -149,7 +149,7 @@ def render_edit_input_page():
                         "次回の宿題ページ数": new_hw,
                         "集中力": new_conc,
                         "ミスへの反応": new_reac,
-                        "授業アドバイス": new_advc,
+                        "アドバイス": new_advc,
                         "保護者への連絡": new_pmsg,
                         "次回への引継ぎ": new_next_h
                     }
