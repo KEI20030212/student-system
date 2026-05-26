@@ -78,7 +78,11 @@ def render_multi_input_page():
 
     with st.sidebar:
         st.header("💾 鉄壁の一時保存メニュー")
-        st.caption("アプリが落ちても、ブラウザを閉じても復元できます！")
+        if os.path.exists(draft_file):
+            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(draft_file))
+            st.success(f"🕒 最終保存: {mtime.strftime('%m/%d %H:%M:%S')}")
+        else:
+            st.caption("保存されたデータはありません")
         
         c1, c2 = st.columns(2)
         if c1.button("💾 保存", use_container_width=True):
@@ -86,9 +90,14 @@ def render_multi_input_page():
             for k, v in st.session_state.items():
                 if any(k.startswith(p) for p in DRAFT_PREFIXES):
                     draft[k] = v
-            with open(draft_file, "wb") as f:
-                pickle.dump(draft, f)
-            st.success("鉄壁保存しました！")
+            if not draft or len(draft) < 3:
+                st.error("⚠️ 入力データがないため保存をキャンセルしました。（既存の保存データは守られています）")
+            else:
+                with open(draft_file, "wb") as f:
+                    pickle.dump(draft, f)
+                st.success("✅ 鉄壁保存しました！")
+                time.sleep(1)
+                st.rerun()
             
         if c2.button("📂 復元", use_container_width=True):
             if os.path.exists(draft_file):
@@ -111,6 +120,10 @@ def render_multi_input_page():
             else:
                 st.info("削除するデータがありません")
         st.divider()
+        st.warning("🚨 **【重要】放置によるデータ消失注意**\n\n画面を15分以上放置するとサーバーとの通信が切れ、その後の入力内容が消えてしまいます。**離席する前は必ず「💾 保存」を押してください！**")
+        
+    if os.path.exists(draft_file):
+        st.error("⚠️ **前回中断した入力データが残っています！** 続きから入力する場合は、左メニューの「📂 復元」を先に押してください。")
 
     student_df = cached_get_student_master()
     if not student_df.empty:
