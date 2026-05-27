@@ -100,34 +100,45 @@ def get_student_info(student_name):#「特定の生徒1人だけの詳細情報�
 #home.py
 @st.cache_data(ttl=120)
 def load_board_message():
-    """掲示板のメッセージを取得する"""
+    """掲示板のメッセージと更新日時を取得する"""
     gc = get_gc_client()
     for attempt in range(3):
         try:
             sh = gc.open_by_key(SPREADSHEET_ID)
             
-            # 💡 改善ポイント：元の「except:」だと全てのエラーを飲み込んでしまうので、
-            # 「シートが見つからないエラー」の時だけ新しくシートを作るように限定しました！
             try:
                 ws = sh.worksheet("設定_掲示板")
             except gspread.exceptions.WorksheetNotFound: 
                 ws = sh.add_worksheet(title="設定_掲示板", rows="10", cols="2")
                 ws.update_cell(1, 1, "メッセージ")
+                ws.update_cell(1, 2, "更新日時")  # 🌟 B1にヘッダー追加
                 ws.update_cell(2, 1, "本日の連絡事項はありません。")
+                ws.update_cell(2, 2, "---")        # 🌟 B2に初期値追加
             
-            val = ws.cell(2, 1).value
-            return val if val else "本日の連絡事項はありません。"
+            # 🌟 APIの節約のため、2行目（A2とB2）を一括で取得します
+            row2_values = ws.row_values(2)
+            
+            val = row2_values[0] if len(row2_values) > 0 else "本日の連絡事項はありません。"
+            updated_at = row2_values[1] if len(row2_values) > 1 else "---"
+            
+            # 空文字だった場合のフォールバック
+            val = val if val else "本日の連絡事項はありません。"
+            updated_at = updated_at if updated_at else "---"
+            
+            # 🌟 辞書型にして2つのデータを一緒に返します
+            return {"message": val, "updated_at": updated_at}
             
         except gspread.exceptions.APIError:
-            # Googleが悲鳴を上げたら（APIエラー）
             if attempt < 2:
-                time.sleep(2) # 2秒深呼吸してやり直し
+                time.sleep(2)
             else:
-                # 3回やってもダメだった場合は、システム全体が止まらないように仮の文字を返す
-                return "⚠️ 現在システムが混み合っています。数分待ってから画面を更新（リロード）してください。"
+                return {
+                    "message": "⚠️ 現在システムが混み合っています。数分待ってから画面を更新（リロード）してください。",
+                    "updated_at": "---"
+                }
 
 def save_board_message(message):
-    """掲示板のメッセージを保存する"""
+    """掲示板のメッセージと更新日時を保存する"""
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     try:
@@ -135,7 +146,13 @@ def save_board_message(message):
     except:
         ws = sh.add_worksheet(title="設定_掲示板", rows="10", cols="2")
         ws.update_cell(1, 1, "メッセージ")
+        ws.update_cell(1, 2, "更新日時")  # 🌟 初期作成時にもB1にヘッダー作成
+        
+    # 🌟 現在の「日付 時刻」を生成
+    now_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        
     ws.update_cell(2, 1, message)
+    ws.update_cell(2, 2, now_str)  # 🌟 B2セルに更新日時を書き込み
     st.cache_data.clear()
 
 @st.cache_data(ttl=60)
