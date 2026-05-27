@@ -52,37 +52,81 @@ def render_analysis_page(selected_student=None):
             st.info("進捗データがありません。")
         else:
             st.markdown("**📖 ページ進捗グラフ**")
+            
             # 日付データを正しくソートするために変換
             df_history['日時'] = pd.to_datetime(df_history['日時'], format='mixed', errors='coerce')
             
-            # 🌟 「ページ」を記録している列を探す
-            page_col = 'ページ数' if 'ページ数' in df_history.columns else '終了ページ' if '終了ページ' in df_history.columns else None
-            
-            # 🌟 「テキスト（または科目）」を記録している列を探す
-            text_col = 'テキスト' if 'テキスト' in df_history.columns else '科目' if '科目' in df_history.columns else None
-
-            if page_col:
-                # ページ数を数値に変換し、日付やページ数がない無効なデータを省く
-                df_history[page_col] = pd.to_numeric(df_history[page_col], errors='coerce')
-                df_chart = df_history.dropna(subset=['日時', page_col]).sort_values('日時')
+            # 🌟 文字列から「テキスト名」と「進捗ページ数」を自動抽出する高度な関数
+            import re
+            def parse_page_data(row):
+                val = row.get('終了ページ')
+                if pd.isna(val): return None, None
+                s = str(val).strip()
+                if not s: return None, None
                 
-                if df_chart.empty:
-                    st.info("グラフに表示できる有効なページデータがありません。")
-                elif text_col:
-                    # 🌟 テキスト（または科目）ごとにグラフを分ける！
-                    text_names = df_chart[text_col].dropna().unique()
-                    for t_name in text_names:
-                        # 空白のテキスト名などはスキップ
-                        if str(t_name).strip() == "": continue
-                        
-                        st.markdown(f"##### 📘 {t_name}")
-                        df_sub = df_chart[df_chart[text_col] == t_name]
-                        st.line_chart(data=df_sub, x="日時", y=page_col)
+                # 初期値のセット（スプレッドシートの「テキスト」列を仮セット）
+                text_name = row.get('テキスト', '')
+                if pd.isna(text_name): text_name = ''
+                page_str = s
+                
+                # 1️⃣ 「終了ページ」のセル内にコロン(:)があれば、テキスト名とページ部分に切り分ける
+                if ':' in s:
+                    parts = s.split(':', 1)
+                    text_name = parts[0].strip()
+                    page_str = parts[1].strip()
+                
+                # 2️⃣ ページ部分から「〜」や「-」の後ろ側（終了ページ数）を切り出す
+                if '〜' in page_str:
+                    target = page_str.split('〜')[-1]
+                elif '-' in page_str:
+                    target = page_str.split('-')[-1]
                 else:
-                    # 万が一テキスト用の列が見つからなかった場合は今まで通りまとめて表示
-                    st.line_chart(data=df_chart, x="日時", y=page_col)
+                    target = page_str
+                
+                # 3️⃣ 切り出した部分から数字を抽出
+                nums = re.findall(r'\d+', target)
+                page_num = int(nums[-1]) if nums else None
+                
+                # 保険：もし上記で取れなければ、ページ文字列全体から一番最後の数字を探す
+                if page_num is None:
+                    all_nums = re.findall(r'\d+', page_str)
+                    if all_nums:
+                        page_num = int(all_nums[-1])
+                
+                # テキスト名がどうしても空なら「科目」や「その他」にする
+                if not str(text_name).strip():
+                    text_name = row.get('科目', 'その他')
+                    if pd.isna(text_name) or not str(text_name).strip():
+                        text_name = 'その他'
+                        
+                return text_name, page_num
+
+            # 🌟 各行に上の関数を適用して「グラフ用テキスト名」と「数値のページ数」を新しく生成
+            res = df_history.apply(parse_page_data, axis=1, result_type='expand')
+            df_history['グラフ用テキスト'] = res[0]
+            df_history['グラフ用ページ'] = res[1]
+
+            # 日時とページ数値が両方揃っている有効なデータだけに絞り込んでソート
+            df_chart = df_history.dropna(subset=['日時', 'グラフ用ページ']).sort_values('日時')
+            
+            if not df_chart.empty:
+                # 抽出したテキスト名ごとにグループを回す
+                text_names = df_chart['グラフ用テキスト'].unique()
+                has_graph = False
+                
+                for t_name in text_names:
+                    if str(t_name).strip() == "": continue
+                    
+                    df_sub = df_chart[df_chart['グラフ用テキスト'] == t_name]
+                    if not df_sub.empty:
+                        st.markdown(f"##### 📘 {t_name}")
+                        st.line_chart(data=df_sub, x="日時", y="グラフ用ページ")
+                        has_graph = True
+                        
+                if not has_graph:
+                    st.info("表示できる有効なデータがありません。")
             else:
-                st.info("「ページ数」または「終了ページ」の列が見つかりません。")
+                st.info("グラフに表示できる有効なページデータがありません。（終了ページの文字からページ数値を読み取れませんでした）")
 
         st.divider()
 
