@@ -54,13 +54,35 @@ def render_analysis_page(selected_student=None):
             st.markdown("**📖 ページ進捗グラフ**")
             # 日付データを正しくソートするために変換
             df_history['日時'] = pd.to_datetime(df_history['日時'], format='mixed', errors='coerce')
-            df_history = df_history.dropna(subset=['日時']).sort_values('日時')
             
-            if 'ページ数' in df_history.columns:
-                st.line_chart(data=df_history, x="日時", y="ページ数")
-            elif '終了ページ' in df_history.columns: # 列名が「終了ページ」の可能性があるための対応
-                df_history['終了ページ'] = pd.to_numeric(df_history['終了ページ'], errors='coerce')
-                st.line_chart(data=df_history.dropna(subset=['終了ページ']), x="日時", y="終了ページ")
+            # 🌟 「ページ」を記録している列を探す
+            page_col = 'ページ数' if 'ページ数' in df_history.columns else '終了ページ' if '終了ページ' in df_history.columns else None
+            
+            # 🌟 「テキスト（または科目）」を記録している列を探す
+            text_col = 'テキスト' if 'テキスト' in df_history.columns else '科目' if '科目' in df_history.columns else None
+
+            if page_col:
+                # ページ数を数値に変換し、日付やページ数がない無効なデータを省く
+                df_history[page_col] = pd.to_numeric(df_history[page_col], errors='coerce')
+                df_chart = df_history.dropna(subset=['日時', page_col]).sort_values('日時')
+                
+                if df_chart.empty:
+                    st.info("グラフに表示できる有効なページデータがありません。")
+                elif text_col:
+                    # 🌟 テキスト（または科目）ごとにグラフを分ける！
+                    text_names = df_chart[text_col].dropna().unique()
+                    for t_name in text_names:
+                        # 空白のテキスト名などはスキップ
+                        if str(t_name).strip() == "": continue
+                        
+                        st.markdown(f"##### 📘 {t_name}")
+                        df_sub = df_chart[df_chart[text_col] == t_name]
+                        st.line_chart(data=df_sub, x="日時", y=page_col)
+                else:
+                    # 万が一テキスト用の列が見つからなかった場合は今まで通りまとめて表示
+                    st.line_chart(data=df_chart, x="日時", y=page_col)
+            else:
+                st.info("「ページ数」または「終了ページ」の列が見つかりません。")
 
         st.divider()
 
