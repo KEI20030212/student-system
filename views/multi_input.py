@@ -438,7 +438,7 @@ def render_multi_input_page():
                                         # ==========================================
                                         # 📦 アコーディオン3: 授業の様子・次回の宿題・コメント
                                         # ==========================================
-                                        with st.expander("🧠 3. 授業の様子 ＆ 🚀 次回の宿題・コメント", expanded=False):
+                                        with st.expander("🧠 3. 授業の様子 ＆ 🚀 次回の宿題・コメント", expanded=True):
                                             st.write("🧠 **授業中の様子・評価**")
                                             col_eval1, col_eval2 = st.columns(2)
                                             with col_eval1:
