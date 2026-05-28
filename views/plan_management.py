@@ -142,8 +142,9 @@ def render_plan_management_page():
                 default_task = "宿題のテキスト P.12〜15 を解き直す" if idx % 2 == 0 else "単元テストのミス直し ＆ 自習室で30分暗記"
                 if idx == 2: default_task = "🏫 通塾日：小テスト合格に向けて20分前に入室すること！"
                 
-                task_content = c_task1.text_input("タスク内容", value=default_task, key=f"task_val_{b}_{idx}")
-                status = c_task2.selectbox("進捗", ["未着手", "進行中", "完了！"], index=2 if idx==0 else 0, key=f"task_status_{b}_{idx}")
+                # 🌟 修正ポイント： key の {b} を削除しました！
+                task_content = c_task1.text_input("タスク内容", value=default_task, key=f"task_val_{idx}")
+                status = c_task2.selectbox("進捗", ["未着手", "進行中", "完了！"], index=2 if idx==0 else 0, key=f"task_status_{idx}")
                 
         st.write("")
         st.button("💾 週間To-Doを確定・保存", key="save_week_plan", type="primary")
