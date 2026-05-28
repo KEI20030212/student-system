@@ -139,7 +139,6 @@ def render_student_portal_page():
                             
                             # 🌟 魔法1：登録成功した瞬間に「入力フォーム」を画面から完全に消し去る！
                             form_placeholder.empty() 
-                            st.balloons() # お祝いの風船演出！
                             
                             # 🌟 魔法2：画面がリロードされた直後に表示するメッセージを仕込む！
                             st.session_state['flash_success_msg'] = f"🎉 新入生「{new_name}」さんのシステム登録が完了しました！\n上のリストから名前を選択して、詳細データの入力を開始できます。"
