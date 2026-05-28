@@ -20,6 +20,7 @@ from views.analytics_dashboard import render_analytics_dashboard_page#改良済
 from views.my_salary import render_my_salary_page#変更なし
 from views.account_manager import render_account_manager_page#変更なし
 from views.finance_integrated import render_finance_integrated_page#改良済
+from views.plan_management import render_plan_management_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
@@ -97,7 +98,8 @@ def main():
         "👤 生徒個別ポータル",
         "💯 小テスト管理センター",
         "🎒 学校課題管理",
-        "💌 メッセージ送信"
+        "💌 メッセージ送信",
+        "🗺️ カリキュラム・計画管理"
     ]
 
     if st.session_state['role'] in ['admin', 'owner', 'am', 'head_teacher']:
@@ -136,6 +138,7 @@ def main():
     elif page == "🏫 教室・学習状況ダッシュボード":render_combined_dashboard_page()
     elif page == "🎒 学校課題管理": render_school_homework_page()
     elif page == "📱 LINE用 学習レポート生成": render_line_report_page()
+    elif page == "🗺️ カリキュラム・計画管理": render_plan_management_page()
     elif page == "🔍 全生徒の過去ログ検索": render_search_page()
     elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page()
     elif page == "💴 自分の給与確認": render_my_salary_page()
