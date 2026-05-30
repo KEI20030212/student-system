@@ -110,11 +110,16 @@ def render_line_report_page():
                     reaction = row.get("ミスへの反応", "")
                     attitude = f"集中力: {concentration} / ミスへの反応: {reaction}" if concentration or reaction else "（未入力）"
 
-                    # 🌟 追加：宿題未達成の理由と修正策の抽出
+                    # 🌟 修正：宿題未達成の理由と修正策から「その他: 」を綺麗に切り取る
                     hw_reason = str(row.get("未達成の理由", "")).strip()
                     if hw_reason == "nan": hw_reason = ""
+                    if hw_reason.startswith("その他: "):
+                        hw_reason = hw_reason.replace("その他: ", "", 1).strip()
+                        
                     hw_fix = str(row.get("本日の修正策", "")).strip()
                     if hw_fix == "nan": hw_fix = ""
+                    if hw_fix.startswith("その他: "):
+                        hw_fix = hw_fix.replace("その他: ", "", 1).strip()
                     
                     hw_status_line = ""
                     if hw_reason or hw_fix:
@@ -125,7 +130,6 @@ def render_line_report_page():
                     parent_msg = str(row.get("保護者への連絡", "")).strip()
                     if parent_msg == "nan": parent_msg = ""
 
-                    # 🌟 hw_status_line を追加してレポート出力
                     class_text = f"📅 【授業内容】（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
                     class_sections.append(class_text)
 
@@ -238,11 +242,17 @@ def render_line_report_page():
                     reaction = row.get("ミスへの反応", "")
                     attitude = f"集中力: {concentration} / ミスへの反応: {reaction}" if concentration or reaction else "（未入力）"
 
-                    # 体験生にも万が一データがあった時のために抽出（通常は空欄）
+                    # 🌟 修正：体験生側も「その他: 」を綺麗に切り取る
                     hw_reason = str(row.get("未達成の理由", "")).strip()
                     if hw_reason == "nan": hw_reason = ""
+                    if hw_reason.startswith("その他: "):
+                        hw_reason = hw_reason.replace("その他: ", "", 1).strip()
+                        
                     hw_fix = str(row.get("本日の修正策", "")).strip()
                     if hw_fix == "nan": hw_fix = ""
+                    if hw_fix.startswith("その他: "):
+                        hw_fix = hw_fix.replace("その他: ", "", 1).strip()
+                        
                     hw_status_line = ""
                     if hw_reason or hw_fix:
                         hw_status_line = f"\n・宿題状況：未達成（理由: {hw_reason} ➡ 対策: {hw_fix}）"
