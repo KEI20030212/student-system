@@ -194,10 +194,9 @@ def render_school_homework_page():
                         st.error("課題内容を1つ以上入力してください！")
                     else:
                         with st.spinner("一括登録中..."):
-                            # 🌟 変更：引数に nendo, gakki, test_type を追加
                             result = robust_api_call(
                                 add_school_homework_multi, 
-                                target_student_list, subject, task_list, deadline, memo, nendo, gakki, test_type,
+                                nendo, gakki, test_type, target_student_list, subject, task_list, deadline, memo,
                                 fallback_value=(False, "通信エラーが発生しました。時間を置いてお試しください。")
                             )
                             is_success, error_msg = result
