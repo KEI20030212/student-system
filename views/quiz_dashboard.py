@@ -44,9 +44,12 @@ def render_quiz_list_page():
         st.stop()
 
     student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
-    selected_student_option = st.selectbox("👤 生徒を選択", ["-- 選択 --"] + student_options)
     
-    if selected_student_option == "-- 選択 --":
+    # 🌟 修正ポイント： ["-- 選択 --"] をリストから消し、index=None と placeholder を設定！
+    selected_student_option = st.selectbox("👤 生徒を選択", student_options, index=None, placeholder="-- 生徒を選択 --")
+    
+    # 🌟 修正ポイント： 選択されていない（None）場合はここで処理を止める
+    if selected_student_option is None:
         st.stop()
 
     student_id = selected_student_option.split(" - ")[0]
@@ -67,22 +70,18 @@ def render_quiz_list_page():
         if not quiz_names:
             st.warning("「設定_小テスト一覧」のデータが取得できません。")
         else:
-            # 🌟 修正ポイント1：小テスト名のセレクトボックスを st.form の『外』に配置
             target_quiz = st.selectbox("📝 実施した小テスト名", quiz_names, key="input_target_quiz")
             
-            # 🌟 フォームの外にあるため、テスト名が変わった瞬間に満点が即時・正確に計算される
             max_score = 100
             if target_quiz:
                 matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{target_quiz}_")]
                 if matched_marks:
                     max_score = int(pd.Series(matched_marks).mode()[0])
             
-            # 🌟 修正ポイント2：ここからフォームを開始（入力パーツをスッキリ並べる）
             with st.form("quiz_input_form"):
                 col1, col2 = st.columns(2)
                 target_unit = col1.number_input("📖 単元・回", min_value=1, value=1, step=1)
                 
-                # 満点表示と入力制限（max_value）が連動して正常に機能する
                 score = col2.number_input(f"💯 点数 (満点: {max_score})", min_value=0, max_value=max_score, value=max_score, step=1)
                 
                 test_date = st.date_input("📅 実施日", datetime.date.today())
@@ -200,7 +199,7 @@ def render_quiz_list_page():
                         ratio = v / full_m if full_m > 0 else 0
                         if ratio >= 1.0: return f"👑 {int(v)}"
                         elif ratio >= 0.8: return f"🟢 {int(v)}"
-                        elif ratio >= 0.2: return f"🟡 {int(v)}" # 元のコードの閾値を維持
+                        elif ratio >= 0.2: return f"🟡 {int(v)}"
                         else: return f"🔴 {int(v)}"
                     except:
                         return str(val)
