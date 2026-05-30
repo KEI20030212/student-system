@@ -9,8 +9,8 @@ import math
 import time
 import streamlit.components.v1 as components
 import base64
-import pickle
 import altair as alt # 座標グラフを描くための魔法の絵の具
+import pickle
 
 def get_jst_now():
     """現在時刻を日本時間(JST)で取得する"""
@@ -21,7 +21,7 @@ def get_jst_now():
 # --------------------------------------------------
 # ⚙️ 設定（デザインとファイル連携）
 # --------------------------------------------------
-SPREADSHEET_ID = '1fEyisztEGteS22kF1lUlsXiwjmMh1cR7MiXU6aDiZEA'
+SPREADSHEET_ID = '1tnhK-rvf_cSXmuY9REkD_cK6Wg4XP7alc1UHTpSRrv4'
 @st.cache_resource
 def get_gc_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -509,16 +509,12 @@ def get_all_teacher_names():
         st.error(f"🚨 講師マスタの取得に失敗しました！原因: {e}")
         return []
 
-def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_records, date, teacher_name="未入力", class_type="1:1", attendance="出席（通常）", class_slot="-", advice="-", parent_msg="-", next_handover="-", assigned_p=0, completed_p=0, motivation_rank=0, next_hw_text="-", next_hw_pages=0, late_time="-", concentration="-", reaction="-"):
-    # 🌟 生徒IDも表示するようにプリント文をパワーアップ！
+def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_records, date, teacher_name="未入力", class_type="1:1", attendance="出席（通常）", class_slot="-", advice="-", parent_msg="-", next_handover="-", assigned_p=0, completed_p=0, motivation_rank=0, hw_reason="", hw_fix="", next_hw_text="-", next_hw_pages=0, late_time="-", concentration="-", reaction="-"):
     print(f"🌟🌟🌟 保存処理スタート！ ID:{student_id} 生徒名:{name} 🌟🌟🌟") 
     
     gc = get_gc_client()
     try:
         sh = gc.open_by_key(SPREADSHEET_ID)
-        
-        # 🌟 革命ポイント！「授業ログ統合」シートだけを狙い撃ち！
-        # （生徒ごとのシートを探したり作ったりする処理は全カットで超高速化）
         worksheet = sh.worksheet("授業ログ統合")
         
         date_str = date.strftime("%Y/%m/%d") if hasattr(date, 'strftime') else str(date)
@@ -526,7 +522,7 @@ def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_r
         # 🚨 超重要ポイント！
         # リストの2番目に「student_id」を追加しました！
         if not quiz_records:
-            worksheet.append_row([date_str, student_id, name, subject, text_name, advanced_p, "-", "-", "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, next_hw_text, next_hw_pages, late_time, concentration, reaction])
+            worksheet.append_row([date_str, student_id, name, subject, text_name, advanced_p, "-", "-", "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, hw_reason, hw_fix, next_hw_text, next_hw_pages, late_time, concentration, reaction])
         else:
             for q in quiz_records:
                 worksheet.append_row([date_str, student_id, name, subject, text_name, advanced_p, f"第{q['unit']}章", q['score'], "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, next_hw_text, next_hw_pages, late_time, concentration, reaction])
@@ -1014,47 +1010,6 @@ def update_quiz_record_in_sheet(date_str, student_name, quiz_name, old_unit, new
         
     except Exception as e:
         print(f"小テスト修正上書き中にエラー発生: {e}")
-        return False
-
-#trial_input
-def save_trial_lesson_to_spreadsheet(date, student_name, subject, text_name, advanced_p, quiz_records, teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, late_time, concentration, reaction):
-    """
-    体験授業の記録を「体験授業ログ」シートに保存する
-    """
-    import gspread
-    gc = get_gc_client()
-    try:
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        ws = sh.worksheet("体験授業ログ")
-        
-        # 小テストの記録を1つの文字列にまとめる（例: "英単語(1回): 90点、漢字(2回): 100点"）
-        quiz_str = ""
-        if quiz_records:
-            quiz_str = "、".join([f"{q['quiz_name']}({q['unit']}回): {q['score']}点" for q in quiz_records])
-            
-        new_row = [
-            date.strftime("%Y/%m/%d"), # A: 日時
-            teacher_name,             # B: 担当講師
-            class_type,               # C: 授業形態
-            class_slot,               # D: 授業コマ
-            student_name,             # E: 名前
-            attendance,               # F: 出欠
-            f"{late_time}分",         # G: 遅刻時間
-            subject,                  # H: 科目
-            text_name,                # I: テキスト
-            advanced_p,               # J: 終了ページ
-            quiz_str,                 # K: 小テスト記録
-            "",                       # L: やる気ランク (後で計算して入れたい場合はロジックを追加)
-            concentration,            # M: 集中力
-            reaction,                 # N: ミスへの反応
-            advice,                   # O: 授業アドバイス
-            parent_msg,               # P: 保護者への連絡
-            next_handover             # Q: 次回への引継ぎ
-        ]
-        ws.append_row(new_row)
-        return True
-    except Exception as e:
-        print(f"体験授業記録の保存エラー: {e}")
         return False
 
 #dashboard.py
