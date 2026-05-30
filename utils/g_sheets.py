@@ -1238,8 +1238,9 @@ def add_school_homework_multi(nendo, gakki, test_type, student_list, subject, ta
 
     gc = get_gc_client()
     max_retries = 3
+    
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    deadline_str = deadline.strftime("%Y-%m-%d")
+    deadline_str = deadline.strftime("%Y-%m-%d") if hasattr(deadline, 'strftime') else str(deadline)
     
     # 全生徒 × 全課題 の行データを作成
     rows_to_add = []
