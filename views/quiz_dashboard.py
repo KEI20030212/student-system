@@ -5,12 +5,11 @@ import re
 
 from utils.g_sheets import (
     get_student_master, 
-    get_quiz_master_dict,                
+    get_quiz_master_dict,                 
     save_quiz_to_dedicated_sheet,        
     load_quiz_records,
-    get_textbook_master # 🌟 追加: テキストマスタをインポート
+    get_textbook_master
 )
-
 from utils.api_guard import robust_api_call
 
 # ==========================================
@@ -28,7 +27,6 @@ def cached_get_quiz_details():
 def cached_load_all_quizzes():
     return robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
 
-# 🌟 追加: テキストマスタのキャッシュ取得
 @st.cache_data(ttl=600)  
 def cached_get_textbook_master():
     return robust_api_call(get_textbook_master, fallback_value={})
@@ -66,26 +64,28 @@ def render_quiz_list_page():
     with st.expander("📝 小テスト結果を登録する"):
         st.write(f"**{student_name}** さんの結果を入力します。") 
         
-        with st.form("quiz_input_form"):
-            col1, col2 = st.columns(2)
+        if not quiz_names:
+            st.warning("「設定_小テスト一覧」のデータが取得できません。")
+        else:
+            # 🌟 修正ポイント1：小テスト名のセレクトボックスを st.form の『外』に配置
+            target_quiz = st.selectbox("📝 実施した小テスト名", quiz_names, key="input_target_quiz")
             
-            if not quiz_names:
-                st.warning("「設定_小テスト一覧」のデータが取得できません。")
-                st.form_submit_button("記録不可", disabled=True)
-            else:
-                target_quiz = col1.selectbox("📝 小テスト名", quiz_names)
-                target_unit = col2.number_input("📖 単元・回", min_value=1, value=1, step=1)
+            # 🌟 フォームの外にあるため、テスト名が変わった瞬間に満点が即時・正確に計算される
+            max_score = 100
+            if target_quiz:
+                matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{target_quiz}_")]
+                if matched_marks:
+                    max_score = int(pd.Series(matched_marks).mode()[0])
+            
+            # 🌟 修正ポイント2：ここからフォームを開始（入力パーツをスッキリ並べる）
+            with st.form("quiz_input_form"):
+                col1, col2 = st.columns(2)
+                target_unit = col1.number_input("📖 単元・回", min_value=1, value=1, step=1)
                 
-                # 🌟 【アップデート】選んだテスト名を元に満点を自動取得
-                max_score = 100
-                if target_quiz:
-                    matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{target_quiz}_")]
-                    if matched_marks:
-                        max_score = int(pd.Series(matched_marks).mode()[0])
+                # 満点表示と入力制限（max_value）が連動して正常に機能する
+                score = col2.number_input(f"💯 点数 (満点: {max_score})", min_value=0, max_value=max_score, value=max_score, step=1)
                 
-                col3, col4 = st.columns(2)
-                score = col3.number_input(f"💯 点数 (満点: {max_score})", min_value=0, max_value=max_score, value=max_score, step=1)
-                test_date = col4.date_input("📅 実施日", datetime.date.today())
+                test_date = st.date_input("📅 実施日", datetime.date.today())
                 
                 submit_quiz = st.form_submit_button("この内容で記録する ✨", type="primary")
                 
@@ -190,7 +190,6 @@ def render_quiz_list_page():
                 def add_icon(val):
                     if pd.isna(val) or val == "": return ""
                     
-                    # 🌟 【アップデート】アイコン表示用の満点取得も新ロジックに対応
                     full_m = 100
                     matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{q_name}_")]
                     if matched_marks:
@@ -201,7 +200,7 @@ def render_quiz_list_page():
                         ratio = v / full_m if full_m > 0 else 0
                         if ratio >= 1.0: return f"👑 {int(v)}"
                         elif ratio >= 0.8: return f"🟢 {int(v)}"
-                        elif ratio >= 0.6: return f"🟡 {int(v)}"
+                        elif ratio >= 0.2: return f"🟡 {int(v)}" # 元のコードの閾値を維持
                         else: return f"🔴 {int(v)}"
                     except:
                         return str(val)
