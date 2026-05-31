@@ -4,7 +4,6 @@ import pandas as pd
 import datetime
 import re
 
-# 🌟 新規登録用に update_student_info もインポート
 from utils.g_sheets import get_student_master, get_student_info, update_student_info
 from utils.api_guard import robust_api_call
 
@@ -51,12 +50,10 @@ def render_student_portal_page():
         # 🆕 新入生登録フォーム（教室長・管理者のみ表示）
         if st.session_state.get('role') in ['admin', 'owner', 'head_teacher'] and not is_conference_mode:
             
-            # 🌟 アップグレードポイント：画面更新後も残る「安心の完了メッセージ」
             if 'flash_success_msg' in st.session_state:
                 st.success(st.session_state['flash_success_msg'])
-                del st.session_state['flash_success_msg'] # 一度表示したら消す
+                del st.session_state['flash_success_msg'] 
             
-            # 🌟 アップグレードポイント：フォーム全体を「あとで消せる箱」に入れる
             form_placeholder = st.empty()
             
             with form_placeholder.container():
@@ -64,13 +61,21 @@ def render_student_portal_page():
                     with st.form("add_new_student_form"):
                         st.markdown("##### 📝 基本情報の入力")
                         
+                        # 🌟 追加：校舎の選択肢（実際の校舎名と頭文字に合わせて自由に変更してください！）
+                        branch_opts = {
+                            "田端新町校": "t",
+                            "東十条駅前校": "h",
+                            "プレフィックスなし (数字のみ)": ""
+                        }
+                        selected_branch_key = st.selectbox("🏫 所属校舎（生徒IDの頭文字になります）", list(branch_opts.keys()), index=0)
+                        
                         if not df_students.empty and '生徒ID' in df_students.columns:
                             existing_ids = pd.to_numeric(df_students['生徒ID'].astype(str).str.extract(r'(\d+)')[0], errors='coerce').dropna()
-                            next_id = int(existing_ids.max() + 1) if not existing_ids.empty else 1
+                            next_num = int(existing_ids.max() + 1) if not existing_ids.empty else 1
                         else:
-                            next_id = 1
+                            next_num = 1
                         
-                        st.caption(f"🤖 生徒IDは自動で振られます ➡ **【 {next_id} 】**")
+                        st.caption(f"🤖 生徒IDは自動で振られます ➡ **【 (校舎頭文字) + {next_num:03d} 】** （例: A{next_num:03d}）")
                         
                         new_name = st.text_input("生徒名（必須）", placeholder="例: 山田 太郎")
                         new_grade = st.text_input("学年", placeholder="例: 中3 / 高1")
@@ -99,11 +104,14 @@ def render_student_portal_page():
                         
                         submit_new_student = st.form_submit_button("🚀 新入生をシステムに登録する", type="primary")
                     
-            # フォームの「外」で送信判定を行う（これによりフォームごと消す魔法が使える）
             if submit_new_student:
                 if not new_name.strip():
                     st.error("❌ 生徒名を入力してください。")
                 else:
+                    # 🌟 追加：選択された校舎の頭文字を取得し、最終的なIDを生成（ゼロ埋め3桁）
+                    branch_prefix = branch_opts[selected_branch_key]
+                    final_student_id = f"{branch_prefix}{next_num:03d}" if branch_prefix else str(next_num)
+                    
                     course_parts = []
                     if b_val > 0: course_parts.append(f"Bコース:{b_val}")
                     if q_val > 0: course_parts.append(f"Qコース:{q_val}")
@@ -114,7 +122,7 @@ def render_student_portal_page():
                     with st.spinner("スプレッドシートに登録中..."):
                         def _create_student():
                             update_student_info(
-                                student_id=str(next_id),
+                                student_id=final_student_id, # 🌟 生成したIDを使用
                                 name=new_name.strip(),
                                 grade=new_grade.strip(),
                                 school=new_school.strip(),
@@ -137,11 +145,11 @@ def render_student_portal_page():
                         if success:
                             st.cache_data.clear()
                             
-                            # 🌟 魔法1：登録成功した瞬間に「入力フォーム」を画面から完全に消し去る！
                             form_placeholder.empty() 
+                            st.balloons() 
                             
-                            # 🌟 魔法2：画面がリロードされた直後に表示するメッセージを仕込む！
-                            st.session_state['flash_success_msg'] = f"🎉 新入生「{new_name}」さんのシステム登録が完了しました！\n上のリストから名前を選択して、詳細データの入力を開始できます。"
+                            # 🌟 成功メッセージに確定したIDを表示
+                            st.session_state['flash_success_msg'] = f"🎉 新入生「{new_name}」さんのシステム登録が完了しました！（生徒ID: {final_student_id}）\n上のリストから名前を選択して、詳細データの入力を開始できます。"
                             
                             st.success("✅ 登録成功！画面を更新します...")
                             time.sleep(1.5)
