@@ -4,7 +4,13 @@ import pandas as pd
 import datetime
 import re
 
-from utils.g_sheets import get_student_master, get_student_info, update_student_info
+# 🌟 新しく追加した move_student_to_inactive_sheet をインポート
+from utils.g_sheets import (
+    get_student_master, 
+    get_student_info, 
+    update_student_info,
+    move_student_to_inactive_sheet
+)
 from utils.api_guard import robust_api_call
 
 from views.student_details import render_student_details_page
@@ -25,7 +31,7 @@ def render_student_portal_page():
         st.caption("✅ 面談モードON（読取専用）※保護者と一緒に画面を見るためのモードです。")
 
     # ==========================================
-    # 🌟 get_student_master を使って「ID - 名前」のリストを生成
+    # get_student_master を使って「ID - 名前」のリストを生成
     # ==========================================
     student_options = []
     with st.spinner("生徒データを読み込み中..."):
@@ -33,7 +39,7 @@ def render_student_portal_page():
         if not df_students.empty and '生徒ID' in df_students.columns and '生徒名' in df_students.columns:
             student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
             
-    # 🌟 全機能共通の生徒選択バー
+    # 全機能共通の生徒選択バー
     selected_student = st.selectbox("👤 対象の生徒を選択してください", student_options, index=None, placeholder="--選択--")
 
     if is_conference_mode:
@@ -43,11 +49,11 @@ def render_student_portal_page():
         st.sidebar.info("✏️ 通常モード（入力・編集）")
 
     # ==========================================
-    # 🌟 生徒が選ばれていない時の「機能紹介 ＆ 新入生登録画面」
+    # 生徒が選ばれていない時の「機能紹介 ＆ 新入生登録画面」
     # ==========================================
     if selected_student is None:
         
-        # 🆕 新入生登録フォーム（教室長・管理者のみ表示）
+        # 新入生登録フォーム（教室長・管理者のみ表示）
         if st.session_state.get('role') in ['admin', 'owner', 'head_teacher'] and not is_conference_mode:
             
             if 'flash_success_msg' in st.session_state:
@@ -61,7 +67,6 @@ def render_student_portal_page():
                     with st.form("add_new_student_form"):
                         st.markdown("##### 📝 基本情報の入力")
                         
-                        # 🌟 追加：校舎の選択肢（実際の校舎名と頭文字に合わせて自由に変更してください！）
                         branch_opts = {
                             "田端新町校": "t",
                             "東十条駅前校": "h",
@@ -108,7 +113,6 @@ def render_student_portal_page():
                 if not new_name.strip():
                     st.error("❌ 生徒名を入力してください。")
                 else:
-                    # 🌟 追加：選択された校舎の頭文字を取得し、最終的なIDを生成（ゼロ埋め3桁）
                     branch_prefix = branch_opts[selected_branch_key]
                     final_student_id = f"{branch_prefix}{next_num:03d}" if branch_prefix else str(next_num)
                     
@@ -122,7 +126,7 @@ def render_student_portal_page():
                     with st.spinner("スプレッドシートに登録中..."):
                         def _create_student():
                             update_student_info(
-                                student_id=final_student_id, # 🌟 生成したIDを使用
+                                student_id=final_student_id, 
                                 name=new_name.strip(),
                                 grade=new_grade.strip(),
                                 school=new_school.strip(),
@@ -144,13 +148,9 @@ def render_student_portal_page():
                         
                         if success:
                             st.cache_data.clear()
-                            
                             form_placeholder.empty() 
                             st.balloons() 
-                            
-                            # 🌟 成功メッセージに確定したIDを表示
                             st.session_state['flash_success_msg'] = f"🎉 新入生「{new_name}」さんのシステム登録が完了しました！（生徒ID: {final_student_id}）\n上のリストから名前を選択して、詳細データの入力を開始できます。"
-                            
                             st.success("✅ 登録成功！画面を更新します...")
                             time.sleep(1.5)
                             st.rerun()
@@ -183,7 +183,7 @@ def render_student_portal_page():
 
 
     # ==========================================
-    # 🌟 モードの分岐
+    # 🌟 生徒が選ばれている時の処理
     # ==========================================
     if is_conference_mode:
         with st.spinner("面談用データを準備中..."):
@@ -204,3 +204,38 @@ def render_student_portal_page():
             render_student_details_page(selected_student)
         else:
             render_analysis_page(selected_student)
+            
+        # ==========================================
+        # 🌟 新規追加：退塾手続きエリア（管理者限定 ＆ 非面談モード時）
+        # ==========================================
+        if st.session_state.get('role') in ['admin', 'owner', 'head_teacher']:
+            st.write("")
+            st.write("")
+            st.divider()
+            
+            target_id = selected_student.split(" - ")[0]
+            target_name = selected_student.split(" - ")[1]
+            
+            with st.expander(f"🚨 【管理者限定】{target_name} さんの退塾・アーカイブ手続き", expanded=False):
+                st.warning(f"この操作を行うと、{target_name} さんのデータは「退塾生情報」シートに移動し、現役生リスト（授業入力や月謝計算など）から即座に除外されます。")
+                
+                # 誤爆防止用の同意チェックボックス
+                confirm_archive = st.checkbox(f"本当に {target_name} 先生の生徒データをアーカイブ（退塾処理）してよろしいですか？", key="chk_archive")
+                
+                if st.button(f"🚀 {target_name} さんの退塾処理を実行する", type="primary", use_container_width=True):
+                    if not confirm_archive:
+                        st.error("⚠️ 処理を実行するには、上記のチェックボックスにチェックを入れてください。")
+                    else:
+                        with st.spinner("データベースの引っ越し処理を実行中..."):
+                            # 引っ越し関数の呼び出し
+                            success, err_msg = robust_api_call(move_student_to_inactive_sheet, target_id, fallback_value=(False, "通信タイムアウト"))
+                            
+                            if success:
+                                st.cache_data.clear() # キャッシュを完全にクリアして現役リストをリフレッシュ
+                                st.balloons()
+                                st.session_state['flash_success_msg'] = f"✅ {target_name} さんの退塾アーカイブ処理が正常に完了しました。"
+                                st.success("処理が完了しました！画面を更新します...")
+                                time.sleep(1.5)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ 処理に失敗しました。理由: {err_msg}")
