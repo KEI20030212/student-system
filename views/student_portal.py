@@ -149,7 +149,6 @@ def render_student_portal_page():
                         if success:
                             st.cache_data.clear()
                             form_placeholder.empty() 
-                            st.balloons() 
                             st.session_state['flash_success_msg'] = f"🎉 新入生「{new_name}」さんのシステム登録が完了しました！（生徒ID: {final_student_id}）\n上のリストから名前を選択して、詳細データの入力を開始できます。"
                             st.success("✅ 登録成功！画面を更新します...")
                             time.sleep(1.5)
@@ -231,8 +230,7 @@ def render_student_portal_page():
                             success, err_msg = robust_api_call(move_student_to_inactive_sheet, target_id, fallback_value=(False, "通信タイムアウト"))
                             
                             if success:
-                                st.cache_data.clear() # キャッシュを完全にクリアして現役リストをリフレッシュ
-                                st.balloons()
+                                st.cache_data.clear()
                                 st.session_state['flash_success_msg'] = f"✅ {target_name} さんの退塾アーカイブ処理が正常に完了しました。"
                                 st.success("処理が完了しました！画面を更新します...")
                                 time.sleep(1.5)
