@@ -1893,3 +1893,28 @@ def save_shift_records(target_type, member_name, edited_df):
     
     return True
 
+#course_contract.py
+# utils/g_sheets.py に追加する際のおすすめ構造
+
+def _raw_load_contract_master():
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    ws = sh.worksheet("設定_講習契約マスタ")
+    return pd.DataFrame(ws.get_all_records(numericise_ignore=["all"]))
+
+@st.cache_data(ttl=600)
+def load_contract_master():
+    from utils.api_guard import robust_api_call
+    import pandas as pd
+    return robust_api_call(_raw_load_contract_master, fallback_value=pd.DataFrame())
+
+def save_contract_master(df):
+    """講習契約マスタを保存（一括上書き）する"""
+    worksheet = get_worksheet("設定_講習契約マスタ")
+    worksheet.clear()
+    # ヘッダーとデータをリスト化して一括更新
+    worksheet.update([df.columns.values.tolist()] + df.values.tolist())
+    return True
+
+
+
