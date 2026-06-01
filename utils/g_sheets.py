@@ -1796,4 +1796,100 @@ def update_fixed_costs_in_sheet(updated_df):
         print(f"固定費の更新エラー: {e}")
         return False
 
+#shift_management.py
+# ==========================================
+# 🌟 内部ヘルパー関数
+# ==========================================
+def _get_shift_sheet_name(target_type):
+    """対象に合わせて読み書きするシート名を切り替える"""
+    if target_type == "講師":
+        return "データ_講師シフト_講習"
+    else:
+        return "データ_生徒シフト_講習"
+
+# ==========================================
+# 🌟 シフトデータの読み込み (Load)
+# ==========================================
+def load_shift_records(target_type, member_name, start_date):
+    """
+    指定されたメンバーの1週間分のシフトをスプレッドシートから取得する
+    """
+    sheet_name = _get_shift_sheet_name(target_type)
+    
+    # 💡 既存のシート取得関数を使用してください（例: get_worksheet）
+    worksheet = get_worksheet(sheet_name) 
+    
+    all_data = worksheet.get_all_records()
+    df_all = pd.DataFrame(all_data)
+    
+    if df_all.empty:
+        return pd.DataFrame()
+        
+    name_col = "講師名" if target_type == "講師" else "生徒名"
+    
+    if name_col not in df_all.columns:
+        return pd.DataFrame()
+        
+    # 1. 該当メンバーのデータのみ抽出
+    df_member = df_all[df_all[name_col] == member_name].copy()
+    
+    # 2. 取得対象の日付リスト（月曜〜日曜の7日分）を文字列で生成して絞り込み
+    date_list = [(start_date + datetime.timedelta(days=i)).strftime("%Y/%m/%d") for i in range(7)]
+    df_filtered = df_member[df_member["日付"].isin(date_list)].copy()
+    
+    # NaNを空文字に変換（Streamlitのデータエディタでエラーになるのを防ぐ）
+    df_filtered = df_filtered.fillna("")
+    
+    return df_filtered
+
+# ==========================================
+# 🌟 シフトデータの書き込み (Save / Upsert)
+# ==========================================
+def save_shift_records(target_type, member_name, edited_df):
+    """
+    UIで編集された1週間分のシフトをスプレッドシートに保存（上書き・追加）する
+    """
+    sheet_name = _get_shift_sheet_name(target_type)
+    worksheet = get_worksheet(sheet_name)
+    
+    all_data = worksheet.get_all_values()
+    headers = all_data[0] if all_data else []
+    
+    # ヘッダーしかない、または完全な空シートの場合の処理
+    if len(all_data) > 1:
+        df_all = pd.DataFrame(all_data[1:], columns=headers)
+    else:
+        df_all = pd.DataFrame(columns=headers)
+        
+    name_col = "講師名" if target_type == "講師" else "生徒名"
+    
+    # 1. 保存用データの形を整える
+    records_to_save = edited_df.copy()
+    records_to_save[name_col] = member_name  # UIには無い「講師/生徒名」カラムを追加
+    
+    dates_to_update = records_to_save["日付"].tolist()
+    
+    # 2. 既存データから、今回更新する「対象者 ✕ 対象の7日間」の行を除外する（擬似的な上書き処理）
+    if not df_all.empty and name_col in df_all.columns and "日付" in df_all.columns:
+        mask = (df_all[name_col] == member_name) & (df_all["日付"].isin(dates_to_update))
+        df_kept = df_all[~mask].copy()
+    else:
+        df_kept = pd.DataFrame(columns=headers)
+        
+    # 3. シートのカラム構造に合わせて新しいデータを結合する
+    for col in headers:
+        if col not in records_to_save.columns:
+            records_to_save[col] = ""  # シートにあるがUIにないカラム（備考など）は空欄で埋める
+            
+    records_to_save = records_to_save[headers]  # 列の順番をスプレッドシートと完全に一致させる
+    
+    df_final = pd.concat([df_kept, records_to_save], ignore_index=True)
+    df_final = df_final.fillna("")
+    
+    # 4. スプレッドシートを一括更新
+    # ※一部だけ更新するより、一度クリアして一括書き込みする方がバグが少なく高速です
+    worksheet.clear()
+    worksheet.update([df_final.columns.values.tolist()] + df_final.values.tolist())
+    
+    return True
 
