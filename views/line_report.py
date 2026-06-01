@@ -7,6 +7,8 @@ from utils.g_sheets import (
     load_quiz_records, 
     load_school_homework_data 
 )
+# 🌟 追加：URL生成のために裏側のフォルダ取得関数をインポート
+from utils.g_drive import get_or_create_student_folder
 from utils.api_guard import robust_api_call
 
 # 🌟 全データを一括取得するキャッシュ関数群
@@ -86,7 +88,7 @@ def render_line_report_page():
                 class_sections = []
                 advice_sections = []
                 parent_msg_sections = []
-                bring_sections = [] # 🌟 持ち物用
+                bring_sections = [] 
 
                 for _, row in student_classes.iterrows():
                     teacher = row.get("担当講師", "（未入力）")
@@ -119,7 +121,7 @@ def render_line_report_page():
                     hw_fix = str(row.get("本日の修正策", "")).strip()
                     if hw_fix == "nan": hw_fix = ""
                     if hw_fix.startswith("その他: "):
-                        hw_fix = hw_fix.replace("その他: ", "", 1).strip()
+                        hw_fix = hw_fix.replace("仕込み: ", "", 1).strip()
                     
                     hw_status_line = ""
                     if hw_reason or hw_fix:
@@ -130,7 +132,6 @@ def render_line_report_page():
                     parent_msg = str(row.get("保護者への連絡", "")).strip()
                     if parent_msg == "nan": parent_msg = ""
                     
-                    # 🌟 持ち物の抽出
                     bring = str(row.get("次回の持ち物", "")).strip()
                     if bring and bring != "nan":
                         bring_sections.append(f"・{bring}（{subject}）")
@@ -147,20 +148,28 @@ def render_line_report_page():
                 advices_text = "\n\n".join(advice_sections) if advice_sections else "（特になし）"
                 msgs_text = "\n\n".join(parent_msg_sections) if parent_msg_sections else "（特になし）"
                 
-                # 🌟 持ち物テキストの組み立て
                 bring_text = ""
                 if bring_sections:
                     bring_list = "\n".join(bring_sections)
                     bring_text = f"\n🎒 【次回の持ち物】\n{bring_list}\n"
 
-                # 小テスト結果
+                # 小テスト結果の抽出と、連動リンクの自動判定
                 quiz_text = "小テストは実施していません"
+                drive_url_line = "" # 🌟 リンク用初期化
+                
                 if not df_all_quizzes.empty and "APIエラー発生" not in df_all_quizzes.columns:
                     df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
                     student_quizzes = df_all_quizzes[(df_all_quizzes['名前'] == student_name) & (df_all_quizzes['日時'].dt.date == target_date)]
+                    
                     if not student_quizzes.empty:
                         quiz_results = [f"【{row.get('テキスト', '不明')} {row.get('単元', '不明')}】: {row.get('点数', '不明')}点" for _, row in student_quizzes.iterrows()]
                         quiz_text = "\n・".join(quiz_results)
+                        
+                        # 🌟 【新機能】小テストがあった場合のみ、その子のGoogle DriveフォルダIDを取得してURLを生成
+                        if student_id != "未設定":
+                            folder_id = robust_api_call(get_or_create_student_folder, student_id, student_name, fallback_value=None)
+                            if folder_id:
+                                drive_url_line = f"\n📂 【本日の答案確認URL】\nhttps://drive.google.com/drive/folders/{folder_id}\n"
 
                 # 学校課題アラート
                 hw_alert_text = ""
@@ -182,6 +191,7 @@ def render_line_report_page():
                         if alerts:
                             hw_alert_text = "\n⚠️ 【学校課題の提出アラート】\n" + "\n".join(alerts) + "\n"
 
+                # 🌟 メッセージの中に {drive_url_line} を配置
                 line_message = f"""保護者様
 
 お世話になっております。
@@ -191,7 +201,7 @@ def render_line_report_page():
 
 💯 【小テスト結果】
 ・{quiz_text}
-{hw_alert_text}{bring_text}
+{drive_url_line}{hw_alert_text}{bring_text}
 🗣️ 【担当講師より（アドバイス等）】
 {advices_text}
 
@@ -202,7 +212,6 @@ def render_line_report_page():
 引き続きよろしくお願いいたします。
 槌屋"""
 
-                # 送信チェックボックスとアコーディオン
                 c_check, c_exp = st.columns([1, 9])
                 is_sent = c_check.checkbox("送済", key=f"sent_reg_{selected_date}_{s_idx}")
                 label_suffix = " ［✅ 送信完了済み］" if is_sent else ""
@@ -219,7 +228,7 @@ def render_line_report_page():
         # ==========================================
         if trial_students:
             if regular_students:
-                st.divider() # 通常生の下に区切り線を入れる
+                st.divider() 
             
             st.subheader("🔰 体験授業レポート")
             for s_idx, student_info in enumerate(trial_students):
@@ -229,7 +238,7 @@ def render_line_report_page():
                 class_sections = []
                 advice_sections = []
                 parent_msg_sections = []
-                bring_sections = [] # 🌟 持ち物用
+                bring_sections = [] 
 
                 for _, row in student_classes.iterrows():
                     teacher = row.get("担当講師", "（未入力）")
@@ -275,7 +284,6 @@ def render_line_report_page():
                     next_handover = str(row.get("次回への引継ぎ", "")).strip()
                     if next_handover == "nan": next_handover = ""
                     
-                    # 🌟 持ち物の抽出
                     bring = str(row.get("次回の持ち物", "")).strip()
                     if bring and bring != "nan":
                         bring_sections.append(f"・{bring}（{subject}）")
@@ -293,22 +301,26 @@ def render_line_report_page():
                 advices_text = "\n\n".join(advice_sections) if advice_sections else "（特になし）"
                 msgs_text = "\n\n".join(parent_msg_sections) if parent_msg_sections else "（特になし）"
                 
-                # 🌟 持ち物テキストの組み立て
                 bring_text = ""
                 if bring_sections:
                     bring_list = "\n".join(bring_sections)
                     bring_text = f"\n🎒 【次回の持ち物】\n{bring_list}\n"
 
-                # 小テスト結果
+                # 体験生用の小テスト＆Drive連動
                 quiz_text = "小テストは実施していません"
+                drive_url_line = ""
                 if not df_all_quizzes.empty and "APIエラー発生" not in df_all_quizzes.columns:
                     df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
                     student_quizzes = df_all_quizzes[(df_all_quizzes['名前'] == student_name) & (df_all_quizzes['日時'].dt.date == target_date)]
                     if not student_quizzes.empty:
                         quiz_results = [f"【{row.get('テキスト', '不明')} {row.get('単元', '不明')}】: {row.get('点数', '不明')}点" for _, row in student_quizzes.iterrows()]
                         quiz_text = "\n・".join(quiz_results)
+                        
+                        # 体験生の場合はIDが固定の文字列（TRIAL）のため
+                        folder_id = robust_api_call(get_or_create_student_folder, "TRIAL", student_name, fallback_value=None)
+                        if folder_id:
+                            drive_url_line = f"\n📂 【本日の答案確認URL】\nhttps://drive.google.com/drive/folders/{folder_id}\n"
 
-                # 🌟 体験生専用テンプレート
                 line_message = f"""保護者様
 
 本日は {student_name} さんの「体験授業」にお越しいただき、誠にありがとうございました！
@@ -319,7 +331,7 @@ def render_line_report_page():
 
 💯 【小テスト結果（体験内容）】
 ・{quiz_text}
-{bring_text}
+{drive_url_line}{bring_text}
 🗣️ 【本日の輝いていた点・長所】
 {advices_text}
 
@@ -332,7 +344,6 @@ def render_line_report_page():
 今後ともよろしくお願いいたします。
 槌屋"""
 
-                # 送信チェックボックスとアコーディオン
                 c_check, c_exp = st.columns([1, 9])
                 is_sent = c_check.checkbox("送済", key=f"sent_trial_{selected_date}_{s_idx}")
                 label_suffix = " ［✅ 送信完了済み］" if is_sent else ""
