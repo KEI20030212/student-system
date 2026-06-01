@@ -12,7 +12,7 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 
 def get_drive_service():
     """Google Drive APIに接続する"""
-    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds_dict = dict(st.secrets["gcp_service_account_json"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     service = build('drive', 'v3', credentials=creds)
     return service
