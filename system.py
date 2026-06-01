@@ -21,6 +21,9 @@ from views.my_salary import render_my_salary_page#変更なし
 from views.account_manager import render_account_manager_page#変更なし
 from views.finance_integrated import render_finance_integrated_page#改良済
 from views.plan_management import render_plan_management_page
+from views.shift_management import render_shift_management_page
+from views.matching_board import render_matching_page
+from views.course_contract import render_course_contract_page
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
@@ -99,7 +102,10 @@ def main():
         "💯 小テスト管理センター",
         "🎒 学校課題管理",
         "💌 メッセージ送信",
-        "🗺️ カリキュラム・計画管理"
+        "🗺️ カリキュラム・計画管理",
+        "📅 講習シフト一括入力フォーム",
+        "🧩 スマート・コマ組みマッチング",
+        "📝 講習契約マスタ登録"
     ]
 
     if st.session_state['role'] in ['admin', 'owner', 'am', 'head_teacher']:
@@ -145,6 +151,9 @@ def main():
     elif page == "💰 財務・請求ダッシュボード": render_finance_integrated_page()
     elif page == "💌 メッセージ送信": render_message_sender_page()
     elif page == "⚙️ アカウント・システム設定": render_account_manager_page()
+    elif page == "📅 講習シフト一括入力フォーム":render_shift_management_page()
+    elif page == "🧩 スマート・コマ組みマッチング":render_matching_page()
+    elif page == "📝 講習契約マスタ登録":render_course_contract_page()
 
 if __name__ == "__main__":
     main()
