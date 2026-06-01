@@ -10,9 +10,9 @@ def render_course_contract_page():
 
     # 1. データの読み込み
     with st.spinner("データを読み込み中..."):
-        df_contracts = robust_api_call(load_contract_master, fallback_value=pd.DataFrame())
-        df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
-
+        df_contracts = load_contract_master()
+        df_students = get_student_master()
+        
     if df_students.empty:
         st.error("生徒マスタが読み込めません。")
         st.stop()
