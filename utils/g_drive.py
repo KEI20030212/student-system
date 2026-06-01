@@ -1,5 +1,6 @@
 import streamlit as st
 import io
+import json # 🌟 追加：JSONを読み込むための部品
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -12,8 +13,9 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 
 def get_drive_service():
     """Google Drive APIに接続する"""
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    # 🌟 g_sheets.py と完全に同じ読み込み方に修正！
+    secret_dict = json.loads(st.secrets["gcp_service_account_json"])
+    creds = Credentials.from_service_account_info(secret_dict, scopes=SCOPES)
     service = build('drive', 'v3', credentials=creds)
     return service
 
