@@ -58,8 +58,10 @@ def render_line_report_page():
         id_col = '生徒ID' if '生徒ID' in daily_logs.columns else None
         name_col = '名前' if '名前' in daily_logs.columns else '生徒名'
 
+        # 生徒リストを抽出
         target_students = daily_logs[[id_col, name_col]].drop_duplicates().to_dict('records')
 
+        # 🌟 校舎・種別ごとに振り分け
         data_buckets = {
             "田端新町校": [],
             "東十条駅前校": [],
@@ -78,11 +80,13 @@ def render_line_report_page():
             else:
                 data_buckets["その他"].append(s)
 
+        # 表示するバケット（校舎）だけを先に抽出する
         display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
 
+        # 表示する校舎の分だけタブを作成
         tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
 
-        # 抽出したバケットでループを回すため、ズレが絶対に起きない！
+        # 抽出したバケットでループを回す
         for t_idx, (bucket_name, students) in enumerate(display_buckets.items()):
             with tabs[t_idx]:
                 if not students:
@@ -134,22 +138,36 @@ def render_line_report_page():
                         if bring and bring != "nan":
                             bring_sections.append(f"・{bring}（{subject}）")
                         
-                        hw = str(row.get("次回の宿題ページ", "")).strip()
+                        # 🌟 次回の宿題を「テキスト」と「ページ数」の両方から取得して組み立てる
+                        next_hw_text = str(row.get("次回の宿題テキスト", "")).strip()
+                        if next_hw_text == "nan" or next_hw_text == "-": next_hw_text = ""
+                        
+                        next_hw_pages = str(row.get("次回の宿題ページ数", "")).strip()
+                        if next_hw_pages == "nan" or next_hw_pages == "-": next_hw_pages = ""
+
+                        hw_content = ""
+                        if next_hw_text and next_hw_pages:
+                            hw_content = f"テキスト: {next_hw_text}\n範囲:\n{next_hw_pages}"
+                        elif next_hw_text:
+                            hw_content = f"テキスト: {next_hw_text}"
+                        elif next_hw_pages:
+                            hw_content = f"範囲:\n{next_hw_pages}"
 
                         prefix = "🎨 【体験内容】" if bucket_name == "体験授業" else "📅 【授業内容】"
                         class_text = f"{prefix}（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
                         class_sections.append(class_text)
 
+                        # 各項目の蓄積
                         if advice and advice != "nan":
                             advice_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{advice}")
                         if parent_msg and parent_msg != "nan":
                             parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
-                        if hw and hw != "nan":
-                            hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw}")
+                        if hw_content:
+                            hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw_content}")
 
                     classes_text = "\n\n".join(class_sections)
                     bring_text = f"🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n\n" if bring_sections else ""
-                    hw_text = f"📘 【次回の宿題】\n" + "\n".join(hw_sections) + "\n\n" if hw_sections else ""
+                    hw_text = f"📘 【次回の宿題】\n" + "\n\n".join(hw_sections) + "\n\n" if hw_sections else ""
 
                     # 小テスト & Drive
                     quiz_text = "小テストは実施していません"
@@ -176,7 +194,6 @@ def render_line_report_page():
                             f"💯 【小テスト結果】\n・{quiz_text}\n\n"
                             f"{drive_url_line}"
                             f"{bring_text}"
-                            f"{hw_text}"
                             f"{advices_block}"
                             f"{msgs_block}"
                             f"引き続きよろしくお願いいたします。\n"
@@ -193,6 +210,7 @@ def render_line_report_page():
                             f"💯 【小テスト結果】\n・{quiz_text}\n\n"
                             f"{drive_url_line}"
                             f"{bring_text}"
+                            f"{hw_text}"  # 🌟 ここにも {hw_text} を追加！
                             f"{advices_block}"
                             f"{msgs_block}"
                             f"よろしくお願いいたします。\n"
