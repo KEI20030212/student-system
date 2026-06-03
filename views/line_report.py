@@ -134,7 +134,7 @@ def render_line_report_page():
                         if bring and bring != "nan":
                             bring_sections.append(f"・{bring}（{subject}）")
                         
-                        hw_sections = str(row.get("次回の宿題ページ", "")).strip()
+                        hw = str(row.get("次回の宿題ページ", "")).strip()
 
                         prefix = "🎨 【体験内容】" if bucket_name == "体験授業" else "📅 【授業内容】"
                         class_text = f"{prefix}（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
@@ -144,6 +144,8 @@ def render_line_report_page():
                             advice_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{advice}")
                         if parent_msg and parent_msg != "nan":
                             parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
+                        if hw and hw != "nan":
+                            hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw}")
 
                     classes_text = "\n\n".join(class_sections)
                     bring_text = f"🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n\n" if bring_sections else ""
