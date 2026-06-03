@@ -186,6 +186,6 @@ def render_line_report_page():
 
                     label_suffix = " ［✅ 送信完了］" if check_val else ""
                     with c_exp:
-                        with st.expander(f"👤 {student_name} 先生 {label_suffix}", expanded=False):
+                        with st.expander(f"👤 {student_name} {label_suffix}", expanded=False):
                             st.code(line_message, language="text")
                             st.caption("👆 コピーしてLINEへペースト！")
