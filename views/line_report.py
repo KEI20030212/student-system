@@ -147,6 +147,7 @@ def render_line_report_page():
 
                     classes_text = "\n\n".join(class_sections)
                     bring_text = f"🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n\n" if bring_sections else ""
+                    hw_text = f"📘 【次回の宿題】\n" + "\n".join(hw_sections) + "\n\n" if hw_sections else ""
 
                     # 小テスト & Drive
                     quiz_text = "小テストは実施していません"
@@ -173,7 +174,7 @@ def render_line_report_page():
                             f"💯 【小テスト結果】\n・{quiz_text}\n\n"
                             f"{drive_url_line}"
                             f"{bring_text}"
-                            f"{hw_sections}"
+                            f"{hw_text}"
                             f"{advices_block}"
                             f"{msgs_block}"
                             f"引き続きよろしくお願いいたします。\n"
