@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import datetime
 import time
+import io
+# 🌟 画像処理用のライブラリを追加（Streamlit環境なら標準で入っています）
+from PIL import Image, ImageEnhance, ImageOps 
+
 from utils.g_sheets import get_student_master
 from utils.g_drive import upload_image_to_drive, list_student_images
 from utils.api_guard import robust_api_call
@@ -9,6 +13,39 @@ from utils.api_guard import robust_api_call
 @st.cache_data(ttl=600)
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+
+def process_image_quality(file_bytes, mode):
+    """選択されたモードに応じて画像の画質をくっきり補正する魔法の関数"""
+    try:
+        # バイナリデータを画像として読み込み
+        img = Image.open(io.BytesIO(file_bytes))
+        
+        # どの形式でもJPEGで統一できるようにRGBモードに変換
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+            
+        if mode == "✨ 文字くっきり（コントラストUP）":
+            # コントラストを1.6倍にして文字を浮き立たせる
+            img = ImageEnhance.Contrast(img).enhance(1.6)
+            # シャープネスを2.0倍にして輪郭をクッキリさせる
+            img = ImageEnhance.Sharpness(img).enhance(2.0)
+            # 明るさを少しだけ上げる
+            img = ImageEnhance.Brightness(img).enhance(1.1)
+            
+        elif mode == "📄 モノクロスキャン風（白黒強調）":
+            # グレースケール（白黒）化
+            img = ImageOps.grayscale(img)
+            # 白と黒のメリハリを大幅にアップ
+            img = ImageEnhance.Contrast(img).enhance(2.5)
+            img = img.convert('RGB')
+
+        # 補正後の画像をJPEGバイナリに再変換（quality=90で高画質を維持）
+        out_buf = io.BytesIO()
+        img.save(out_buf, format="JPEG", quality=90)
+        return out_buf.getvalue(), "image/jpeg"
+    except Exception as e:
+        # 万が一エラーが起きた場合は安全のために元のデータをそのまま返す
+        return file_bytes, None
 
 def render_quiz_image_manager_page():
     st.header("📸 小テスト・画像管理")
@@ -32,7 +69,14 @@ def render_quiz_image_manager_page():
     st.divider()
     st.subheader(f"✍️ {student_name} さんの小テスト登録")
 
-    # 🌟 アップロード方法をタブで切り替え（カメラ or ファイル選択）
+    # 🌟 画質補正オプションの選択欄（フォームの前に配置して視認しやすく）
+    quality_mode = st.radio(
+        "🎨 画像の画質補正モードを選択してください",
+        ["オリジナル（そのまま）", "✨ 文字くっきり（コントラストUP）", "📄 モノクロスキャン風（白黒強調）"],
+        horizontal=True,
+        help="影を飛ばして文字を読みやすくするための補正機能です。手ブレや暗い写真に効果的です。"
+    )
+
     tab_cam, tab_file = st.tabs(["📷 スマホカメラで撮影", "📂 写真ファイルを選択"])
     
     uploaded_file = None
@@ -53,7 +97,13 @@ def render_quiz_image_manager_page():
         file_bytes = uploaded_file.getvalue()
         mime_type = uploaded_file.type
         
-        # わかりやすいファイル名を自動生成（例: 20260520_数学_小テスト.png）
+        # 🌟 選択されたモードで画質補正を実行
+        if quality_mode != "オリジナル（そのまま）":
+            with st.spinner("✨ 画像をクッキリ補正中..."):
+                file_bytes, new_mime = process_image_quality(file_bytes, quality_mode)
+                if new_mime:
+                    mime_type = new_mime
+        
         now_date = datetime.date.today().strftime("%Y%m%d")
         
         c_meta1, c_meta2 = st.columns(2)
@@ -61,7 +111,10 @@ def render_quiz_image_manager_page():
         title_suffix = c_meta2.text_input("補足名 (任意)", placeholder="単元名やテスト名", key=f"meta_title_{student_id}")
         
         suffix_str = f"_{title_suffix}" if title_suffix.strip() else ""
-        file_name = f"{now_date}_{subj}{suffix_str}.{mime_type.split('/')[-1]}"
+        
+        # モードによって拡張子を適切に処理
+        ext = "jpg" if quality_mode != "オリジナル（そのまま）" else mime_type.split('/')[-1]
+        file_name = f"{now_date}_{subj}{suffix_str}.{ext}"
 
         if st.button("🚀 Google Driveへ写真を保存する", type="primary", use_container_width=True):
             with st.spinner("Google Driveへアップロード中..."):
@@ -96,7 +149,6 @@ def render_quiz_image_manager_page():
     else:
         st.caption("💡 新しい写真から順番に並んでいます。クリックするとGoogle Drive上で原寸大の確認が可能です。")
         
-        # 3列のグリッド形式できれいに写真を並べる
         cols = st.columns(3)
         for idx, img in enumerate(images):
             col_idx = idx % 3
@@ -104,7 +156,6 @@ def render_quiz_image_manager_page():
                 with st.container(border=True):
                     st.markdown(f"**{img.get('name')}**")
                     
-                    # タイムスタンプの整形
                     c_time = img.get('createdTime', '')
                     if c_time:
                         try:
@@ -113,12 +164,10 @@ def render_quiz_image_manager_page():
                         except:
                             st.caption(f"📅 {c_time[:10]}")
                     
-                    # サムネイル表示（Drive APIから提供される高速軽量リンクを使用）
                     thumb = img.get('thumbnailLink')
                     if thumb:
                         st.image(thumb, use_container_width=True)
                     else:
                         st.caption("（プレビュー不可）")
                         
-                    # 原寸大リンクボタン
                     st.markdown(f"[🔗 Google Driveで開く]({img.get('webViewLink')})")
