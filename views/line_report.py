@@ -143,7 +143,7 @@ def render_line_report_page():
 
                         hw_content = ""
                         if next_hw_pages:
-                            hw_content = f"範囲:{next_hw_pages}"
+                            hw_content = f"{next_hw_pages}"
 
                         prefix = "🎨 【体験内容】" if bucket_name == "体験授業" else "📅 【授業内容】"
                         class_text = f"{prefix}（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
