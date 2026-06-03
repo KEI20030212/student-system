@@ -84,24 +84,11 @@ def render_quiz_image_manager_page():
         help="鉛筆の文字や影を補正します。おすすめは「モノクロスキャン風」です！"
     )
 
-    # 🌟 画質を上げるための重要なアナウンスを追加
-    st.info("💡 **高画質で残すコツ:** ブラウザの「カメラで撮影」機能は文字がぼやけやすいため、スマホ標準のカメラアプリで綺麗に撮影してから **「📂 写真ファイルを選択」** でアップロードするのが最も高画質になります！")
+    # 🌟 画質を上げるための重要なアナウンスを変更
+    st.info("💡 **高画質で残すコツ:** スマホ標準のカメラアプリで明るく綺麗に撮影してからアップロードするのが最も高画質になります！")
 
-    tab_cam, tab_file = st.tabs(["📷 スマホカメラで撮影", "📂 写真ファイルを選択"])
-    
-    uploaded_file = None
-    file_bytes = None
-    mime_type = None
-
-    with tab_cam:
-        cam_image = st.camera_input("答案をカメラに正対させて撮影してください", key=f"cam_{student_id}")
-        if cam_image:
-            uploaded_file = cam_image
-            
-    with tab_file:
-        file_image = st.file_uploader("画像ファイルを選択してください (JPG / PNG)", type=["jpg", "jpeg", "png"], key=f"file_{student_id}")
-        if file_image:
-            uploaded_file = file_image
+    # タブをなくし、ファイルアップローダーを直接表示
+    uploaded_file = st.file_uploader("📂 画像ファイルを選択してください (JPG / PNG)", type=["jpg", "jpeg", "png"], key=f"file_{student_id}")
 
     if uploaded_file is not None:
         file_bytes = uploaded_file.getvalue()
