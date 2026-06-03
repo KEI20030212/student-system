@@ -58,11 +58,8 @@ def render_line_report_page():
         id_col = '生徒ID' if '生徒ID' in daily_logs.columns else None
         name_col = '名前' if '名前' in daily_logs.columns else '生徒名'
 
-        # 生徒リストを抽出
         target_students = daily_logs[[id_col, name_col]].drop_duplicates().to_dict('records')
 
-        # 🌟 校舎・種別ごとに振り分け
-        # t: 田端新町校, h: 東十条駅前校, TRIAL: 体験, その他
         data_buckets = {
             "田端新町校": [],
             "東十条駅前校": [],
@@ -81,11 +78,8 @@ def render_line_report_page():
             else:
                 data_buckets["その他"].append(s)
 
-        # 🌟 表示するバケット（校舎）だけを先に抽出する
-        # （「その他」に該当する生徒が0人の場合は、最初から処理リストに入れない）
         display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
 
-        # 🌟 表示する校舎の分だけタブを作成
         tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
 
         # 抽出したバケットでループを回すため、ズレが絶対に起きない！
@@ -104,6 +98,7 @@ def render_line_report_page():
                     
                     class_sections = []
                     advice_sections = []
+                    hw_sections = []
                     parent_msg_sections = []
                     bring_sections = []
 
@@ -138,6 +133,8 @@ def render_line_report_page():
                         bring = str(row.get("次回の持ち物", "")).strip()
                         if bring and bring != "nan":
                             bring_sections.append(f"・{bring}（{subject}）")
+                        
+                        hw_sections = str(row.get("次回の宿題ページ", "")).strip()
 
                         prefix = "🎨 【体験内容】" if bucket_name == "体験授業" else "📅 【授業内容】"
                         class_text = f"{prefix}（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
@@ -176,6 +173,7 @@ def render_line_report_page():
                             f"💯 【小テスト結果】\n・{quiz_text}\n\n"
                             f"{drive_url_line}"
                             f"{bring_text}"
+                            f"{hw_sections}"
                             f"{advices_block}"
                             f"{msgs_block}"
                             f"引き続きよろしくお願いいたします。\n"
