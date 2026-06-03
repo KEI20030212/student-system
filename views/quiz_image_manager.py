@@ -3,7 +3,6 @@ import pandas as pd
 import datetime
 import time
 import io
-# 🌟 画像処理用のライブラリを追加（Streamlit環境なら標準で入っています）
 from PIL import Image, ImageEnhance, ImageOps 
 
 from utils.g_sheets import get_student_master
@@ -15,36 +14,44 @@ def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
 def process_image_quality(file_bytes, mode):
-    """選択されたモードに応じて画像の画質をくっきり補正する魔法の関数"""
+    """本格的なスキャナー品質に引き上げる魔法の画像処理関数"""
     try:
-        # バイナリデータを画像として読み込み
         img = Image.open(io.BytesIO(file_bytes))
         
-        # どの形式でもJPEGで統一できるようにRGBモードに変換
         if img.mode != 'RGB':
             img = img.convert('RGB')
             
         if mode == "✨ 文字くっきり（コントラストUP）":
-            # コントラストを1.6倍にして文字を浮き立たせる
-            img = ImageEnhance.Contrast(img).enhance(1.6)
-            # シャープネスを2.0倍にして輪郭をクッキリさせる
-            img = ImageEnhance.Sharpness(img).enhance(2.0)
-            # 明るさを少しだけ上げる
+            # 1. オートコントラストで写真全体の明暗バランスを最適化
+            img = ImageOps.autocontrast(img, cutoff=2)
+            # 2. シャープネスを限界まで上げて文字のフチを強調
+            img = ImageEnhance.Sharpness(img).enhance(2.5)
+            # 3. コントラストと明るさを微調整
+            img = ImageEnhance.Contrast(img).enhance(1.3)
             img = ImageEnhance.Brightness(img).enhance(1.1)
             
         elif mode == "📄 モノクロスキャン風（白黒強調）":
-            # グレースケール（白黒）化
+            # 1. まず白黒にする
             img = ImageOps.grayscale(img)
-            # 白と黒のメリハリを大幅にアップ
-            img = ImageEnhance.Contrast(img).enhance(2.5)
+            # 2. オートコントラストで薄い文字を浮かび上がらせる
+            img = ImageOps.autocontrast(img, cutoff=2)
+            
+            # 🌟 3. 新技術：影を完全に消し去る魔法の閾値（しきい値）処理
+            # （160以上の明るいグレーは影とみなして真っ白(255)に飛ばし、それ以下の文字部分はより真っ黒(0)に近づける）
+            def clean_background(p):
+                if p > 160: 
+                    return 255
+                else:
+                    return max(0, int(p * 0.7))
+            
+            img = img.point(clean_background)
             img = img.convert('RGB')
 
-        # 補正後の画像をJPEGバイナリに再変換（quality=90で高画質を維持）
         out_buf = io.BytesIO()
-        img.save(out_buf, format="JPEG", quality=90)
+        # 🌟 保存時の劣化をゼロにする（最高画質100、色にじみ防止）
+        img.save(out_buf, format="JPEG", quality=100, subsampling=0)
         return out_buf.getvalue(), "image/jpeg"
     except Exception as e:
-        # 万が一エラーが起きた場合は安全のために元のデータをそのまま返す
         return file_bytes, None
 
 def render_quiz_image_manager_page():
@@ -69,13 +76,16 @@ def render_quiz_image_manager_page():
     st.divider()
     st.subheader(f"✍️ {student_name} さんの小テスト登録")
 
-    # 🌟 画質補正オプションの選択欄（フォームの前に配置して視認しやすく）
+    # 画質補正オプション
     quality_mode = st.radio(
         "🎨 画像の画質補正モードを選択してください",
         ["オリジナル（そのまま）", "✨ 文字くっきり（コントラストUP）", "📄 モノクロスキャン風（白黒強調）"],
         horizontal=True,
-        help="影を飛ばして文字を読みやすくするための補正機能です。手ブレや暗い写真に効果的です。"
+        help="鉛筆の文字や影を補正します。おすすめは「モノクロスキャン風」です！"
     )
+
+    # 🌟 画質を上げるための重要なアナウンスを追加
+    st.info("💡 **高画質で残すコツ:** ブラウザの「カメラで撮影」機能は文字がぼやけやすいため、スマホ標準のカメラアプリで綺麗に撮影してから **「📂 写真ファイルを選択」** でアップロードするのが最も高画質になります！")
 
     tab_cam, tab_file = st.tabs(["📷 スマホカメラで撮影", "📂 写真ファイルを選択"])
     
@@ -97,9 +107,8 @@ def render_quiz_image_manager_page():
         file_bytes = uploaded_file.getvalue()
         mime_type = uploaded_file.type
         
-        # 🌟 選択されたモードで画質補正を実行
         if quality_mode != "オリジナル（そのまま）":
-            with st.spinner("✨ 画像をクッキリ補正中..."):
+            with st.spinner("✨ 画像を最高画質でクッキリ補正中..."):
                 file_bytes, new_mime = process_image_quality(file_bytes, quality_mode)
                 if new_mime:
                     mime_type = new_mime
@@ -111,8 +120,6 @@ def render_quiz_image_manager_page():
         title_suffix = c_meta2.text_input("補足名 (任意)", placeholder="単元名やテスト名", key=f"meta_title_{student_id}")
         
         suffix_str = f"_{title_suffix}" if title_suffix.strip() else ""
-        
-        # モードによって拡張子を適切に処理
         ext = "jpg" if quality_mode != "オリジナル（そのまま）" else mime_type.split('/')[-1]
         file_name = f"{now_date}_{subj}{suffix_str}.{ext}"
 
