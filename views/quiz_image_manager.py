@@ -18,26 +18,7 @@ def process_image_quality(file_bytes, mode):
     try:
         img = Image.open(io.BytesIO(file_bytes))
         
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-            
-        if mode == "✨ 文字くっきり（コントラストUP）":
-            img = ImageOps.autocontrast(img, cutoff=2)
-            img = ImageEnhance.Sharpness(img).enhance(2.5)
-            img = ImageEnhance.Contrast(img).enhance(1.3)
-            img = ImageEnhance.Brightness(img).enhance(1.1)
-            
-        elif mode == "📄 モノクロスキャン風（白黒強調）":
-            img = ImageOps.grayscale(img)
-            img = ImageOps.autocontrast(img, cutoff=2)
-            
-            def clean_background(p):
-                if p > 160: 
-                    return 255
-                else:
-                    return max(0, int(p * 0.7))
-            
-            img = img.point(clean_background)
+        img.mode != 'RGB':
             img = img.convert('RGB')
 
         out_buf = io.BytesIO()
@@ -67,14 +48,6 @@ def render_quiz_image_manager_page():
 
     st.divider()
     st.subheader(f"✍️ {student_name} さんの小テスト・ノート登録")
-
-    # 画質補正オプション
-    quality_mode = st.radio(
-        "🎨 画像の補正モード",
-        ["オリジナル（そのまま）", "✨ 文字くっきり（コントラストUP）", "📄 モノクロスキャン風（白黒強調）"],
-        horizontal=True,
-        help="鉛筆の文字や影を補正します。おすすめは「モノクロスキャン風」です！"
-    )
 
     st.info("💡 **アップロードのコツ:** スマホ標準のカメラアプリでピントを合わせて綺麗に撮影し、以下の枠からアップロードしてください。")
 
