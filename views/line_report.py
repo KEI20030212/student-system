@@ -81,7 +81,7 @@ def render_line_report_page():
             else:
                 data_buckets["その他"].append(s)
 
-        # 🌟 修正ポイント：表示するバケット（校舎）だけを先に抽出する
+        # 🌟 表示するバケット（校舎）だけを先に抽出する
         # （「その他」に該当する生徒が0人の場合は、最初から処理リストに入れない）
         display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
 
@@ -102,7 +102,6 @@ def render_line_report_page():
                     # --- 個別レポート生成ロジック ---
                     student_classes = daily_logs[daily_logs[id_col].astype(str) == str(student_id)]
                     
-                    # 🌟 ここから下のインデントを正しくループの内部へと修正しました
                     class_sections = []
                     advice_sections = []
                     parent_msg_sections = []
@@ -150,9 +149,7 @@ def render_line_report_page():
                             parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
 
                     classes_text = "\n\n".join(class_sections)
-                    advices_text = "\n\n".join(advice_sections) if advice_sections else "（特になし）"
-                    msgs_text = "\n\n".join(parent_msg_sections) if parent_msg_sections else "（特になし）"
-                    bring_text = f"\n🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n" if bring_sections else ""
+                    bring_text = f"🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n\n" if bring_sections else ""
 
                     # 小テスト & Drive
                     quiz_text = "小テストは実施していません"
@@ -165,13 +162,41 @@ def render_line_report_page():
                             quiz_text = "\n・".join(quiz_results)
                             folder_id = robust_api_call(get_or_create_student_folder, student_id, student_name, fallback_value=None)
                             if folder_id:
-                                drive_url_line = f"\n📂 【本日の答案確認URL】\nhttps://drive.google.com/drive/folders/{folder_id}\n"
+                                drive_url_line = f"📂 【本日の答案確認URL】\nhttps://drive.google.com/drive/folders/{folder_id}\n\n"
 
-                    # レポート組み立て
+                    # 🌟 項目ごと動的に詰める新ロジック
                     if bucket_name == "体験授業":
-                        line_message = f"保護者様\n\n本日は {student_name} さんの「体験授業」にお越しいただき、ありがとうございました！\n\n{classes_text}\n\n💯 【小テスト結果】\n・{quiz_text}\n{drive_url_line}{bring_text}\n🗣️ 【本日の輝いていた点】\n{advices_text}\n\n📢 【今後の課題・ご提案】\n{msgs_text}\n\n引き続きよろしくお願いいたします。\n槌屋"
+                        advices_block = f"🗣️ 【本日の輝いていた点】\n" + "\n\n".join(advice_sections) + "\n\n" if advice_sections else ""
+                        msgs_block = f"📢 【今後の課題・ご提案】\n" + "\n\n".join(parent_msg_sections) + "\n\n" if parent_msg_sections else ""
+                        
+                        line_message = (
+                            f"保護者様\n\n"
+                            f"本日は {student_name} さんの「体験授業」にお越しいただき、ありがとうございました！\n\n"
+                            f"{classes_text}\n\n"
+                            f"💯 【小テスト結果】\n・{quiz_text}\n\n"
+                            f"{drive_url_line}"
+                            f"{bring_text}"
+                            f"{advices_block}"
+                            f"{msgs_block}"
+                            f"引き続きよろしくお願いいたします。\n"
+                            f"槌屋"
+                        )
                     else:
-                        line_message = f"保護者様\n\nお世話になっております。本日の {student_name} さんの授業報告です。\n\n{classes_text}\n\n💯 【小テスト結果】\n・{quiz_text}\n{drive_url_line}{bring_text}🗣️ 【アドバイス(褒めた点など)】\n{advices_text}\n\n📢 【ご連絡事項】\n{msgs_text}\n\nよろしくお願いいたします。\n槌屋"
+                        advices_block = f"🗣️ 【アドバイス(褒めた点など)】\n" + "\n\n".join(advice_sections) + "\n\n" if advice_sections else ""
+                        msgs_block = f"📢 【ご連絡事項】\n" + "\n\n".join(parent_msg_sections) + "\n\n" if parent_msg_sections else ""
+                        
+                        line_message = (
+                            f"保護者様\n\n"
+                            f"お世話になっております。本日の {student_name} さんの授業報告です。\n\n"
+                            f"{classes_text}\n\n"
+                            f"💯 【小テスト結果】\n・{quiz_text}\n\n"
+                            f"{drive_url_line}"
+                            f"{bring_text}"
+                            f"{advices_block}"
+                            f"{msgs_block}"
+                            f"よろしくお願いいたします。\n"
+                            f"槌屋"
+                        )
 
                     # 🌟 チェックボックスの状態管理
                     checkbox_key = f"sent_{date_str}_{student_id}"
