@@ -141,7 +141,9 @@ def render_line_report_page():
                         next_hw_pages = str(row.get("次回の宿題ページ数", "")).strip()
                         if next_hw_pages == "nan" or next_hw_pages == "-": next_hw_pages = ""
 
-                        hw_content = f"範囲:\n{next_hw_pages}"
+                        hw_content = ""
+                        if next_hw_pages:
+                            hw_content = f"範囲:{next_hw_pages}"
 
                         prefix = "🎨 【体験内容】" if bucket_name == "体験授業" else "📅 【授業内容】"
                         class_text = f"{prefix}（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
