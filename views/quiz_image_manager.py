@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import time
 import io
-from PIL import Image, ImageEnhance, ImageOps 
+from PIL import Image
 
 from utils.g_sheets import get_student_master
 from utils.g_drive import upload_image_to_drive, list_student_images
@@ -13,15 +13,16 @@ from utils.api_guard import robust_api_call
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-def process_image_quality(file_bytes, mode):
-    """本格的なスキャナー品質に引き上げる魔法の画像処理関数"""
+def process_image_quality(file_bytes):
+    """画質補正を行わず、最高画質（劣化なし）を維持してJPEGに統一する安全関数"""
     try:
         img = Image.open(io.BytesIO(file_bytes))
         
-        img.mode != 'RGB':
+        if img.mode != 'RGB':
             img = img.convert('RGB')
 
         out_buf = io.BytesIO()
+        # 🌟 画質劣化をゼロ（品質100%、色にじみなし）にして保存
         img.save(out_buf, format="JPEG", quality=100, subsampling=0)
         return out_buf.getvalue(), "image/jpeg"
     except Exception as e:
@@ -51,18 +52,17 @@ def render_quiz_image_manager_page():
 
     st.info("💡 **アップロードのコツ:** スマホ標準のカメラアプリでピントを合わせて綺麗に撮影し、以下の枠からアップロードしてください。")
 
-    # 🌟 カメラ機能を削除し、ファイルアップローダーのみにシンプル化
+    # ファイルアップローダーのみのシンプルなUI
     uploaded_file = st.file_uploader("📂 写真ファイルを選択してください (JPG / PNG)", type=["jpg", "jpeg", "png"], key=f"file_{student_id}")
 
     if uploaded_file is not None:
         file_bytes = uploaded_file.getvalue()
         mime_type = uploaded_file.type
         
-        if quality_mode != "オリジナル（そのまま）":
-            with st.spinner("✨ 画像を最高画質でクッキリ補正中..."):
-                file_bytes, new_mime = process_image_quality(file_bytes, quality_mode)
-                if new_mime:
-                    mime_type = new_mime
+        with st.spinner("✨ 画像を最高画質データに変換中..."):
+            file_bytes, new_mime = process_image_quality(file_bytes)
+            if new_mime:
+                mime_type = new_mime
         
         now_date = datetime.date.today().strftime("%Y%m%d")
         
@@ -73,8 +73,7 @@ def render_quiz_image_manager_page():
             title_suffix = c_meta2.text_input("補足名 (任意)", placeholder="単元名やテスト名（例: 二次関数）", key=f"meta_title_{student_id}")
             
             suffix_str = f"_{title_suffix}" if title_suffix.strip() else ""
-            ext = "jpg" if quality_mode != "オリジナル（そのまま）" else mime_type.split('/')[-1]
-            file_name = f"{now_date}_{subj}{suffix_str}.{ext}"
+            file_name = f"{now_date}_{subj}{suffix_str}.jpg"
 
             if st.button("🚀 この設定でGoogle Driveへ保存する", type="primary", use_container_width=True):
                 with st.spinner(f"【{file_name}】をアップロード中..."):
