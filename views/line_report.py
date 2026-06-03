@@ -171,7 +171,7 @@ def render_line_report_page():
                     if bucket_name == "体験授業":
                         line_message = f"保護者様\n\n本日は {student_name} さんの「体験授業」にお越しいただき、ありがとうございました！\n\n{classes_text}\n\n💯 【小テスト結果】\n・{quiz_text}\n{drive_url_line}{bring_text}\n🗣️ 【本日の輝いていた点】\n{advices_text}\n\n📢 【今後の課題・ご提案】\n{msgs_text}\n\n引き続きよろしくお願いいたします。\n槌屋"
                     else:
-                        line_message = f"保護者様\n\nお世話になっております。本日の {student_name} さんの授業報告です。\n\n{classes_text}\n\n💯 【小テスト結果】\n・{quiz_text}\n{drive_url_line}{bring_text}🗣️ 【担当講師より】\n{advices_text}\n\n📢 【ご連絡事項】\n{msgs_text}\n\nよろしくお願いいたします。\n槌屋"
+                        line_message = f"保護者様\n\nお世話になっております。本日の {student_name} さんの授業報告です。\n\n{classes_text}\n\n💯 【小テスト結果】\n・{quiz_text}\n{drive_url_line}{bring_text}🗣️ 【アドバイス(褒めた点など)】\n{advices_text}\n\n📢 【ご連絡事項】\n{msgs_text}\n\nよろしくお願いいたします。\n槌屋"
 
                     # 🌟 チェックボックスの状態管理
                     checkbox_key = f"sent_{date_str}_{student_id}"
