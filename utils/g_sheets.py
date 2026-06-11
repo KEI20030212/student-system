@@ -1494,6 +1494,18 @@ def save_parent_reply(date_str, student_id, student_name, teacher_name, reaction
     except:
         return False
 
+def load_parent_reply_data():
+    """保護者からの返信・リアクション履歴をすべて取得する"""
+    try:
+        import gspread
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("保護者返信履歴")
+        records = ws.get_all_records()
+        return pd.DataFrame(records)
+    except:
+        return pd.DataFrame()
+
 #my_salary.py
 @st.cache_data(ttl=600)
 def load_published_salary():
