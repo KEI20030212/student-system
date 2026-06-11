@@ -17,7 +17,7 @@ from utils.g_sheets import (
     save_draft_to_sheet,
     load_draft_from_sheet,
     delete_draft_from_sheet,
-    get_all_logs # 🌟 API通信削減のための最終兵器！
+    get_all_logs 
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -47,7 +47,6 @@ def cached_get_quiz_master():
 def cached_get_type_advice():
     return robust_api_call(get_type_advice_dict, fallback_value={})
 
-# 🌟 全授業記録を一括取得（科目ごとのAPI通信をゼロにする魔法）
 @st.cache_data(ttl=60, show_spinner=False)
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
@@ -61,9 +60,6 @@ DRAFT_PREFIXES = (
     "hw_reason", "hw_fix", "bring"
 )
 
-# ==========================================
-# 🌟 タブ増減のコールバック関数
-# ==========================================
 def add_tab():
     st.session_state['num_blocks'] = st.session_state.get('num_blocks', 1) + 1
 
@@ -172,7 +168,6 @@ def render_multi_input_page():
     if not quiz_names:
         quiz_names = ["設定なし"]
 
-    # 🌟 事前に全ログを読み込んでおく（APIコールを激減させるため）
     df_all_logs = cached_get_all_logs()
 
     st.write("### 🗂️ 授業コマの管理")
@@ -285,16 +280,12 @@ def render_multi_input_page():
                                         completed_p = 0
                                         last_page_num = 0
                                         
-                                        # ==========================================
-                                        # 📦 アコーディオン1: 前回データの確認と宿題消化
-                                        # ==========================================
                                         with st.expander("🔍 1. 前回データ確認 ＆ 宿題チェック", expanded=not is_trial):
                                             if is_trial:
                                                 st.info("🔰 体験生モード：前回の引き継ぎ・宿題確認はスキップされます。")
                                                 hw_reason_val = ""
                                                 hw_fix_val = ""
                                             else:
-                                                # 🌟 キャッシュされた全データから一瞬で前回情報を検索（API通信ゼロ！）
                                                 last_note, last_hw_text, last_hw_pages, last_page = "", "", "", "0"
                                                 last_teacher = "不明"
                                                 last_date_str = "過去データなし"
@@ -309,30 +300,36 @@ def render_multi_input_page():
                                                         
                                                         last_teacher = str(last_row.get('担当講師', '不明'))
                                                         last_date_str = last_row['日時'].strftime('%Y/%m/%d') if pd.notna(last_row['日時']) else "不明"
+                                                        
+                                                        # 🌟 空欄やハイフンを「なし」に変換し、文字巨大化バグを防御！
                                                         last_note = str(last_row.get('次回への引継ぎ事項', ''))
-                                                        if last_note == "nan": last_note = ""
+                                                        if last_note in ["nan", "", "-"]: last_note = "特になし"
+                                                        
                                                         last_hw_text = str(last_row.get('次回の宿題テキスト', ''))
-                                                        if last_hw_text == "nan": last_hw_text = ""
+                                                        if last_hw_text in ["nan", "", "-"]: last_hw_text = "なし"
+                                                        
                                                         last_hw_pages = str(last_row.get('次回の宿題ページ数', ''))
-                                                        if last_hw_pages == "nan": last_hw_pages = ""
+                                                        if last_hw_pages in ["nan", "", "-"]: last_hw_pages = "なし"
+                                                        
                                                         last_page = str(last_row.get('終了ページ', ''))
-                                                        if last_page == "nan": last_page = "0"
+                                                        if last_page in ["nan", "", "-"]: last_page = "なし"
                                                 
                                                 last_page_num = int(last_page) if str(last_page).isdigit() else 0
+                                                
+                                                # 改行コードを半角スペース2つ＋改行に変換して、Markdownの誤作動を完全に阻止
                                                 formatted_last_page = str(last_page).replace('\n', '  \n')
                                                 formatted_last_hw_pages = str(last_hw_pages).replace('\n', '  \n')
 
-                                                # 🌟 スッキリ整理した前回情報の表示（担当講師と日付を追加！）
                                                 st.markdown(f"**📅 前回: {last_date_str} （👨‍🏫 担当: {last_teacher}先生）**")
                                                 st.info(
-                                                    f"📖 **前回の進捗:** {formatted_last_page}\n\n"
-                                                    f"📚 **出した宿題:** {last_hw_text}\n"
-                                                    f"🎯 **宿題範囲:** \n{formatted_last_hw_pages}\n\n"
-                                                    f"💬 **引継ぎメモ:**\n{last_note}"
+                                                    f"📖 **前回の進捗:** {formatted_last_page}  \n"
+                                                    f"📚 **出した宿題:** {last_hw_text}  \n"
+                                                    f"🎯 **宿題範囲:** {formatted_last_hw_pages}  \n\n"
+                                                    f"💬 **引継ぎメモ:** \n{last_note}"
                                                 )
                                                 
                                                 assigned_hw_list = []
-                                                if str(last_hw_pages).strip() and str(last_hw_pages).strip() != "-":
+                                                if str(last_hw_pages).strip() and str(last_hw_pages).strip() not in ["-", "なし"]:
                                                     for line in str(last_hw_pages).split('\n'):
                                                         match = re.search(r'(?:(.*?)[:：]\s*)?[P\.]*(\d+)\s*[〜~-]\s*(\d+)', line)
                                                         if match:
@@ -383,7 +380,6 @@ def render_multi_input_page():
                                                 hw_reason_val = ""
                                                 hw_fix_val = ""
                                                 
-                                                # 🌟 【UIスッキリ化】未達成の時だけ理由欄をフワッと出現させる
                                                 if (assigned_p > 0 and completed_p < assigned_p) or is_hw_forgotten:
                                                     st.warning("⚠️ 宿題が未達成です。原因の分析と修正策を記録してください。")
                                                     r_col1, r_col2 = st.columns(2)
@@ -404,9 +400,6 @@ def render_multi_input_page():
                                                         else:
                                                             hw_fix_val = fix_sel
 
-                                        # ==========================================
-                                        # 📦 アコーディオン2: 今回の進捗と小テスト
-                                        # ==========================================
                                         with st.expander("📚 2. 今回の授業進捗 ＆ 💯 小テスト", expanded=True):
                                             st.write("📚 **使用テキストと進捗**")
                                             usage_text_options = ["🆕 新規テキスト入力"] + text_options
@@ -480,9 +473,6 @@ def render_multi_input_page():
                                             today_hw_rate = calculate_hw_rate(assigned_p, completed_p)
                                             motivation_rank = calculate_motivation_rank(today_hw_rate, current_quiz_pts, 0)
 
-                                        # ==========================================
-                                        # 📦 アコーディオン3: 授業の様子・次回の宿題・コメント
-                                        # ==========================================
                                         with st.expander("🧠 3. 授業の様子 ＆ 🚀 次回の宿題・コメント", expanded=True):
                                             st.write("🧠 **授業中の様子・評価**")
                                             col_eval1, col_eval2 = st.columns(2)
@@ -611,7 +601,6 @@ def render_multi_input_page():
                                                     status.update(label="保存完了！", state="complete", expanded=False)
                                                     st.success(f"✅ {name} の記録を保存しました！")
                                                     
-                                                    # 🌟 個別保存バグの解消ポイント：削除処理をやめ、フラグだけ立てる
                                                     st.session_state[f"saved_flag_{b}_{i}"] = True
                                                     st.session_state[f"saved_name_{b}_{i}"] = name
                                                     single_save_triggered = True
@@ -638,6 +627,9 @@ def render_multi_input_page():
                             
                             if "欠席" in data.get("attendance", ""):
                                 st.session_state[f"saved_flag_{b}_{o_idx}"] = True
+                                continue
+
+                            if st.session_state.get(f"saved_flag_{b}_{o_idx}", False):
                                 continue
 
                             success = robust_api_call(
@@ -692,10 +684,6 @@ def render_multi_input_page():
                 st.success("🎉 このコマの全員の入力が完了しました！画面をリセットします...")
                 all_save_triggered = (b, num_students)
 
-    # ==========================================
-    # 🧹 一番最後での遅延お掃除処理（API連打対策のスリープ付き）
-    # ==========================================
-    
     if all_save_triggered:
         b_idx, students_count = all_save_triggered
         for k in ["class_date", "sb_teacher", "class_type", "sb_class_slot"]:
@@ -722,7 +710,6 @@ def render_multi_input_page():
         st.rerun()
 
     elif single_save_triggered:
-        # 🌟 変更ポイント：個別保存の時は変な削除処理をせず、画面の再描画だけを行う！
         st.cache_data.clear()
         time.sleep(1.5)
         st.rerun()
