@@ -281,14 +281,14 @@ def render_multi_input_page():
                                         completed_p = 0
                                         last_page_num = 0
 
-                                        # 🌟 ここがポイント！科目に応じてテキスト選択肢を賢くフィルター
+                                        # 🌟 科目に応じてテキスト選択肢を絞り込む（「Myeトレ(数学)」などを自動抽出）
                                         filtered_text_options = []
                                         for t in text_options:
                                             if "Myeトレ" in t:
-                                                if subject in t: # 科目が一致するMyeトレだけを残す
+                                                if subject in t: 
                                                     filtered_text_options.append(t)
                                             else:
-                                                filtered_text_options.append(t) # Myeトレ以外のテキストはすべて表示
+                                                filtered_text_options.append(t)
                                         
                                         with st.expander("🔍 1. 前回データ確認 ＆ 宿題チェック", expanded=not is_trial):
                                             if is_trial:
@@ -410,7 +410,6 @@ def render_multi_input_page():
 
                                         with st.expander("📚 2. 今回の授業進捗 ＆ 💯 小テスト", expanded=True):
                                             st.write("📚 **使用テキストと進捗**")
-                                            # 🌟 フィルター済みのテキスト一覧を使用！
                                             usage_text_options = ["🆕 新規テキスト入力"] + filtered_text_options
                                             selected_texts = st.multiselect("使用テキスト (複数可)", usage_text_options, key=f"texts_{b}_{i}")
                                             
@@ -429,7 +428,7 @@ def render_multi_input_page():
                                                 for t_idx, text_name in enumerate(selected_texts):
                                                     st.caption(f"📘 {text_name} の進捗")
                                                     
-                                                    # 🌟 Myeトレの場合の分岐をより堅牢に！
+                                                    # 🌟 【改修ポイント】Myeトレ時は完全にプルダウン式に統一！
                                                     if "Myeトレ" in text_name:
                                                         units_raw = cached_get_textbook_master().get(text_name, [])
                                                         if isinstance(units_raw, str):
@@ -439,10 +438,8 @@ def render_multi_input_page():
                                                         else:
                                                             unit_options = []
                                                         
-                                                        if unit_options:
-                                                            adv_unit = st.selectbox("実施単元", [""] + unit_options, key=f"adv_unit_{b}_{i}_{t_idx}")
-                                                        else:
-                                                            adv_unit = st.text_input("実施単元（手入力）", key=f"adv_unit_{b}_{i}_{t_idx}")
+                                                        # 完全にプルダウン選択（selectbox）に固定
+                                                        adv_unit = st.selectbox("実施した単元を選択してください", [""] + unit_options, key=f"adv_unit_{b}_{i}_{t_idx}")
                                                         
                                                         if adv_unit:
                                                             advanced_p_list.append(f"{text_name}: {adv_unit}")
@@ -526,25 +523,14 @@ def render_multi_input_page():
                                                     next_hw_pages_str = str(last_hw_pages)
                                                     st.info(f"🔄 【自動引き継ぎ】\n📚 テキスト: **{selected_hw_text_str}**\n🎯 範囲: \n{next_hw_pages_str}")
                                                 else:
-                                                    # 🌟 こちらもフィルター済みのテキスト一覧を使用！
-                                                    hw_text_options = ["🆕 新規テキスト入力"] + filtered_text_options
-                                                    selected_hw_texts = st.multiselect("次回の宿題テキスト (複数可)", hw_text_options, key=f"hw_texts_{b}_{i}")
-
-                                                    if "🆕 新規テキスト入力" in selected_hw_texts:
-                                                        new_text_name = st.text_input("新規テキスト名を入力", key=f"new_hw_text_{b}_{i}")
-                                                        if new_text_name:
-                                                            robust_api_call(add_new_textbook, new_text_name)
-                                                            selected_hw_texts.remove("🆕 新規テキスト入力")
-                                                            if new_text_name not in selected_hw_texts:
-                                                                selected_hw_texts.append(new_text_name)
-                                                            cached_get_textbook_master.clear()
+                                                    selected_hw_texts = st.multiselect("次回の宿題テキスト (複数可)", filtered_text_options, key=f"hw_texts_{b}_{i}")
 
                                                     next_hw_pages_list = []
                                                     if selected_hw_texts:
                                                         for t_idx, hw_text in enumerate(selected_hw_texts):
                                                             st.write(f"📘 **{hw_text}** の宿題")
                                                             
-                                                            # 🌟 Myeトレ宿題の分岐もより堅牢に！
+                                                            # 🌟 【改修ポイント】宿題指示側も単元選択のプルダウンに！
                                                             if "Myeトレ" in hw_text:
                                                                 units_raw = cached_get_textbook_master().get(hw_text, [])
                                                                 if isinstance(units_raw, str):
@@ -554,14 +540,9 @@ def render_multi_input_page():
                                                                 else:
                                                                     unit_options = []
                                                                 
-                                                                if unit_options:
-                                                                    hw_units = st.multiselect("宿題にする単元 (複数可)", unit_options, key=f"hw_unit_{b}_{i}_{t_idx}")
-                                                                    if hw_units:
-                                                                        next_hw_pages_list.append(f"{hw_text}: {', '.join(hw_units)}")
-                                                                else:
-                                                                    hw_unit_text = st.text_input("宿題にする単元（手入力）", key=f"hw_unit_{b}_{i}_{t_idx}")
-                                                                    if hw_unit_text:
-                                                                        next_hw_pages_list.append(f"{hw_text}: {hw_unit_text}")
+                                                                hw_units = st.multiselect("宿題にする単元を選択してください (複数可)", unit_options, key=f"hw_unit_{b}_{i}_{t_idx}")
+                                                                if hw_units:
+                                                                    next_hw_pages_list.append(f"{hw_text}: {', '.join(hw_units)}")
                                                             else:
                                                                 # 通常のページ数入力
                                                                 num_ranges = st.number_input(f"出す範囲の数 (飛び石対応)", min_value=1, max_value=5, value=1, key=f"hw_ranges_num_{b}_{i}_{t_idx}")
