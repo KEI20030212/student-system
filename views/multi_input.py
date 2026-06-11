@@ -51,7 +51,6 @@ def cached_get_type_advice():
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
 
-# 🌟 adv_unit, hw_unit を下書き保存の対象に追加
 DRAFT_PREFIXES = (
     "num_blocks", "class_date", "class_type", 
     "sb_", "sel_student", "new_name", "att", "late", "sub", "texts", "new_usage_text", 
@@ -281,7 +280,6 @@ def render_multi_input_page():
                                         completed_p = 0
                                         last_page_num = 0
 
-                                        # 🌟 科目に応じてテキスト選択肢を絞り込む（「Myeトレ(数学)」などを自動抽出）
                                         filtered_text_options = []
                                         for t in text_options:
                                             if "Myeトレ" in t:
@@ -428,17 +426,20 @@ def render_multi_input_page():
                                                 for t_idx, text_name in enumerate(selected_texts):
                                                     st.caption(f"📘 {text_name} の進捗")
                                                     
-                                                    # 🌟 【改修ポイント】Myeトレ時は完全にプルダウン式に統一！
+                                                    # 🌟 【天才機能】辞書（dict）で送られてきた単元名をリストに変換！
                                                     if "Myeトレ" in text_name:
-                                                        units_raw = cached_get_textbook_master().get(text_name, [])
-                                                        if isinstance(units_raw, str):
+                                                        units_raw = cached_get_textbook_master().get(text_name, {})
+                                                        
+                                                        if isinstance(units_raw, dict):
+                                                            # 辞書の場合は「値（単元名）」をリストにする。単元名が空なら章番号にする安全設計
+                                                            unit_options = [str(v).strip() if str(v).strip() else str(k).strip() for k, v in units_raw.items()]
+                                                        elif isinstance(units_raw, str):
                                                             unit_options = [u.strip() for u in units_raw.replace('、', ',').split(',') if u.strip()]
                                                         elif isinstance(units_raw, list):
                                                             unit_options = [str(u).strip() for u in units_raw if str(u).strip() != ""]
                                                         else:
                                                             unit_options = []
                                                         
-                                                        # 完全にプルダウン選択（selectbox）に固定
                                                         adv_unit = st.selectbox("実施した単元を選択してください", [""] + unit_options, key=f"adv_unit_{b}_{i}_{t_idx}")
                                                         
                                                         if adv_unit:
@@ -446,7 +447,6 @@ def render_multi_input_page():
                                                         else:
                                                             advanced_p_list.append(f"{text_name}: -")
                                                     else:
-                                                        # 通常のページ数入力
                                                         col_adv1, col_adv2 = st.columns(2)
                                                         with col_adv1:
                                                             adv_start = st.number_input(f"開始P", min_value=0, value=last_page_num, key=f"adv_start_{b}_{i}_{t_idx}")
@@ -530,10 +530,13 @@ def render_multi_input_page():
                                                         for t_idx, hw_text in enumerate(selected_hw_texts):
                                                             st.write(f"📘 **{hw_text}** の宿題")
                                                             
-                                                            # 🌟 【改修ポイント】宿題指示側も単元選択のプルダウンに！
+                                                            # 🌟 宿題側も天才機能（辞書→リスト化）を追加！
                                                             if "Myeトレ" in hw_text:
-                                                                units_raw = cached_get_textbook_master().get(hw_text, [])
-                                                                if isinstance(units_raw, str):
+                                                                units_raw = cached_get_textbook_master().get(hw_text, {})
+                                                                
+                                                                if isinstance(units_raw, dict):
+                                                                    unit_options = [str(v).strip() if str(v).strip() else str(k).strip() for k, v in units_raw.items()]
+                                                                elif isinstance(units_raw, str):
                                                                     unit_options = [u.strip() for u in units_raw.replace('、', ',').split(',') if u.strip()]
                                                                 elif isinstance(units_raw, list):
                                                                     unit_options = [str(u).strip() for u in units_raw if str(u).strip() != ""]
@@ -544,7 +547,6 @@ def render_multi_input_page():
                                                                 if hw_units:
                                                                     next_hw_pages_list.append(f"{hw_text}: {', '.join(hw_units)}")
                                                             else:
-                                                                # 通常のページ数入力
                                                                 num_ranges = st.number_input(f"出す範囲の数 (飛び石対応)", min_value=1, max_value=5, value=1, key=f"hw_ranges_num_{b}_{i}_{t_idx}")
                                                                 
                                                                 for r_idx in range(num_ranges):
