@@ -9,7 +9,7 @@ from utils.g_sheets import (
     load_school_homework_data,
     get_sent_list,      
     update_sent_flag,
-    save_parent_reply   # 🌟 追加
+    save_parent_reply
 )
 from utils.g_drive import get_or_create_student_folder
 from utils.api_guard import robust_api_call
@@ -49,13 +49,23 @@ def render_line_report_page():
         target_date = pd.to_datetime(selected_date).date()
         daily_logs = df_all_logs[df_all_logs['日時'].dt.date == target_date]
 
-    # 🌟 メインタブを2つに拡張！
-    main_tab1, main_tab2 = st.tabs(["📱 LINEレポート一括生成", "💬 保護者返信・ファン化度記録"])
+    # 🌟 権限チェック：admin, owner, AM のいずれかか判定
+    user_role = st.session_state.get('role', '')
+    is_manager = user_role in ['admin', 'owner', 'AM']
+
+    # 🌟 権限に応じてタブを作るか、そのまま表示するかを分岐
+    if is_manager:
+        main_tab1, main_tab2 = st.tabs(["📱 LINEレポート一括生成", "💬 保護者返信・ファン化度記録"])
+        report_container = main_tab1
+        reply_container = main_tab2
+    else:
+        report_container = st.container() # タブを作らず透明な箱を用意
+        reply_container = None            # 権限がないので返信タブ用の箱は無し
 
     # ==========================================
-    # メインタブ1：LINEレポート一括生成（既存の全機能を完全維持）
+    # レポート一括生成エリア（権限に関わらず表示）
     # ==========================================
-    with main_tab1:
+    with report_container:
         if daily_logs.empty:
             st.info(f"📅 {date_str} の授業記録はまだありません。")
         else:
@@ -65,9 +75,8 @@ def render_line_report_page():
 
             target_students = daily_logs[[id_col, name_col]].drop_duplicates().to_dict('records')
 
-            # 管理者専用：URL抜け生徒のピックアップ
-            user_role = st.session_state.get('role', '')
-            if user_role in ['admin', 'owner', 'head_teacher']:
+            # 管理者専用：URL抜け生徒のピックアップ（権限連動）
+            if is_manager:
                 missing_url_students = []
                 for s in target_students:
                     s_name = s.get(name_col, "不明")
@@ -193,63 +202,64 @@ def render_line_report_page():
                                 st.caption("👆 コピーしてLINEへペースト！")
 
     # ==========================================
-    # 🌟 メインタブ2：💬 保護者返信・ファン化度記録 (新規追加)
+    # 保護者返信・ファン化度記録エリア（権限がある場合のみ表示）
     # ==========================================
-    with main_tab2:
-        st.write("LINE報告に対する保護者様からのリアクションや返信を記録し、信頼関係の見える化（ファン化分析）に活用します✨")
-        if daily_logs.empty:
-            st.info(f"📅 {date_str} の授業記録がないため、返信記録は登録できません。")
-        else:
-            id_col = '生徒ID' if '生徒ID' in daily_logs.columns else None
-            name_col = '名前' if '名前' in daily_logs.columns else '生徒名'
-            
-            # その日に授業のあった生徒のリストをプルダウンに自動抽出
-            student_names = sorted(daily_logs[name_col].drop_duplicates().tolist())
-            selected_student = st.selectbox("👤 返信のあった生徒を選択してください", student_names, index=None, placeholder="-- 生徒を選択 --", key="parent_reply_student_select")
-            
-            if selected_student:
-                # 該当生徒のIDを取得
-                matched_row = daily_logs[daily_logs[name_col] == selected_student]
-                student_id = str(matched_row.iloc[0][id_col]) if id_col and not matched_row.empty else "未設定"
+    if reply_container is not None:
+        with reply_container:
+            st.write("LINE報告に対する保護者様からのリアクションや返信を記録し、信頼関係の見える化（ファン化分析）に活用します✨")
+            if daily_logs.empty:
+                st.info(f"📅 {date_str} の授業記録がないため、返信記録は登録できません。")
+            else:
+                id_col = '生徒ID' if '生徒ID' in daily_logs.columns else None
+                name_col = '名前' if '名前' in daily_logs.columns else '生徒名'
                 
-                # フォームを使って、入力中の裏側リロードを徹底防止
-                with st.form(key=f"parent_reply_form_{selected_student}"):
-                    st.markdown(f"### 💬 {selected_student} さんの保護者リアクション登録")
+                # 🌟 修正ポイント：sorted() を削除して、記録された順番通りに表示
+                student_names = daily_logs[name_col].drop_duplicates().tolist()
+                
+                selected_student = st.selectbox("👤 返信のあった生徒を選択してください", student_names, index=None, placeholder="-- 生徒を選択 --", key="parent_reply_student_select")
+                
+                if selected_student:
+                    # 該当生徒のIDを取得
+                    matched_row = daily_logs[daily_logs[name_col] == selected_student]
+                    student_id = str(matched_row.iloc[0][id_col]) if id_col and not matched_row.empty else "未設定"
                     
-                    reaction_type = st.selectbox(
-                        "🤝 保護者のリアクション・ファン化度評価",
-                        [
-                            "🔥 大絶賛・大感謝（超ファン化・講習の提案やお知らせに即合意レベル）",
-                            "🟢 好意的・納得（信頼構築・塾への指示通りに家庭が動く状態）",
-                            "🟡 質問・相談あり（家庭との対話要フォロー・要社員共有）",
-                            "🔵 既読スルー・事務的な了解スタンプのみ（関係性維持に注力要）",
-                            "⚪ 未読スルー（要状況確認）"
-                        ],
-                        index=1
-                    )
-                    
-                    reply_text = st.text_area(
-                        "📝 返信内容・特記事項（メモ）", 
-                        placeholder="「いつも細かく見ていただきありがとうございます。本人も喜んでいました」などの実際の文面や、相談された内容の要約を入力してください。", 
-                        height=120
-                    )
-                    
-                    submit_reply = st.form_submit_button("🚀 保護者の返信記録をスプレッドシートへ保存する", use_container_width=True)
-                    
-                    if submit_reply:
-                        with st.spinner("データを安全に書き込み中..."):
-                            success = robust_api_call(
-                                save_parent_reply,
-                                date_str=date_str,
-                                student_id=student_id,
-                                student_name=selected_student,
-                                reaction_type=reaction_type,
-                                reply_text=reply_text,
-                                fallback_value=False
-                            )
-                            if success:
-                                st.success(f"✅ {selected_student} さんの保護者返信を正常に記録しました！今後の面談資料やファン化度分析に自動反映されます。")
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.error("❌ スプレッドシートへの保存に失敗しました。通信環境を確認するか、時間をおいて再試行してください。")
+                    with st.form(key=f"parent_reply_form_{selected_student}"):
+                        st.markdown(f"### 💬 {selected_student} さんの保護者リアクション登録")
+                        
+                        reaction_type = st.selectbox(
+                            "🤝 保護者のリアクション・ファン化度評価",
+                            [
+                                "🔥 大絶賛・大感謝（超ファン化・講習の提案やお知らせに即合意レベル）",
+                                "🟢 好意的・納得（信頼構築・塾への指示通りに家庭が動く状態）",
+                                "🟡 質問・相談あり（家庭との対話要フォロー・要社員共有）",
+                                "🔵 既読スルー・事務的な了解スタンプのみ（関係性維持に注力要）",
+                                "⚪ 未読スルー（要状況確認）"
+                            ],
+                            index=1
+                        )
+                        
+                        reply_text = st.text_area(
+                            "📝 返信内容・特記事項（メモ）", 
+                            placeholder="「いつも細かく見ていただきありがとうございます。本人も喜んでいました」などの実際の文面や、相談された内容の要約を入力してください。", 
+                            height=120
+                        )
+                        
+                        submit_reply = st.form_submit_button("🚀 保護者の返信記録をスプレッドシートへ保存する", use_container_width=True)
+                        
+                        if submit_reply:
+                            with st.spinner("データを安全に書き込み中..."):
+                                success = robust_api_call(
+                                    save_parent_reply,
+                                    date_str=date_str,
+                                    student_id=student_id,
+                                    student_name=selected_student,
+                                    reaction_type=reaction_type,
+                                    reply_text=reply_text,
+                                    fallback_value=False
+                                )
+                                if success:
+                                    st.success(f"✅ {selected_student} さんの保護者返信を正常に記録しました！今後の面談資料やファン化度分析に自動反映されます。")
+                                    time.sleep(1.5)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ スプレッドシートへの保存に失敗しました。通信環境を確認するか、時間をおいて再試行してください。")
