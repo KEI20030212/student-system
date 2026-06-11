@@ -51,12 +51,13 @@ def cached_get_type_advice():
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
 
+# 🌟 adv_unit, hw_unit を下書き保存の対象に追加
 DRAFT_PREFIXES = (
     "num_blocks", "class_date", "class_type", 
     "sb_", "sel_student", "new_name", "att", "late", "sub", "texts", "new_usage_text", 
-    "adv_start", "adv_end", "num_q", "q_name", "q_chap", "q_score", "w",
+    "adv_start", "adv_end", "adv_unit", "num_q", "q_name", "q_chap", "q_score", "w",
     "cont", "hw_forgot", "done_start", "done_end", "conc", "reac", "hw_texts", "new_hw_text", 
-    "n_start", "n_end", "advc", "p_msg", "next_h", "d_s", "d_e", "n_s", "n_e", "hw_ranges_num",
+    "n_start", "n_end", "hw_unit", "advc", "p_msg", "next_h", "d_s", "d_e", "n_s", "n_e", "hw_ranges_num",
     "hw_reason", "hw_fix", "bring"
 )
 
@@ -301,7 +302,6 @@ def render_multi_input_page():
                                                         last_teacher = str(last_row.get('担当講師', '不明'))
                                                         last_date_str = last_row['日時'].strftime('%Y/%m/%d') if pd.notna(last_row['日時']) else "不明"
                                                         
-                                                        # 🌟 空欄やハイフンを「なし」に変換し、文字巨大化バグを防御！
                                                         last_note = str(last_row.get('次回への引継ぎ事項', ''))
                                                         if last_note in ["nan", "", "-"]: last_note = "特になし"
                                                         
@@ -316,7 +316,6 @@ def render_multi_input_page():
                                                 
                                                 last_page_num = int(last_page) if str(last_page).isdigit() else 0
                                                 
-                                                # 改行コードを半角スペース2つ＋改行に変換して、Markdownの誤作動を完全に阻止
                                                 formatted_last_page = str(last_page).replace('\n', '  \n')
                                                 formatted_last_hw_pages = str(last_hw_pages).replace('\n', '  \n')
 
@@ -419,16 +418,34 @@ def render_multi_input_page():
                                                 text_name_str = "、".join(selected_texts)
                                                 for t_idx, text_name in enumerate(selected_texts):
                                                     st.caption(f"📘 {text_name} の進捗")
-                                                    col_adv1, col_adv2 = st.columns(2)
-                                                    with col_adv1:
-                                                        adv_start = st.number_input(f"開始P", min_value=0, value=last_page_num, key=f"adv_start_{b}_{i}_{t_idx}")
-                                                    with col_adv2:
-                                                        adv_end = st.number_input(f"終了P", min_value=0, value=last_page_num, key=f"adv_end_{b}_{i}_{t_idx}")
                                                     
-                                                    if adv_end >= adv_start and adv_end > 0:
-                                                        advanced_p_list.append(f"{text_name}: P.{adv_start}〜{adv_end}")
+                                                    # 🌟 Myeトレの場合の分岐を追加
+                                                    if "Myeトレ" in text_name:
+                                                        units = cached_get_textbook_master().get(text_name, [])
+                                                        if not isinstance(units, list): units = []
+                                                        unit_options = [u for u in units if str(u).strip() != ""]
+                                                        
+                                                        if unit_options:
+                                                            adv_unit = st.selectbox("実施単元", [""] + unit_options, key=f"adv_unit_{b}_{i}_{t_idx}")
+                                                        else:
+                                                            adv_unit = st.text_input("実施単元（手入力）", key=f"adv_unit_{b}_{i}_{t_idx}")
+                                                        
+                                                        if adv_unit:
+                                                            advanced_p_list.append(f"{text_name}: {adv_unit}")
+                                                        else:
+                                                            advanced_p_list.append(f"{text_name}: -")
                                                     else:
-                                                        advanced_p_list.append(f"{text_name}: -")
+                                                        # 通常のページ数入力
+                                                        col_adv1, col_adv2 = st.columns(2)
+                                                        with col_adv1:
+                                                            adv_start = st.number_input(f"開始P", min_value=0, value=last_page_num, key=f"adv_start_{b}_{i}_{t_idx}")
+                                                        with col_adv2:
+                                                            adv_end = st.number_input(f"終了P", min_value=0, value=last_page_num, key=f"adv_end_{b}_{i}_{t_idx}")
+                                                        
+                                                        if adv_end >= adv_start and adv_end > 0:
+                                                            advanced_p_list.append(f"{text_name}: P.{adv_start}〜{adv_end}")
+                                                        else:
+                                                            advanced_p_list.append(f"{text_name}: -")
                                                 advanced_p_str = "\n".join(advanced_p_list)
                                             else:
                                                 text_name_str = "-"
@@ -511,15 +528,32 @@ def render_multi_input_page():
                                                     if selected_hw_texts:
                                                         for t_idx, hw_text in enumerate(selected_hw_texts):
                                                             st.write(f"📘 **{hw_text}** の宿題")
-                                                            num_ranges = st.number_input(f"出す範囲の数 (飛び石対応)", min_value=1, max_value=5, value=1, key=f"hw_ranges_num_{b}_{i}_{t_idx}")
                                                             
-                                                            for r_idx in range(num_ranges):
-                                                                n_s_col, n_e_col = st.columns(2)
-                                                                next_start = n_s_col.number_input(f"開始P ({r_idx+1})", min_value=0, value=0, key=f"n_s_{b}_{i}_{t_idx}_{r_idx}")
-                                                                next_end = n_e_col.number_input(f"終了P ({r_idx+1})", min_value=0, value=0, key=f"n_e_{b}_{i}_{t_idx}_{r_idx}")
+                                                            # 🌟 Myeトレの場合の分岐を追加
+                                                            if "Myeトレ" in hw_text:
+                                                                units = cached_get_textbook_master().get(hw_text, [])
+                                                                if not isinstance(units, list): units = []
+                                                                unit_options = [u for u in units if str(u).strip() != ""]
                                                                 
-                                                                if next_end >= next_start and next_end > 0:
-                                                                    next_hw_pages_list.append(f"{hw_text}: P.{next_start}〜{next_end}")
+                                                                if unit_options:
+                                                                    hw_units = st.multiselect("宿題にする単元 (複数可)", unit_options, key=f"hw_unit_{b}_{i}_{t_idx}")
+                                                                    if hw_units:
+                                                                        next_hw_pages_list.append(f"{hw_text}: {', '.join(hw_units)}")
+                                                                else:
+                                                                    hw_unit_text = st.text_input("宿題にする単元（手入力）", key=f"hw_unit_{b}_{i}_{t_idx}")
+                                                                    if hw_unit_text:
+                                                                        next_hw_pages_list.append(f"{hw_text}: {hw_unit_text}")
+                                                            else:
+                                                                # 通常のページ数入力
+                                                                num_ranges = st.number_input(f"出す範囲の数 (飛び石対応)", min_value=1, max_value=5, value=1, key=f"hw_ranges_num_{b}_{i}_{t_idx}")
+                                                                
+                                                                for r_idx in range(num_ranges):
+                                                                    n_s_col, n_e_col = st.columns(2)
+                                                                    next_start = n_s_col.number_input(f"開始P ({r_idx+1})", min_value=0, value=0, key=f"n_s_{b}_{i}_{t_idx}_{r_idx}")
+                                                                    next_end = n_e_col.number_input(f"終了P ({r_idx+1})", min_value=0, value=0, key=f"n_e_{b}_{i}_{t_idx}_{r_idx}")
+                                                                    
+                                                                    if next_end >= next_start and next_end > 0:
+                                                                        next_hw_pages_list.append(f"{hw_text}: P.{next_start}〜{next_end}")
                                                                     
                                                         next_hw_pages_str = "\n".join(next_hw_pages_list) if next_hw_pages_list else "-"
                                                         selected_hw_text_str = "、".join(selected_hw_texts)
@@ -696,7 +730,7 @@ def render_multi_input_page():
             "adv_end", "num_q", "q_name", "q_chap", "q_score", "w", 
             "conc", "reac", "hw_texts", "new_hw_text", "hw_ranges_num", 
             "n_s", "n_e", "advc", "p_msg", "next_h", "d_s", "d_e",
-            "saved_flag", "saved_name", "hw_reason", "hw_fix", "bring"
+            "saved_flag", "saved_name", "hw_reason", "hw_fix", "bring", "adv_unit", "hw_unit"
         ]
         for i_idx in range(students_count):
             for key in list(st.session_state.keys()):
