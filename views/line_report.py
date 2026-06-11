@@ -16,7 +16,6 @@ from utils.g_sheets import (
 from utils.g_drive import get_or_create_student_folder
 from utils.api_guard import robust_api_call
 
-# 🌟 キャッシュ関数群
 @st.cache_data(ttl=60, show_spinner=False)
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
@@ -41,30 +40,25 @@ def cached_get_teacher_names():
 def render_line_report_page():
     st.header("📱 LINE用 授業報告レポート管理")
     
-    # 🌟 権限チェックの細分化
     user_role = st.session_state.get('role', '')
     
-    # レポート生成を使える権限
     can_use_report = user_role in ['admin', 'owner', 'AM', 'head_teacher']
-    # 返信記録を使える権限
     can_use_reply = user_role in ['admin', 'owner', 'AM']
 
-    # どちらの権限もない場合（一般講師など）は完全に弾く
     if not can_use_report and not can_use_reply:
         st.error("🔒 このページへのアクセス権限がありません。管理者または教室長（社員）のみ利用可能です。")
         st.stop()
 
-    # 権限に応じてタブを作るか、そのまま表示するかを分岐
     if can_use_reply:
         main_tab1, main_tab2 = st.tabs(["📱 LINEレポート一括生成", "💬 保護者返信・ファン化度記録"])
         report_container = main_tab1
         reply_container = main_tab2
     else:
-        report_container = st.container() # head_teacher用：タブを作らず透明な箱を用意
-        reply_container = None            # 返信タブ用の箱は無し
+        report_container = st.container()
+        reply_container = None
 
     # ==========================================
-    # 🌟 エリア1：レポート一括生成
+    # エリア1：レポート一括生成
     # ==========================================
     with report_container:
         st.write("授業日を選択するだけで、**校舎ごと**に全生徒のレポートを自動生成します✨")
@@ -96,7 +90,6 @@ def render_line_report_page():
 
             target_students = daily_logs[[id_col, name_col]].drop_duplicates().to_dict('records')
 
-            # 管理者・社員用：URL抜け生徒のピックアップ
             if can_use_report:
                 missing_url_students = []
                 for s in target_students:
@@ -112,7 +105,6 @@ def render_line_report_page():
                 if missing_url_students:
                     st.error(f"🚨 **【答案確認URL 未添付アラート】** 以下の生徒は小テスト記録がないため、報告書に「答案確認URL」が表示されていません。\n\n**{', '.join(missing_url_students)}**")
 
-            # 校舎振り分けバケット
             data_buckets = {"田端新町校": [], "東十条駅前校": [], "体験授業": [], "その他": []}
             for s in target_students:
                 s_id = str(s.get(id_col, "")).lower()
@@ -180,7 +172,7 @@ def render_line_report_page():
 
                             if advice and advice != "nan": advice_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{advice}")
                             if parent_msg and parent_msg != "nan": parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
-                            if hw_content: hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw_content}")
+                            if hw_content: hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より}\n{hw_content}")
 
                         classes_text = "\n\n".join(class_sections)
                         bring_text = f"🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n\n" if bring_sections else ""
@@ -223,7 +215,7 @@ def render_line_report_page():
                                 st.caption("👆 コピーしてLINEへペースト！")
 
     # ==========================================
-    # 🌟 エリア2：保護者返信・ファン化度記録 (特定のマネージャーのみ表示)
+    # 🌟 エリア2：保護者返信・ファン化度記録
     # ==========================================
     if reply_container is not None:
         with reply_container:
@@ -236,7 +228,6 @@ def render_line_report_page():
                 st.warning("生徒データが読み込めません。")
             else:
                 student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
-                
                 selected_student = st.selectbox("👤 返信のあった生徒を選択してください", student_options, index=None, placeholder="-- 生徒を選択 --", key="parent_reply_student_select")
                 
                 if selected_student:
@@ -252,14 +243,14 @@ def render_line_report_page():
                         with c2:
                             teacher_name = st.selectbox("👨‍🏫 報告書を作成した担当講師", teacher_names, index=None, placeholder="-- 講師を選択 --")
                             
+                        # 🌟 変更ポイント：未読・既読スルーを消し、「悪印象」を追加
                         reaction_type = st.selectbox(
                             "🤝 保護者のリアクション・ファン化度評価",
                             [
                                 "🔥 大絶賛・大感謝（超ファン化・講習の提案やお知らせに即合意レベル）",
                                 "🟢 好意的・納得（信頼構築・塾への指示通りに家庭が動く状態）",
                                 "🟡 質問・相談あり（家庭との対話要フォロー・要社員共有）",
-                                "🔵 既読スルー・事務的な了解スタンプのみ（関係性維持に注力要）",
-                                "⚪ 未読スルー（要状況確認）"
+                                "🚨 悪印象・不満あり（至急のフォロー・面談要レベル）"
                             ],
                             index=1
                         )
