@@ -10,8 +10,8 @@ from utils.g_sheets import (
     get_sent_list,      
     update_sent_flag,
     save_parent_reply,
-    get_student_master,     # 🌟 追加
-    get_all_teacher_names   # 🌟 追加
+    get_student_master,
+    get_all_teacher_names
 )
 from utils.g_drive import get_or_create_student_folder
 from utils.api_guard import robust_api_call
@@ -29,7 +29,6 @@ def cached_load_quiz_records():
 def cached_load_hw_records():
     return robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
 
-# 🌟 マスターデータ用のキャッシュ関数
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
@@ -42,26 +41,34 @@ def cached_get_teacher_names():
 def render_line_report_page():
     st.header("📱 LINE用 授業報告レポート管理")
     
-    # 🌟 権限チェック：admin, owner, AM のいずれかか判定
+    # 🌟 権限チェックの細分化
     user_role = st.session_state.get('role', '')
-    is_manager = user_role in ['admin', 'owner', 'AM']
+    
+    # レポート生成を使える権限
+    can_use_report = user_role in ['admin', 'owner', 'AM', 'head_teacher']
+    # 返信記録を使える権限
+    can_use_reply = user_role in ['admin', 'owner', 'AM']
+
+    # どちらの権限もない場合（一般講師など）は完全に弾く
+    if not can_use_report and not can_use_reply:
+        st.error("🔒 このページへのアクセス権限がありません。管理者または教室長（社員）のみ利用可能です。")
+        st.stop()
 
     # 権限に応じてタブを作るか、そのまま表示するかを分岐
-    if is_manager:
+    if can_use_reply:
         main_tab1, main_tab2 = st.tabs(["📱 LINEレポート一括生成", "💬 保護者返信・ファン化度記録"])
         report_container = main_tab1
         reply_container = main_tab2
     else:
-        report_container = st.container() # タブを作らず透明な箱を用意
-        reply_container = None            # 権限がないので返信タブ用の箱は無し
+        report_container = st.container() # head_teacher用：タブを作らず透明な箱を用意
+        reply_container = None            # 返信タブ用の箱は無し
 
     # ==========================================
-    # 🌟 エリア1：レポート一括生成（権限に関わらず表示）
+    # 🌟 エリア1：レポート一括生成
     # ==========================================
     with report_container:
         st.write("授業日を選択するだけで、**校舎ごと**に全生徒のレポートを自動生成します✨")
         
-        # 🌟 日付選択をタブの中に移動！これで他の機能に影響を与えません
         selected_date = st.date_input("📅 授業日を選択", datetime.date.today(), key="report_target_date")
         date_str = selected_date.strftime("%Y/%m/%d")
 
@@ -89,8 +96,8 @@ def render_line_report_page():
 
             target_students = daily_logs[[id_col, name_col]].drop_duplicates().to_dict('records')
 
-            # 管理者専用：URL抜け生徒のピックアップ（権限連動）
-            if is_manager:
+            # 管理者・社員用：URL抜け生徒のピックアップ
+            if can_use_report:
                 missing_url_students = []
                 for s in target_students:
                     s_name = s.get(name_col, "不明")
@@ -103,7 +110,7 @@ def render_line_report_page():
                     if not has_quiz:
                         missing_url_students.append(s_name)
                 if missing_url_students:
-                    st.error(f"🚨 **【管理者アラート】** 以下の生徒は小テスト記録がないため、報告書に「答案確認URL」が表示されていません。\n\n**{', '.join(missing_url_students)}**")
+                    st.error(f"🚨 **【答案確認URL 未添付アラート】** 以下の生徒は小テスト記録がないため、報告書に「答案確認URL」が表示されていません。\n\n**{', '.join(missing_url_students)}**")
 
             # 校舎振り分けバケット
             data_buckets = {"田端新町校": [], "東十条駅前校": [], "体験授業": [], "その他": []}
@@ -216,7 +223,7 @@ def render_line_report_page():
                                 st.caption("👆 コピーしてLINEへペースト！")
 
     # ==========================================
-    # 🌟 エリア2：保護者返信・ファン化度記録 (マネージャーのみ表示)
+    # 🌟 エリア2：保護者返信・ファン化度記録 (特定のマネージャーのみ表示)
     # ==========================================
     if reply_container is not None:
         with reply_container:
@@ -228,7 +235,6 @@ def render_line_report_page():
             if df_students.empty:
                 st.warning("生徒データが読み込めません。")
             else:
-                # 日付に縛られず、全生徒から自由に選べるようになりました！
                 student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
                 
                 selected_student = st.selectbox("👤 返信のあった生徒を選択してください", student_options, index=None, placeholder="-- 生徒を選択 --", key="parent_reply_student_select")
@@ -244,7 +250,6 @@ def render_line_report_page():
                         with c1:
                             target_date = st.date_input("📅 対象の授業日（報告書を送った日）", datetime.date.today())
                         with c2:
-                            # 🌟 ここで「どの先生の報告書か」を選べるようにしました！
                             teacher_name = st.selectbox("👨‍🏫 報告書を作成した担当講師", teacher_names, index=None, placeholder="-- 講師を選択 --")
                             
                         reaction_type = st.selectbox(
@@ -277,7 +282,7 @@ def render_line_report_page():
                                         date_str=target_date.strftime("%Y/%m/%d"),
                                         student_id=student_id,
                                         student_name=student_name,
-                                        teacher_name=teacher_name, # 🌟 先生の名前も保存
+                                        teacher_name=teacher_name, 
                                         reaction_type=reaction_type,
                                         reply_text=reply_text,
                                         fallback_value=False
