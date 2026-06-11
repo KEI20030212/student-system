@@ -1474,7 +1474,7 @@ def update_sent_flag(date_str, student_id, is_sent):
     except:
         return False
 
-def save_parent_reply(date_str, student_id, student_name, reaction_type, reply_text):
+def save_parent_reply(date_str, student_id, student_name, teacher_name, reaction_type, reply_text):
     """保護者からのLINE返信やリアクションをスプレッドシートに記録する"""
     try:
         import gspread
@@ -1484,12 +1484,12 @@ def save_parent_reply(date_str, student_id, student_name, reaction_type, reply_t
         try:
             ws = sh.worksheet("保護者返信履歴")
         except gspread.exceptions.WorksheetNotFound:
-            # シートがなければ自動作成 (5列)
-            ws = sh.add_worksheet(title="保護者返信履歴", rows="2000", cols="5")
-            ws.update("A1:E1", [["記録日時", "授業日", "生徒ID", "生徒名", "リアクション種別", "返信メモ"]])
+            # シートがなければ自動作成 (6列に拡張)
+            ws = sh.add_worksheet(title="保護者返信履歴", rows="2000", cols="6")
+            ws.update("A1:F1", [["記録日時", "授業日", "生徒ID", "生徒名", "担当講師", "リアクション種別", "返信メモ"]])
             
         now_str = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-        ws.append_row([now_str, date_str, str(student_id), student_name, reaction_type, reply_text])
+        ws.append_row([now_str, date_str, str(student_id), student_name, teacher_name, reaction_type, reply_text])
         return True
     except:
         return False
