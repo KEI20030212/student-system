@@ -9,12 +9,14 @@ from utils.g_sheets import (
     load_school_homework_data,
     get_sent_list,      
     update_sent_flag,
-    save_parent_reply
+    save_parent_reply,
+    get_student_master,     # 🌟 追加
+    get_all_teacher_names   # 🌟 追加
 )
 from utils.g_drive import get_or_create_student_folder
 from utils.api_guard import robust_api_call
 
-# 🌟 全データを一括取得するキャッシュ関数群
+# 🌟 キャッシュ関数群
 @st.cache_data(ttl=60, show_spinner=False)
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
@@ -27,33 +29,24 @@ def cached_load_quiz_records():
 def cached_load_hw_records():
     return robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
 
+# 🌟 マスターデータ用のキャッシュ関数
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_get_student_master():
+    return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_get_teacher_names():
+    return robust_api_call(get_all_teacher_names, fallback_value=[])
+
+
 def render_line_report_page():
-    st.header("📱 LINE用 授業報告レポート一括生成")
-    st.write("授業日を選択するだけで、**校舎ごと**に全生徒のレポートを自動生成します✨")
-
-    selected_date = st.date_input("📅 授業日を選択", datetime.date.today())
-    date_str = selected_date.strftime("%Y/%m/%d")
-
-    st.divider()
-
-    with st.spinner(f"{date_str} の全データを解析中..."):
-        df_all_logs = cached_get_all_logs()
-        df_all_quizzes = cached_load_quiz_records()
-        df_hw = cached_load_hw_records()
-
-        if df_all_logs.empty or "APIエラー発生" in df_all_logs.columns:
-            st.error("授業記録データの取得に失敗しました。")
-            st.stop()
-
-        df_all_logs['日時'] = pd.to_datetime(df_all_logs['日時'], format='mixed', errors='coerce')
-        target_date = pd.to_datetime(selected_date).date()
-        daily_logs = df_all_logs[df_all_logs['日時'].dt.date == target_date]
-
+    st.header("📱 LINE用 授業報告レポート管理")
+    
     # 🌟 権限チェック：admin, owner, AM のいずれかか判定
     user_role = st.session_state.get('role', '')
     is_manager = user_role in ['admin', 'owner', 'AM']
 
-    # 🌟 権限に応じてタブを作るか、そのまま表示するかを分岐
+    # 権限に応じてタブを作るか、そのまま表示するかを分岐
     if is_manager:
         main_tab1, main_tab2 = st.tabs(["📱 LINEレポート一括生成", "💬 保護者返信・ファン化度記録"])
         report_container = main_tab1
@@ -63,9 +56,30 @@ def render_line_report_page():
         reply_container = None            # 権限がないので返信タブ用の箱は無し
 
     # ==========================================
-    # レポート一括生成エリア（権限に関わらず表示）
+    # 🌟 エリア1：レポート一括生成（権限に関わらず表示）
     # ==========================================
     with report_container:
+        st.write("授業日を選択するだけで、**校舎ごと**に全生徒のレポートを自動生成します✨")
+        
+        # 🌟 日付選択をタブの中に移動！これで他の機能に影響を与えません
+        selected_date = st.date_input("📅 授業日を選択", datetime.date.today(), key="report_target_date")
+        date_str = selected_date.strftime("%Y/%m/%d")
+
+        st.divider()
+
+        with st.spinner(f"{date_str} の全データを解析中..."):
+            df_all_logs = cached_get_all_logs()
+            df_all_quizzes = cached_load_quiz_records()
+            df_hw = cached_load_hw_records()
+
+            if df_all_logs.empty or "APIエラー発生" in df_all_logs.columns:
+                st.error("授業記録データの取得に失敗しました。")
+                st.stop()
+
+            df_all_logs['日時'] = pd.to_datetime(df_all_logs['日時'], format='mixed', errors='coerce')
+            target_date = pd.to_datetime(selected_date).date()
+            daily_logs = df_all_logs[df_all_logs['日時'].dt.date == target_date]
+
         if daily_logs.empty:
             st.info(f"📅 {date_str} の授業記録はまだありません。")
         else:
@@ -202,30 +216,37 @@ def render_line_report_page():
                                 st.caption("👆 コピーしてLINEへペースト！")
 
     # ==========================================
-    # 保護者返信・ファン化度記録エリア（権限がある場合のみ表示）
+    # 🌟 エリア2：保護者返信・ファン化度記録 (マネージャーのみ表示)
     # ==========================================
     if reply_container is not None:
         with reply_container:
             st.write("LINE報告に対する保護者様からのリアクションや返信を記録し、信頼関係の見える化（ファン化分析）に活用します✨")
-            if daily_logs.empty:
-                st.info(f"📅 {date_str} の授業記録がないため、返信記録は登録できません。")
+            
+            df_students = cached_get_student_master()
+            teacher_names = cached_get_teacher_names()
+            
+            if df_students.empty:
+                st.warning("生徒データが読み込めません。")
             else:
-                id_col = '生徒ID' if '生徒ID' in daily_logs.columns else None
-                name_col = '名前' if '名前' in daily_logs.columns else '生徒名'
+                # 日付に縛られず、全生徒から自由に選べるようになりました！
+                student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
                 
-                # 🌟 修正ポイント：sorted() を削除して、記録された順番通りに表示
-                student_names = daily_logs[name_col].drop_duplicates().tolist()
-                
-                selected_student = st.selectbox("👤 返信のあった生徒を選択してください", student_names, index=None, placeholder="-- 生徒を選択 --", key="parent_reply_student_select")
+                selected_student = st.selectbox("👤 返信のあった生徒を選択してください", student_options, index=None, placeholder="-- 生徒を選択 --", key="parent_reply_student_select")
                 
                 if selected_student:
-                    # 該当生徒のIDを取得
-                    matched_row = daily_logs[daily_logs[name_col] == selected_student]
-                    student_id = str(matched_row.iloc[0][id_col]) if id_col and not matched_row.empty else "未設定"
+                    student_id = selected_student.split(" - ")[0]
+                    student_name = selected_student.split(" - ")[1]
                     
-                    with st.form(key=f"parent_reply_form_{selected_student}"):
-                        st.markdown(f"### 💬 {selected_student} さんの保護者リアクション登録")
+                    with st.form(key=f"parent_reply_form"):
+                        st.markdown(f"### 💬 {student_name} さんの保護者リアクション登録")
                         
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            target_date = st.date_input("📅 対象の授業日（報告書を送った日）", datetime.date.today())
+                        with c2:
+                            # 🌟 ここで「どの先生の報告書か」を選べるようにしました！
+                            teacher_name = st.selectbox("👨‍🏫 報告書を作成した担当講師", teacher_names, index=None, placeholder="-- 講師を選択 --")
+                            
                         reaction_type = st.selectbox(
                             "🤝 保護者のリアクション・ファン化度評価",
                             [
@@ -240,26 +261,30 @@ def render_line_report_page():
                         
                         reply_text = st.text_area(
                             "📝 返信内容・特記事項（メモ）", 
-                            placeholder="「いつも細かく見ていただきありがとうございます。本人も喜んでいました」などの実際の文面や、相談された内容の要約を入力してください。", 
+                            placeholder="実際の文面や、相談された内容の要約を入力してください。", 
                             height=120
                         )
                         
                         submit_reply = st.form_submit_button("🚀 保護者の返信記録をスプレッドシートへ保存する", use_container_width=True)
                         
                         if submit_reply:
-                            with st.spinner("データを安全に書き込み中..."):
-                                success = robust_api_call(
-                                    save_parent_reply,
-                                    date_str=date_str,
-                                    student_id=student_id,
-                                    student_name=selected_student,
-                                    reaction_type=reaction_type,
-                                    reply_text=reply_text,
-                                    fallback_value=False
-                                )
-                                if success:
-                                    st.success(f"✅ {selected_student} さんの保護者返信を正常に記録しました！今後の面談資料やファン化度分析に自動反映されます。")
-                                    time.sleep(1.5)
-                                    st.rerun()
-                                else:
-                                    st.error("❌ スプレッドシートへの保存に失敗しました。通信環境を確認するか、時間をおいて再試行してください。")
+                            if not teacher_name:
+                                st.error("⚠️ 担当講師を選択してください。")
+                            else:
+                                with st.spinner("データを安全に書き込み中..."):
+                                    success = robust_api_call(
+                                        save_parent_reply,
+                                        date_str=target_date.strftime("%Y/%m/%d"),
+                                        student_id=student_id,
+                                        student_name=student_name,
+                                        teacher_name=teacher_name, # 🌟 先生の名前も保存
+                                        reaction_type=reaction_type,
+                                        reply_text=reply_text,
+                                        fallback_value=False
+                                    )
+                                    if success:
+                                        st.success(f"✅ {student_name} さんの保護者返信を正常に記録しました！")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ スプレッドシートへの保存に失敗しました。")
