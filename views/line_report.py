@@ -172,7 +172,8 @@ def render_line_report_page():
 
                             if advice and advice != "nan": advice_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{advice}")
                             if parent_msg and parent_msg != "nan": parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
-                            if hw_content: hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より}\n{hw_content}")
+                            # 🌟 ここにあった「}」のタイポを「》」に修正しました！
+                            if hw_content: hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw_content}")
 
                         classes_text = "\n\n".join(class_sections)
                         bring_text = f"🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n\n" if bring_sections else ""
@@ -215,7 +216,7 @@ def render_line_report_page():
                                 st.caption("👆 コピーしてLINEへペースト！")
 
     # ==========================================
-    # 🌟 エリア2：保護者返信・ファン化度記録
+    # エリア2：保護者返信・ファン化度記録
     # ==========================================
     if reply_container is not None:
         with reply_container:
@@ -228,6 +229,7 @@ def render_line_report_page():
                 st.warning("生徒データが読み込めません。")
             else:
                 student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
+                
                 selected_student = st.selectbox("👤 返信のあった生徒を選択してください", student_options, index=None, placeholder="-- 生徒を選択 --", key="parent_reply_student_select")
                 
                 if selected_student:
@@ -243,7 +245,6 @@ def render_line_report_page():
                         with c2:
                             teacher_name = st.selectbox("👨‍🏫 報告書を作成した担当講師", teacher_names, index=None, placeholder="-- 講師を選択 --")
                             
-                        # 🌟 変更ポイント：未読・既読スルーを消し、「悪印象」を追加
                         reaction_type = st.selectbox(
                             "🤝 保護者のリアクション・ファン化度評価",
                             [
