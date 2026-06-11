@@ -31,7 +31,15 @@ def cached_load_parent_reply_data():
     return robust_api_call(load_parent_reply_data, fallback_value=pd.DataFrame())
 
 def render_analytics_dashboard_page():
-    st.header("📊 講師パフォーマンス分析ダッシュボード")
+    # 🌟 変更ポイント：ヘッダーの横にリロードボタンを配置
+    col_h, col_r = st.columns([0.8, 0.2])
+    with col_h:
+        st.header("📊 講師パフォーマンス分析ダッシュボード")
+    with col_r:
+        if st.button("🔄 データを更新", use_container_width=True):
+            st.cache_data.clear() # キャッシュを強制クリア
+            st.rerun()            # 画面を再読み込み
+
     st.write("講師の「稼働状況」「指導の熱量」「宿題コントロール力」「小テスト実施率」「保護者ファン化度」を可視化します。")
 
     report_col = 'アドバイス'
@@ -78,11 +86,16 @@ def render_analytics_dashboard_page():
     # 🌟 【新機能】保護者リアクション（自動既読スルー補完）の結合ロジック
     # ==========================================
     if not df_reply.empty and "APIエラー発生" not in df_reply.columns:
-        df_reply['授業日'] = pd.to_datetime(df_reply['授業日'], format='mixed', errors='coerce').dt.date
-        # 必要な列だけを抽出してリネーム
-        reply_clean = df_reply[['授業日', '生徒名', '担当講師', 'リアクション種別']].copy()
-        reply_clean.columns = ['日付', '生徒名', '担当講師', '保護者リアクション']
-        reply_clean = reply_clean.drop_duplicates(subset=['日付', '生徒名', '担当講師'])
+        # 🌟 必要な列がすべて揃っているかチェック（KeyError防止）
+        required_cols = ['授業日', '生徒名', '担当講師', 'リアクション種別']
+        if all(col in df_reply.columns for col in required_cols):
+            df_reply['授業日'] = pd.to_datetime(df_reply['授業日'], format='mixed', errors='coerce').dt.date
+            # 必要な列だけを抽出してリネーム
+            reply_clean = df_reply[['授業日', '生徒名', '担当講師', 'リアクション種別']].copy()
+            reply_clean.columns = ['日付', '生徒名', '担当講師', '保護者リアクション']
+            reply_clean = reply_clean.drop_duplicates(subset=['日付', '生徒名', '担当講師'])
+        else:
+            reply_clean = pd.DataFrame(columns=['日付', '生徒名', '担当講師', '保護者リアクション'])
     else:
         reply_clean = pd.DataFrame(columns=['日付', '生徒名', '担当講師', '保護者リアクション'])
 

@@ -38,7 +38,14 @@ def cached_get_teacher_names():
 
 
 def render_line_report_page():
-    st.header("📱 LINE用 授業報告レポート管理")
+    # 🌟 変更ポイント：ヘッダーの横にリロードボタンを配置
+    col_h, col_r = st.columns([0.8, 0.2])
+    with col_h:
+        st.header("📱 LINE用 授業報告レポート管理")
+    with col_r:
+        if st.button("🔄 データを更新", use_container_width=True):
+            st.cache_data.clear() # キャッシュを強制クリア
+            st.rerun()            # 画面を再読み込み
     
     user_role = st.session_state.get('role', '')
     
@@ -172,7 +179,6 @@ def render_line_report_page():
 
                             if advice and advice != "nan": advice_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{advice}")
                             if parent_msg and parent_msg != "nan": parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
-                            # 🌟 ここにあった「}」のタイポを「》」に修正しました！
                             if hw_content: hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw_content}")
 
                         classes_text = "\n\n".join(class_sections)
