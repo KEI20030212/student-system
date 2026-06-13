@@ -14,7 +14,7 @@ import pickle
 
 def get_jst_now():
     """現在時刻を日本時間(JST)で取得する"""
-    jst = datetime.timezone(datetime.timedelta(hours=9), 'JST')
+    jst = datetime.timezone(timedelta(hours=9), 'JST')
     
     # 🌟 ポイント： datetime.datetime.now(...) と2回重ねる！
     return datetime.datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S')
@@ -1925,7 +1925,7 @@ def load_shift_records(target_type, member_name, start_date):
     df_member = df_all[df_all[name_col] == member_name].copy()
     
     # 2. 取得対象の日付リスト（月曜〜日曜の7日分）を文字列で生成して絞り込み
-    date_list = [(start_date + datetime.timedelta(days=i)).strftime("%Y/%m/%d") for i in range(7)]
+    date_list = [(start_date + timedelta(days=i)).strftime("%Y/%m/%d") for i in range(7)]
     df_filtered = df_member[df_member["日付"].isin(date_list)].copy()
     
     # NaNを空文字に変換（Streamlitのデータエディタでエラーになるのを防ぐ）
