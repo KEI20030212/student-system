@@ -1984,13 +1984,19 @@ def save_shift_records(target_type, member_name, edited_df):
     return True
 
 # ==========================================
-# 🌟 講習契約マスタの読み書き
+# 🌟 講習契約マスタの読み書き（超安全版）
 # ==========================================
 def _raw_load_contract_master():
-    gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID)
-    ws = sh.worksheet("設定_講習契約マスタ")
-    return pd.DataFrame(ws.get_all_records(numericise_ignore=["all"]))
+    ws = get_worksheet("設定_講習契約マスタ")
+    all_values = ws.get_all_values()
+    
+    # 🚨 シートが完全に空、またはヘッダーしかない場合は空のDataFrameを返す
+    if not all_values or len(all_values) < 1:
+        return pd.DataFrame()
+        
+    headers = all_values[0]
+    data = all_values[1:]
+    return pd.DataFrame(data, columns=headers)
 
 @st.cache_data(ttl=600)
 def load_contract_master():
@@ -2002,21 +2008,25 @@ def save_contract_master(df):
     """講習契約マスタを保存（一括上書き）する"""
     worksheet = get_worksheet("設定_講習契約マスタ")
     worksheet.clear()
-    # ヘッダーとデータをリスト化して一括更新
     worksheet.update([df.columns.values.tolist()] + df.values.tolist())
     return True
 
 # ------------------------------------------
-# 🌟 授業予定表の読み書き
+# 🌟 授業予定表の読み書き（超安全版）
 # ------------------------------------------
 def _raw_load_lesson_schedule():
     import pandas as pd
-    gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID)
-    ws = sh.worksheet("データ_授業予定表")
-    return pd.DataFrame(ws.get_all_records(numericise_ignore=["all"]))
+    ws = get_worksheet("データ_授業予定表")
+    all_values = ws.get_all_values()
+    
+    if not all_values or len(all_values) < 1:
+        return pd.DataFrame()
+        
+    headers = all_values[0]
+    data = all_values[1:]
+    return pd.DataFrame(data, columns=headers)
 
-@st.cache_data(ttl=60) # 授業予定は頻繁に変わるのでキャッシュは短めの1分
+@st.cache_data(ttl=60) 
 def load_lesson_schedule():
     from utils.api_guard import robust_api_call
     import pandas as pd
@@ -2025,31 +2035,34 @@ def load_lesson_schedule():
 def save_lesson_schedule(df_new_lessons):
     """確定した授業予定を末尾に追加(Append)する"""
     from utils.api_guard import robust_api_call
-    gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID)
-    ws = sh.worksheet("データ_授業予定表")
+    ws = get_worksheet("データ_授業予定表")
     
     values_to_append = df_new_lessons.values.tolist()
     if values_to_append:
         ws.append_rows(values_to_append)
-        st.cache_data.clear() # キャッシュをクリアして即時反映させる
+        st.cache_data.clear() 
         return True
     return False
 
 # ------------------------------------------
-# 🌟 全員のシフトを一括取得する関数（マッチング用）
+# 🌟 全員のシフトを一括取得する関数（超安全版）
 # ------------------------------------------
 def _raw_load_all_shifts(target_type):
     import pandas as pd
-    gc = get_gc_client()
-    sh = gc.open_by_key(SPREADSHEET_ID)
     sheet_name = "データ_講師シフト_講習" if target_type == "講師" else "データ_生徒シフト_講習"
-    ws = sh.worksheet(sheet_name)
-    return pd.DataFrame(ws.get_all_records(numericise_ignore=["all"]))
+    ws = get_worksheet(sheet_name)
+    all_values = ws.get_all_values()
+    
+    # 🚨 ここで get_all_records を使わないようにしたため、空シートでもエラーにならなくなります！
+    if not all_values or len(all_values) < 1:
+        return pd.DataFrame()
+        
+    headers = all_values[0]
+    data = all_values[1:]
+    return pd.DataFrame(data, columns=headers)
 
 @st.cache_data(ttl=300)
 def load_all_shifts(target_type):
     from utils.api_guard import robust_api_call
     import pandas as pd
     return robust_api_call(lambda: _raw_load_all_shifts(target_type), fallback_value=pd.DataFrame())
-
