@@ -1886,10 +1886,33 @@ def update_fixed_costs_in_sheet(updated_df):
 # 🛡️ 追加：共通のワークシート取得関数（これでエラーが消えます）
 # ==========================================
 def get_worksheet(sheet_name):
-    """指定された名前のワークシートを安全に取得する共通関数"""
+    """指定された名前のワークシートを安全に取得する共通関数（デバッグ機能付き）"""
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
-    return sh.worksheet(sheet_name)
+    try:
+        return sh.worksheet(sheet_name)
+    except Exception as e:
+        # 💡 シートが見つからないエラーが発生した場合、安全装置をすり抜けて実際のシート名一覧を画面に強制表示します
+        import gspread
+        available_sheets = [w.title for w in sh.worksheets()]
+        
+        st.error(f"❌ アプリが『{sheet_name}』というシートを見つけられませんでした。")
+        st.info(f"💻 プログラムが探している名前: `{sheet_name}`")
+        st.warning(f"📋 現在、実際のExcel（スプレッドシート）側にあるシート名一覧はこちらです：")
+        
+        # 実際のシート名を箇条書きで表示
+        for s in available_sheets:
+            st.markdown(f"- `{s}`")
+            
+        st.markdown("""
+        ---
+        **【対策】**
+        上の「探している名前」と、一覧にある名前をよーーく見比べてみてください。
+        （アンダースコア `_` が全角 `＿` になっていたり、前後に見えないスペースがありませんか？）
+        
+        スプレッドシート側のタブ名を、上記の一覧から正しいものに書き換えるか、コピペし直してください。
+        """)
+        st.stop()  # ここで処理を安全に止める
 
 def _get_shift_sheet_name(target_type):
     """対象に合わせて読み書きするシート名を切り替える"""
