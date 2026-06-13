@@ -4,24 +4,24 @@ import datetime
 import time
 
 from utils.api_guard import robust_api_call
-# 🚨 本物の関数を読み込みます！
-from utils.g_sheets import save_shift_records, load_shift_records
-
-# ==========================================
-# 🌟 ダミーデータ・モックアップ用の設定
-# (本来は生徒マスタや講師マスタから取得します)
-# ==========================================
-def get_mock_members(target_type):
-    if target_type == "講師":
-        return ["鈴木先生", "佐藤先生", "田中先生", "高橋先生"]
-    else:
-        return ["山田太郎", "佐藤花子", "鈴木一郎", "対馬次郎"]
-
-# ==========================================
+# 🚨 本物の関数を読み込みます！（マスタ取得用も追加）
+from utils.g_sheets import (
+    save_shift_records, 
+    load_shift_records,
+    get_student_master,
+    get_teacher_master  # 👈 講師マスタを取得する関数も追加想定
+)
 
 def render_shift_management_page():
     st.header("📅 講習シフト一括入力フォーム")
     st.write("講師と生徒の講習シフトを、1週間単位でエクセルのようにスマートに一括登録・更新できます🚀")
+
+    # ------------------------------------------
+    # 0. 本番マスタデータのロード（ダミー卒業！🎓）
+    # ------------------------------------------
+    with st.spinner("マスタデータを読み込み中..."):
+        df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+        df_teachers = robust_api_call(get_teacher_master, fallback_value=pd.DataFrame())
 
     # ------------------------------------------
     # 1. 対象（講師 or 生徒）とメンバーの選択
@@ -31,8 +31,20 @@ def render_shift_management_page():
     
     col1, col2 = st.columns(2)
     
-    # メンバー選択（マスタ連携想定）
-    member_options = get_mock_members(target_type)
+    # マスタデータから動的にプルダウンの選択肢を生成
+    if target_type == "講師":
+        if not df_teachers.empty and "講師名" in df_teachers.columns:
+            member_options = df_teachers["講師名"].dropna().unique().tolist()
+        else:
+            st.warning("⚠️ 講師マスタにデータがありません。")
+            member_options = []
+    else:
+        if not df_students.empty and "生徒名" in df_students.columns:
+            member_options = df_students["生徒名"].dropna().unique().tolist()
+        else:
+            st.warning("⚠️ 生徒マスタにデータがありません。")
+            member_options = []
+
     selected_member = col1.selectbox(
         f"👨‍🏫 担当の{target_type}名を選択", 
         ["-- 選択してください --"] + member_options
@@ -49,16 +61,16 @@ def render_shift_management_page():
     start_of_week = today - datetime.timedelta(days=today.weekday()) 
     
     week_options = []
-    for i in range(-1, 6): # 先週 〜 5週間先まで
+    for i in range(-2, 9): # 過去2週間 〜 未来8週間まで拡張
         w_start = start_of_week + datetime.timedelta(weeks=i)
         w_end = w_start + datetime.timedelta(days=6)
-        label = f"{w_start.strftime('%m/%d')} (月) 〜 {w_end.strftime('%m/%d')} (日)"
+        label = f"{w_start.strftime('%Y/%m/%d')} (月) 〜 {w_end.strftime('%m/%d')} (日)"
         week_options.append((w_start, label))
         
     selected_week_idx = col2.selectbox(
         "📅 対象の週を選択", 
         range(len(week_options)), 
-        index=1, # デフォルトは「今週」
+        index=2, # デフォルトは「今週」
         format_func=lambda x: week_options[x][1]
     )
     target_start_date = week_options[selected_week_idx][0]
