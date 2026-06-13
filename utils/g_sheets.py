@@ -1883,8 +1883,14 @@ def update_fixed_costs_in_sheet(updated_df):
 
 #shift_management.py
 # ==========================================
-# 🌟 内部ヘルパー関数
+# 🛡️ 追加：共通のワークシート取得関数（これでエラーが消えます）
 # ==========================================
+def get_worksheet(sheet_name):
+    """指定された名前のワークシートを安全に取得する共通関数"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    return sh.worksheet(sheet_name)
+
 def _get_shift_sheet_name(target_type):
     """対象に合わせて読み書きするシート名を切り替える"""
     if target_type == "講師":
@@ -1901,7 +1907,7 @@ def load_shift_records(target_type, member_name, start_date):
     """
     sheet_name = _get_shift_sheet_name(target_type)
     
-    # 💡 既存のシート取得関数を使用してください（例: get_worksheet）
+    # 💡 定義した共通関数を使ってシートを取得
     worksheet = get_worksheet(sheet_name) 
     
     all_data = worksheet.get_all_records()
@@ -1972,14 +1978,14 @@ def save_shift_records(target_type, member_name, edited_df):
     df_final = df_final.fillna("")
     
     # 4. スプレッドシートを一括更新
-    # ※一部だけ更新するより、一度クリアして一括書き込みする方がバグが少なく高速です
     worksheet.clear()
     worksheet.update([df_final.columns.values.tolist()] + df_final.values.tolist())
     
     return True
 
-#course_contract.py
-# utils/g_sheets.py に追加する際のおすすめ構造
+# ==========================================
+# 🌟 講習契約マスタの読み書き
+# ==========================================
 def _raw_load_contract_master():
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
@@ -2023,8 +2029,6 @@ def save_lesson_schedule(df_new_lessons):
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("データ_授業予定表")
     
-    # 既存の全データを取得して二重登録を防止する等の処理が本来はベストですが、
-    # ここでは安全に新しい行のリストを後ろに追加します
     values_to_append = df_new_lessons.values.tolist()
     if values_to_append:
         ws.append_rows(values_to_append)
@@ -2048,6 +2052,4 @@ def load_all_shifts(target_type):
     from utils.api_guard import robust_api_call
     import pandas as pd
     return robust_api_call(lambda: _raw_load_all_shifts(target_type), fallback_value=pd.DataFrame())
-
-
 
