@@ -55,6 +55,23 @@ def render_matching_page():
     st.divider()
     st.subheader(f"📊 {student_name} さんの受講・契約進捗")
 
+    # 🚨 【ここに安全装置を追加しました！】列名チェックロジック
+    required_columns = ["生徒ID", "契約コマ数", "科目"]
+    missing_columns = [col for col in required_columns if col not in df_contracts.columns]
+    
+    if missing_columns:
+        st.error(f"❌ 『設定_講習契約マスタ』シートの列名が正しく認識できませんでした。")
+        st.warning(f"アプリが探したのに見つからなかった列名: {missing_columns}")
+        st.info(f"💡 スプレッドシート側から実際に読み取れた列名の一覧: `{df_contracts.columns.tolist()}`")
+        st.markdown("""
+        **【スプレッドシートの確認・修正方法】**
+        1. Googleスプレッドシートの**『設定_講習契約マスタ』**シートを開いてください。
+        2. **1行目（ヘッダー行）**に、正しく「生徒ID」「契約コマ数」「科目」と入力されているか確認してください。
+        3. 文字の前後に**余計なスペース（空白文字）**が入っていないか確認してください（例：「 生徒ID」や「生徒ID 」などはNGになります）。
+        4. 「ID」が全角の「ＩＤ」になっていないか確認してください。
+        """)
+        st.stop()
+
     # 講習契約マスタからこの生徒の総契約数を計算
     student_contracts = df_contracts[df_contracts["生徒ID"].astype(str) == student_id]
     
