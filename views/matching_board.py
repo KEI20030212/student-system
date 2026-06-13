@@ -29,7 +29,7 @@ def render_matching_page():
         st.stop()
 
     # ------------------------------------------
-    # 2. 条件選択エリア
+    # 2. 条件選択エリア（🌟 実用型：現在の日付から週を動的生成）
     # ------------------------------------------
     col_target, col_week = st.columns(2)
     
@@ -37,9 +37,25 @@ def render_matching_page():
     student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
     selected_student_raw = col_target.selectbox("👤 対象の生徒を選択", ["-- 選択してください --"] + student_options)
     
-    # 対象週の選択（運用に合わせて動的化可能、ここでは夏期の基準週を例示）
-    selected_week_start = datetime.date(2026, 8, 3) 
-    col_week.selectbox("📅 コマ組みする週を選択", [f"{selected_week_start.strftime('%Y/%m/%d')} (月) 〜 2026/08/09 (日)"])
+    # 今週の月曜日を基準点にする
+    today = datetime.date.today()
+    start_of_week = today - datetime.timedelta(days=today.weekday()) 
+    
+    week_options = []
+    # 過去2週間 〜 未来8週間まで選択可能に
+    for i in range(-2, 9): 
+        w_start = start_of_week + datetime.timedelta(weeks=i)
+        w_end = w_start + datetime.timedelta(days=6)
+        label = f"{w_start.strftime('%Y/%m/%d')} (月) 〜 {w_end.strftime('%m/%d')} (日)"
+        week_options.append((w_start, label))
+        
+    selected_week_idx = col_week.selectbox(
+        "📅 コマ組みする週を選択", 
+        range(len(week_options)), 
+        index=2, # デフォルトは「今週」（リストの3番目）
+        format_func=lambda x: week_options[x][1]
+    )
+    selected_week_start = week_options[selected_week_idx][0]
 
     if selected_student_raw == "-- 選択してください --":
         st.info("💡 生徒を選択すると、その生徒の契約状況とマッチングボードが起動します。")
@@ -55,21 +71,12 @@ def render_matching_page():
     st.divider()
     st.subheader(f"📊 {student_name} さんの受講・契約進捗")
 
-    # 🚨 【ここに安全装置を追加しました！】列名チェックロジック
     required_columns = ["生徒ID", "契約コマ数", "科目"]
     missing_columns = [col for col in required_columns if col not in df_contracts.columns]
     
     if missing_columns:
         st.error(f"❌ 『設定_講習契約マスタ』シートの列名が正しく認識できませんでした。")
-        st.warning(f"アプリが探したのに見つからなかった列名: {missing_columns}")
-        st.info(f"💡 スプレッドシート側から実際に読み取れた列名の一覧: `{df_contracts.columns.tolist()}`")
-        st.markdown("""
-        **【スプレッドシートの確認・修正方法】**
-        1. Googleスプレッドシートの**『設定_講習契約マスタ』**シートを開いてください。
-        2. **1行目（ヘッダー行）**に、正しく「生徒ID」「契約コマ数」「科目」と入力されているか確認してください。
-        3. 文字の前後に**余計なスペース（空白文字）**が入っていないか確認してください（例：「 生徒ID」や「生徒ID 」などはNGになります）。
-        4. 「ID」が全角の「ＩＤ」になっていないか確認してください。
-        """)
+        st.warning(f"不足している列名: {missing_columns}")
         st.stop()
 
     # 講習契約マスタからこの生徒の総契約数を計算
@@ -81,7 +88,7 @@ def render_matching_page():
         
     total_contract_units = int(student_contracts["契約コマ数"].sum())
     
-    # 授業予定表シートから、この生徒がすでにスケジュール確定しているコマ数を集計
+    # 授業予定表シートからスケジュール確定コマ数を集計
     if not df_lessons.empty and "生徒名" in df_lessons.columns:
         already_scheduled_units = len(df_lessons[df_lessons["生徒名"] == student_name])
     else:
@@ -97,35 +104,35 @@ def render_matching_page():
     st.progress(progress_pct / 100, text=f"スケジュール消化率: {progress_pct}%")
 
     # ------------------------------------------
-    # 4. マッチング・ボード（生徒シフトに基づく自動ブロックUI）
+    # 4. マッチング・ボード
     # ------------------------------------------
     st.divider()
     st.subheader("🗓️ マッチング・ボード")
     st.caption("生徒が「〇」を出しているコマのみ編集可能です。「×」のコマは自動でブロックされます。")
     
-    # 該当生徒の提出シフトを抽出
+    if df_student_shifts.empty or "生徒名" not in df_student_shifts.columns:
+        st.warning("⚠️ スプレッドシートに生徒のシフトデータが存在しません。")
+        st.stop()
+
     this_student_shift = df_student_shifts[df_student_shifts["生徒名"] == student_name]
-    
     if this_student_shift.empty:
-        st.warning(f"⚠️ {student_name} さんのシフトデータがスプレッドシートに見つかりません。シフトを入力してください。")
+        st.warning(f"⚠️ {student_name} さんのシフトデータが見つかりません。シフトを入力してください。")
         st.stop()
 
     slots = ["Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
     days_of_week = ["月", "火", "水", "木", "金", "土", "日"]
     
-    # 1週間分（7日間）のマトリクス行を動的に生成
     init_data = []
     for i in range(7):
         current_date = selected_week_start + datetime.timedelta(days=i)
         date_str = current_date.strftime("%Y/%m/%d")
         
-        # スプレッドシートのシフト行から該当日のデータを取得
         day_shift = this_student_shift[this_student_shift["日付"] == date_str]
         
         row_dict = {"日付": date_str, "曜日": days_of_week[i]}
         for slot in slots:
-            if not day_shift.empty and day_shift.iloc[0][slot] == "〇":
-                row_dict[slot] = ""  # 生徒が〇なら空欄（講師を選択できる状態にする）
+            if not day_shift.empty and slot in day_shift.columns and day_shift.iloc[0][slot] == "〇":
+                row_dict[slot] = ""  # 生徒が〇なら空欄（講師を選択できる状態）
             else:
                 row_dict[slot] = "⛔ 生徒NG"  # 生徒が×、または未提出なら強制ブロック
                 
@@ -133,10 +140,12 @@ def render_matching_page():
         
     df_matching_board = pd.DataFrame(init_data)
 
-    # プルダウンに表示する全講師のリストをシフトデータから動的に抽出
-    all_teachers = [""] + df_teacher_shifts["講師名"].unique().tolist() if not df_teacher_shifts.empty else [""]
+    # 講師リストの安全な抽出
+    if not df_teacher_shifts.empty and "講師名" in df_teacher_shifts.columns:
+        all_teachers = [""] + df_teacher_shifts["講師名"].dropna().unique().tolist()
+    else:
+        all_teachers = [""]
 
-    # カラム設定
     column_config = {
         "日付": st.column_config.TextColumn("📅 日付", disabled=True),
         "曜日": st.column_config.TextColumn("📆 曜日", disabled=True),
@@ -144,7 +153,6 @@ def render_matching_page():
     for slot in slots:
         column_config[slot] = st.column_config.SelectboxColumn(slot, options=all_teachers, width="medium")
 
-    # エクセルライクなデータエディタの描画
     edited_df = st.data_editor(
         df_matching_board,
         column_config=column_config,
@@ -154,35 +162,31 @@ def render_matching_page():
     )
 
     # ------------------------------------------
-    # 5. 保存処理 ＆ 講師の出勤バリデーション（安全装置）
+    # 5. 保存処理 ＆ 講師の出勤バリデーション
     # ------------------------------------------
     if st.button("💾 このスケジュールで確定して授業予定表に書き込む", type="primary", use_container_width=True):
         new_lessons_list = []
         errors = []
         
-        # 画面上の変更内容を1セルずつ走査
         for index, row in edited_df.iterrows():
             date_str = row["日付"]
             for slot in slots:
                 val = row[slot]
                 
-                # 講師が選択されており、かつ生徒NG枠でない場合
                 if val and val != "⛔ 生徒NG":
                     teacher_name = val
                     
-                    # 🛡️ 【バリデーション】選択された講師が本当にその日そのコマに「〇」を出しているか検証
+                    # バリデーション：講師のシフトチェック
                     t_match = df_teacher_shifts[
                         (df_teacher_shifts["講師名"] == teacher_name) & 
                         (df_teacher_shifts["日付"] == date_str)
                     ]
-                    if t_match.empty or t_match.iloc[0][slot] != "〇":
-                        errors.append(f"❌ {date_str} {slot}: {teacher_name} 先生はこの時間シフト（出勤希望）を出していません！")
+                    
+                    if t_match.empty or slot not in t_match.columns or t_match.iloc[0][slot] != "〇":
+                        errors.append(f"❌ {date_str} {slot}: {teacher_name} 先生はこの時間シフトを出していません！")
                         continue
                     
-                    # 授業IDの自動ユニーク生成
                     class_id = f"SCH-{date_str.replace('/', '')}-{slot}-{student_id}"
-                    
-                    # 科目は契約マスタの最初の科目を仮アサイン（運用に応じて選択化可能）
                     subj = student_contracts.iloc[0]["科目"] if not student_contracts.empty else "未定"
                     
                     new_lessons_list.append({
@@ -192,10 +196,9 @@ def render_matching_page():
                         "講師名": teacher_name,
                         "生徒名": student_name,
                         "科目": subj,
-                        "指導形態": "1:2"  # 初期デフォルト値
+                        "指導形態": "1:2"
                     })
 
-        # 1つでもシフト不一致の講師がいれば処理を中断して警告
         if errors:
             for err in errors:
                 st.error(err)
@@ -205,12 +208,10 @@ def render_matching_page():
             st.warning("⚠️ アサインされた授業がありません。講師を選択してから保存してください。")
             st.stop()
 
-        # スプレッドシートの「データ_授業予定表」シートへ一括追記
         df_new_lessons = pd.DataFrame(new_lessons_list)
         with st.spinner("スプレッドシートへ授業データを保存中..."):
             success = save_lesson_schedule(df_new_lessons)
             if success:
                 st.success(f"🎉 正常に {len(df_new_lessons)} コマ分の授業を確定し、予定表に追記しました！")
-                st.balloons()
                 time.sleep(1.5)
                 st.rerun()

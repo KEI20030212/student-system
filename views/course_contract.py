@@ -14,7 +14,7 @@ def render_course_contract_page():
         df_students = get_student_master()
         
     if df_students.empty:
-        st.error("生徒マスタが読み込めません。")
+        st.error("生徒マスタが読み込めません。スプレッドシートの生徒マスタにデータがあるか確認してください。")
         st.stop()
 
     # 🚨 【安全装置】スプレッドシートの列名が正しいかチェック
@@ -23,15 +23,13 @@ def render_course_contract_page():
         missing_cols = [c for c in required_cols if c not in df_contracts.columns]
         
         if missing_cols:
-            st.error(f"❌ 『設定_講習契約マスタ』シートに、システムが動くために必要な列が足りません。")
-            st.warning(f"アプリが見つけられなかった列名: {missing_cols}")
-            st.info(f"現在のスプレッドシートから読み取れた列名: `{df_contracts.columns.tolist()}`")
-            st.markdown("""
-            **【解決方法】**
-            スプレッドシートの「設定_講習契約マスタ」の1行目を以下のように完全に一致させてください。
-            `講習名` | `生徒ID` | `生徒名` | `科目` | `契約コマ数`
-            """)
+            st.error(f"❌ 『設定_講習契約マスタ』シートに必要な列が足りません。")
+            st.warning(f"不足している列: {missing_cols}")
+            st.info("シートの1行目を「講習名, 生徒ID, 生徒名, 科目, 契約コマ数」の順に設定してください。")
             st.stop()
+    else:
+        # データが空の場合は初期カラムを持つ空のDataFrameを作成
+        df_contracts = pd.DataFrame(columns=["講習名", "生徒ID", "生徒名", "科目", "契約コマ数"])
 
     # 生徒選択用のリスト作成
     student_list = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
@@ -43,7 +41,11 @@ def render_course_contract_page():
         with st.form("add_contract_form"):
             col1, col2 = st.columns(2)
             selected_student = col1.selectbox("生徒を選択", student_list, index=None, placeholder="生徒を選んでください")
-            course_name = col2.selectbox("講習名", ["2026夏期講習", "2026冬期講習", "2027春期講習"], index=0)
+            
+            # 実運用向けに現在の年を自動取得して講習名を動的生成
+            current_year = pd.Timestamp.now().year
+            course_options = [f"{current_year}夏期講習", f"{current_year}冬期講習", f"{current_year+1}春期講習"]
+            course_name = col2.selectbox("講習名", course_options, index=0)
             
             col3, col4 = st.columns(2)
             subject = col3.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"])
@@ -58,8 +60,8 @@ def render_course_contract_page():
                     sid = selected_student.split(" - ")[0]
                     sname = selected_student.split(" - ")[1]
                     
-                    # 重複チェック（安全装置のおかげでここでKeyErrorが出なくなります！）
-                    is_duplicate = not df_contracts.empty and len(df_contracts[
+                    # 重複チェック
+                    is_duplicate = len(df_contracts[
                         (df_contracts['生徒ID'].astype(str) == sid) & 
                         (df_contracts['講習名'] == course_name) & 
                         (df_contracts['科目'] == subject)
@@ -72,6 +74,7 @@ def render_course_contract_page():
                             "講習名": course_name, "生徒ID": sid, "生徒名": sname, "科目": subject, "契約コマ数": int(units)
                         }])
                         df_contracts = pd.concat([df_contracts, new_row], ignore_index=True)
+                        
                         success = robust_api_call(lambda: save_contract_master(df_contracts), fallback_value=False)
                         if success:
                             st.success(f"✅ {sname} さんの契約を追加しました！")
@@ -86,34 +89,30 @@ def render_course_contract_page():
     if df_contracts.empty:
         st.info("登録済みの契約はありません。上のフォームから登録してください。")
     else:
-        # フィルタリング
         search_q = st.text_input("🔍 生徒名や講習名で検索", placeholder="山田、夏期講習 など...")
         df_display = df_contracts.copy()
         if search_q:
             df_display = df_display[
-                df_display['生徒名'].str.contains(search_q) | 
-                df_display['講習名'].str.contains(search_q)
+                df_display['生徒名'].str.contains(search_q, na=False) | 
+                df_display['講習名'].str.contains(search_q, na=False)
             ]
 
-        # データエディタ
         edited_df = st.data_editor(
             df_display,
             column_config={
                 "生徒ID": st.column_config.TextColumn("ID", disabled=True),
                 "生徒名": st.column_config.TextColumn("名前", disabled=True),
-                "講習名": st.column_config.SelectboxColumn("講習", options=["2026夏期講習", "2026冬期講習", "2027春期講習"]),
+                "講習名": st.column_config.SelectboxColumn("講習", options=course_options),
                 "科目": st.column_config.SelectboxColumn("科目", options=["英語", "数学", "国語", "理科", "社会"]),
                 "契約コマ数": st.column_config.NumberColumn("契約数", min_value=1, max_value=100, step=1),
             },
-            num_rows="dynamic", # 行の削除を許可
+            num_rows="dynamic",
             use_container_width=True,
             hide_index=True,
             key="contract_editor"
         )
 
-        # 保存ボタン
         if st.button("💾 変更をスプレッドシートに保存", type="secondary", use_container_width=True):
-            # 簡易化のため「表示されているものが正」として保存
             with st.spinner("保存中..."):
                 success = robust_api_call(lambda: save_contract_master(edited_df), fallback_value=False)
                 if success:
