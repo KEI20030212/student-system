@@ -2000,5 +2000,54 @@ def save_contract_master(df):
     worksheet.update([df.columns.values.tolist()] + df.values.tolist())
     return True
 
+# ------------------------------------------
+# 🌟 授業予定表の読み書き
+# ------------------------------------------
+def _raw_load_lesson_schedule():
+    import pandas as pd
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    ws = sh.worksheet("データ_授業予定表")
+    return pd.DataFrame(ws.get_all_records(numericise_ignore=["all"]))
+
+@st.cache_data(ttl=60) # 授業予定は頻繁に変わるのでキャッシュは短めの1分
+def load_lesson_schedule():
+    from utils.api_guard import robust_api_call
+    import pandas as pd
+    return robust_api_call(_raw_load_lesson_schedule, fallback_value=pd.DataFrame())
+
+def save_lesson_schedule(df_new_lessons):
+    """確定した授業予定を末尾に追加(Append)する"""
+    from utils.api_guard import robust_api_call
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    ws = sh.worksheet("データ_授業予定表")
+    
+    # 既存の全データを取得して二重登録を防止する等の処理が本来はベストですが、
+    # ここでは安全に新しい行のリストを後ろに追加します
+    values_to_append = df_new_lessons.values.tolist()
+    if values_to_append:
+        ws.append_rows(values_to_append)
+        st.cache_data.clear() # キャッシュをクリアして即時反映させる
+        return True
+    return False
+
+# ------------------------------------------
+# 🌟 全員のシフトを一括取得する関数（マッチング用）
+# ------------------------------------------
+def _raw_load_all_shifts(target_type):
+    import pandas as pd
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    sheet_name = "データ_講師シフト_講習" if target_type == "講師" else "データ_生徒シフト_講習"
+    ws = sh.worksheet(sheet_name)
+    return pd.DataFrame(ws.get_all_records(numericise_ignore=["all"]))
+
+@st.cache_data(ttl=300)
+def load_all_shifts(target_type):
+    from utils.api_guard import robust_api_call
+    import pandas as pd
+    return robust_api_call(lambda: _raw_load_all_shifts(target_type), fallback_value=pd.DataFrame())
+
 
 
