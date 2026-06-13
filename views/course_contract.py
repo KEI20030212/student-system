@@ -17,6 +17,22 @@ def render_course_contract_page():
         st.error("生徒マスタが読み込めません。")
         st.stop()
 
+    # 🚨 【安全装置】スプレッドシートの列名が正しいかチェック
+    if not df_contracts.empty:
+        required_cols = ["講習名", "生徒ID", "生徒名", "科目", "契約コマ数"]
+        missing_cols = [c for c in required_cols if c not in df_contracts.columns]
+        
+        if missing_cols:
+            st.error(f"❌ 『設定_講習契約マスタ』シートに、システムが動くために必要な列が足りません。")
+            st.warning(f"アプリが見つけられなかった列名: {missing_cols}")
+            st.info(f"現在のスプレッドシートから読み取れた列名: `{df_contracts.columns.tolist()}`")
+            st.markdown("""
+            **【解決方法】**
+            スプレッドシートの「設定_講習契約マスタ」の1行目を以下のように完全に一致させてください。
+            `講習名` | `生徒ID` | `生徒名` | `科目` | `契約コマ数`
+            """)
+            st.stop()
+
     # 生徒選択用のリスト作成
     student_list = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
 
@@ -42,7 +58,7 @@ def render_course_contract_page():
                     sid = selected_student.split(" - ")[0]
                     sname = selected_student.split(" - ")[1]
                     
-                    # 重複チェック
+                    # 重複チェック（安全装置のおかげでここでKeyErrorが出なくなります！）
                     is_duplicate = not df_contracts.empty and len(df_contracts[
                         (df_contracts['生徒ID'].astype(str) == sid) & 
                         (df_contracts['講習名'] == course_name) & 
@@ -53,7 +69,7 @@ def render_course_contract_page():
                         st.warning(f"⚠️ {sname} さんの {course_name} ({subject}) は既に登録されています。下の表で編集してください。")
                     else:
                         new_row = pd.DataFrame([{
-                            "生徒ID": sid, "生徒名": sname, "講習名": course_name, "科目": subject, "契約コマ数": int(units)
+                            "講習名": course_name, "生徒ID": sid, "生徒名": sname, "科目": subject, "契約コマ数": int(units)
                         }])
                         df_contracts = pd.concat([df_contracts, new_row], ignore_index=True)
                         success = robust_api_call(lambda: save_contract_master(df_contracts), fallback_value=False)
@@ -85,7 +101,7 @@ def render_course_contract_page():
             column_config={
                 "生徒ID": st.column_config.TextColumn("ID", disabled=True),
                 "生徒名": st.column_config.TextColumn("名前", disabled=True),
-                "講習名": st.column_config.SelectboxColumn("講習", options=["2026夏期講習", "2026冬期講習"]),
+                "講習名": st.column_config.SelectboxColumn("講習", options=["2026夏期講習", "2026冬期講習", "2027春期講習"]),
                 "科目": st.column_config.SelectboxColumn("科目", options=["英語", "数学", "国語", "理科", "社会"]),
                 "契約コマ数": st.column_config.NumberColumn("契約数", min_value=1, max_value=100, step=1),
             },
@@ -97,8 +113,7 @@ def render_course_contract_page():
 
         # 保存ボタン
         if st.button("💾 変更をスプレッドシートに保存", type="secondary", use_container_width=True):
-            # フィルター後の編集結果を元の全体データに反映させるロジックが必要だが、
-            # 簡易化のため、ここでは「表示されているものが正」として保存
+            # 簡易化のため「表示されているものが正」として保存
             with st.spinner("保存中..."):
                 success = robust_api_call(lambda: save_contract_master(edited_df), fallback_value=False)
                 if success:
