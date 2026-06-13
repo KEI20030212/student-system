@@ -4,7 +4,7 @@ import datetime
 import time
 
 from utils.api_guard import robust_api_call
-# 🚨 コメントアウトを解除し、本物の関数を読み込みます！
+# 🚨 本物の関数を読み込みます！
 from utils.g_sheets import save_shift_records, load_shift_records
 
 # ==========================================
@@ -75,7 +75,7 @@ def render_shift_management_page():
     days_of_week = ["月", "火", "水", "木", "金", "土", "日"]
     columns = ["日付", "曜日", "Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
     
-    # 🚨 【本物のロジックを有効化】既存データをスプレッドシートから安全にロード
+    # 🚨 既存データをスプレッドシートから安全にロード
     with st.spinner("既存のシフトデータを読み込み中..."):
         df_existing = robust_api_call(
             lambda: load_shift_records(target_type, selected_member, target_start_date),
@@ -94,6 +94,11 @@ def render_shift_management_page():
             })
         df_shift_base = pd.DataFrame(init_data)
     else:
+        # 🚨 【エラー回避の魔法】スプレッドシート側に足りない列があれば、自動で空欄として補ってエラーを防ぐ！
+        for col in columns:
+            if col not in df_existing.columns:
+                df_existing[col] = ""
+                
         # 既存データがある場合は、表示に必要な列だけを順番通りに並び替える
         df_shift_base = df_existing[columns].copy()
 
@@ -128,7 +133,7 @@ def render_shift_management_page():
     if submit_btn:
         with st.spinner("スプレッドシートにシフトデータを書き込み中..."):
             
-            # 🚨 【本物のロジックを有効化】編集されたデータを関数に渡して保存！
+            # 🚨 編集されたデータを関数に渡して保存！
             success = robust_api_call(
                 lambda: save_shift_records(target_type, selected_member, edited_df),
                 fallback_value=False
