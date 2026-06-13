@@ -4,8 +4,8 @@ import datetime
 import time
 
 from utils.api_guard import robust_api_call
-# 💡 今後 utils/g_sheets.py に実装する想定の関数（今回は骨組み＆シミュレーション）
-# from utils.g_sheets import save_shift_records, load_shift_records
+# 🚨 コメントアウトを解除し、本物の関数を読み込みます！
+from utils.g_sheets import save_shift_records, load_shift_records
 
 # ==========================================
 # 🌟 ダミーデータ・モックアップ用の設定
@@ -46,10 +46,8 @@ def render_shift_management_page():
     # 2. 対象の「週」を選択（月曜日を基準にする）
     # ------------------------------------------
     today = datetime.date.today()
-    # 今週の月曜日を取得
     start_of_week = today - datetime.timedelta(days=today.weekday()) 
     
-    # 前後数週間分の月曜日を選択肢として生成
     week_options = []
     for i in range(-1, 6): # 先週 〜 5週間先まで
         w_start = start_of_week + datetime.timedelta(weeks=i)
@@ -77,24 +75,30 @@ def render_shift_management_page():
     days_of_week = ["月", "火", "水", "木", "金", "土", "日"]
     columns = ["日付", "曜日", "Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
     
-    # 【本来のロジック】
-    # 既にスプレッドシートにデータがあればそれをロードし、無ければ新規の空テーブルを作る
-    # df_existing = robust_api_call(load_shift_records, target_type, selected_member, target_start_date, fallback_value=pd.DataFrame())
+    # 🚨 【本物のロジックを有効化】既存データをスプレッドシートから安全にロード
+    with st.spinner("既存のシフトデータを読み込み中..."):
+        df_existing = robust_api_call(
+            lambda: load_shift_records(target_type, selected_member, target_start_date),
+            fallback_value=pd.DataFrame()
+        )
     
-    # 今回はモックとして、すべて空欄の7日分の初期データを作成
-    init_data = []
-    for i in range(7):
-        current_date = target_start_date + datetime.timedelta(days=i)
-        init_data.append({
-            "日付": current_date.strftime("%Y/%m/%d"),
-            "曜日": days_of_week[i],
-            "Aコマ": "", "Bコマ": "", "0コマ": "", "1コマ": "", "2コマ": "", "3コマ": "", "4コマ": ""
-        })
-    df_shift_base = pd.DataFrame(init_data)
+    # スプレッドシートにデータがまだ無い場合は、すべて空欄の7日分の初期データを作成
+    if df_existing.empty:
+        init_data = []
+        for i in range(7):
+            current_date = target_start_date + datetime.timedelta(days=i)
+            init_data.append({
+                "日付": current_date.strftime("%Y/%m/%d"),
+                "曜日": days_of_week[i],
+                "Aコマ": "", "Bコマ": "", "0コマ": "", "1コマ": "", "2コマ": "", "3コマ": "", "4コマ": ""
+            })
+        df_shift_base = pd.DataFrame(init_data)
+    else:
+        # 既存データがある場合は、表示に必要な列だけを順番通りに並び替える
+        df_shift_base = df_existing[columns].copy()
 
-    # 💡 UI爆上げポイント: カラムごとのドロップダウン設定と時間割ヘルプの追加
+    # UIのカラム設定
     status_options = ["", "〇", "×"]
-    
     column_config = {
         "日付": st.column_config.TextColumn("📅 日付", disabled=True, width="medium"),
         "曜日": st.column_config.TextColumn("📆 曜日", disabled=True, width="small"),
@@ -107,7 +111,7 @@ def render_shift_management_page():
         "4コマ": st.column_config.SelectboxColumn("4コマ", options=status_options, help="20:00 ~ 21:30", width="small"),
     }
 
-    # 超直感的なデータエディタのレンダリング
+    # データエディタのレンダリング
     edited_df = st.data_editor(
         df_shift_base,
         column_config=column_config,
@@ -124,18 +128,18 @@ def render_shift_management_page():
     if submit_btn:
         with st.spinner("スプレッドシートにシフトデータを書き込み中..."):
             
-            # 【本来のロジック】
-            # success = robust_api_call(save_shift_records, target_type, selected_member, edited_df, fallback_value=False)
-            
-            # シミュレーション用のウエイト
-            time.sleep(1.5)
-            success = True 
+            # 🚨 【本物のロジックを有効化】編集されたデータを関数に渡して保存！
+            success = robust_api_call(
+                lambda: save_shift_records(target_type, selected_member, edited_df),
+                fallback_value=False
+            )
             
             if success:
                 st.success(f"🎉 {selected_member} さんのシフト（{week_options[selected_week_idx][1]}）を正常に保存しました！")
                 
-                # ユーザーへのフィードバックとして保存データを綺麗に見せる
-                with st.expander("📊 保存されたデータの中身を確認する"):
-                    st.dataframe(edited_df, use_container_width=True, hide_index=True)
+                # 🚨 キャッシュをクリアして、次回開いたときに確実に最新データが読み込まれるようにする
+                st.cache_data.clear()
+                time.sleep(1)
+                st.rerun()  # 画面を再読み込みして保存結果を反映
             else:
-                st.error("スプレッドシートへの保存に失敗しました。ネットワーク状況を確認してください。")
+                st.error("スプレッドシートへの保存に失敗しました。ネットワーク状況やシートの列名を確認してください。")
