@@ -27,6 +27,9 @@ def render_course_contract_page():
             st.warning(f"不足している列: {missing_cols}")
             st.info("シートの1行目を「講習名, 生徒ID, 生徒名, 科目, 契約コマ数」の順に設定してください。")
             st.stop()
+        else:
+            # 🌟 読み込んだ時点で「生徒ID > 講習名 > 科目」の順に綺麗に並び替える
+            df_contracts = df_contracts.sort_values(by=["生徒ID", "講習名", "科目"]).reset_index(drop=True)
     else:
         # データが空の場合は初期カラムを持つ空のDataFrameを作成
         df_contracts = pd.DataFrame(columns=["講習名", "生徒ID", "生徒名", "科目", "契約コマ数"])
@@ -91,11 +94,15 @@ def render_course_contract_page():
                     if new_rows:
                         # 複数科目分を一気にデータフレームに追加
                         df_contracts = pd.concat([df_contracts, pd.DataFrame(new_rows)], ignore_index=True)
+                        
+                        # 🌟 追加後にも並び替えを実行して、スプレッドシートに保存するデータ自体を整理する
+                        df_contracts = df_contracts.sort_values(by=["生徒ID", "講習名", "科目"]).reset_index(drop=True)
+                        
                         success = robust_api_call(lambda: save_contract_master(df_contracts), fallback_value=False)
                         
                         if success:
                             st.success(f"✅ {sname} さんの契約（{len(new_rows)}科目）を追加しました！")
-                            st.cache_data.clear()  # 🌟 フォーム追加の成功時にもキャッシュをクリア！
+                            st.cache_data.clear()  
                             time.sleep(1.5)
                             st.rerun()
                     elif not skipped_subjects:
@@ -134,9 +141,12 @@ def render_course_contract_page():
 
         if st.button("💾 変更をスプレッドシートに保存", type="secondary", use_container_width=True):
             with st.spinner("保存中..."):
+                # 🌟 表で直接編集・追加された場合も、保存前に並び替えを実行する
+                edited_df = edited_df.sort_values(by=["生徒ID", "講習名", "科目"]).reset_index(drop=True)
+                
                 success = robust_api_call(lambda: save_contract_master(edited_df), fallback_value=False)
                 if success:
                     st.success("✅ スプレッドシートを更新しました！")
-                    st.cache_data.clear()  # 一覧保存時もキャッシュをクリア
+                    st.cache_data.clear()  
                     time.sleep(1.0)
                     st.rerun()
