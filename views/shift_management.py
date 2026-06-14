@@ -9,7 +9,7 @@ from utils.g_sheets import (
     save_shift_records, 
     load_shift_records,
     get_student_master,
-    get_teacher_master  # 👈 講師マスタを取得する関数も追加想定
+    get_all_teacher_names  # 👈 講師マスタを取得する関数も追加想定
 )
 
 def render_shift_management_page():
@@ -21,8 +21,7 @@ def render_shift_management_page():
     # ------------------------------------------
     with st.spinner("マスタデータを読み込み中..."):
         df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
-        df_teachers = robust_api_call(get_teacher_master, fallback_value=pd.DataFrame())
-
+        teacher_names = robust_api_call(get_all_teacher_names, fallback_value=[])
     # ------------------------------------------
     # 1. 対象（講師 or 生徒）とメンバーの選択
     # ------------------------------------------
@@ -33,8 +32,8 @@ def render_shift_management_page():
     
     # マスタデータから動的にプルダウンの選択肢を生成
     if target_type == "講師":
-        if not df_teachers.empty and "講師名" in df_teachers.columns:
-            member_options = df_teachers["講師名"].dropna().unique().tolist()
+        if teacher_names:
+            member_options = teacher_names
         else:
             st.warning("⚠️ 講師マスタにデータがありません。")
             member_options = []
