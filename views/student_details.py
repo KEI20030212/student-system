@@ -3,9 +3,8 @@ import pandas as pd
 import altair as alt 
 import datetime 
 import time 
-import re # 🌟 文字列から数字を抽出するために追加
+import re 
 
-# 🌟 変更: get_type_advice_dict を追加インポート
 from utils.g_sheets import (
     get_student_master,
     update_student_info,
@@ -14,7 +13,10 @@ from utils.g_sheets import (
     get_student_self_study_points,
     get_student_quiz_records,
     get_quiz_master_dict,
-    get_type_advice_dict # 🌟 ここに追加！
+    get_type_advice_dict,
+    load_compatibility_ng_master, # 🌟 追加
+    save_compatibility_ng_master, # 🌟 追加
+    load_teacher_master           # 🌟 追加
 )
 from utils.calc_logic import (
     calculate_ability_rank,
@@ -22,10 +24,8 @@ from utils.calc_logic import (
     calculate_quiz_points
 )
 
-# 🌟 APIガードをインポート
 from utils.api_guard import robust_api_call
 
-# 🌟 新しく追加：マニュアルをスプレッドシートから取得して記憶するキャッシュ関数
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_type_advice():
     return robust_api_call(get_type_advice_dict, fallback_value={})
@@ -41,7 +41,6 @@ def render_student_details_page(selected_student_option):
     tab_info, tab_input, tab_view = st.tabs(["👤 基本情報・カルテ", "✍️ テスト成績を入力", "📈 テスト成績推移を見る"])
 
     with tab_info:
-        # 🌟 劇的改善: 重い個別取得をやめて、キャッシュされたマスターから一瞬で情報を探す！
         df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
         info = {}
         if not df_students.empty and '生徒名' in df_students.columns:
@@ -52,7 +51,6 @@ def render_student_details_page(selected_student_option):
         if student_id == "未設定" and "生徒ID" in info:
             student_id = str(info["生徒ID"]).strip()
             
-        # 🌟 APIエラー対策付きの読み込み
         df_test = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
         
         df_student_tests = pd.DataFrame()
@@ -83,7 +81,6 @@ def render_student_details_page(selected_student_option):
             if disp_types:
                 st.markdown(f"**🎯 生徒タイプ**: {disp_types.replace('、', ' / ')}")
                 
-                # 🌟 【新機能】取得したマニュアルから、この生徒に合ったアドバイスを抽出して表示！
                 type_advice_dict = cached_get_type_advice()
                 advices = []
                 for t_key, t_adv in type_advice_dict.items():
@@ -116,11 +113,9 @@ def render_student_details_page(selected_student_option):
                         new_target = st.text_input("志望校・通塾目的", value=info.get('志望校・目的', ''))
                         new_subjects = st.text_input("受講科目 (例: 英語, 数学)", value=info.get('受講科目', ''))
                         
-                        # 🌟 追加：契約コースの入力欄
                         st.markdown("##### 📋 契約コース (回数/月)")
                         raw_course = str(info.get('契約コース', ''))
                         
-                        # スプレッドシートの文字列から数字を自動抽出（パース）
                         b_match = re.search(r'Bコース[:：](\d+)', raw_course)
                         q_match = re.search(r'Qコース[:：](\d+)', raw_course)
                         b_default = int(b_match.group(1)) if b_match else None
@@ -140,31 +135,21 @@ def render_student_details_page(selected_student_option):
                         type_opts = ["充実", "訓練", "実用", "関係", "自尊", "報酬"]
 
                         current_types = str(info.get('タイプ', '')).replace('未設定', '').split('、')
-                        current_types = [t for t in current_types if t in type_opts] # 空文字などを除去
+                        current_types = [t for t in current_types if t in type_opts]
 
                         new_types = st.multiselect("🎯 生徒タイプ（複数選択可）", type_opts, default=current_types)
 
                         if st.form_submit_button("💾 基本情報を保存", type="primary"):
                             new_type_str = "、".join(new_types)
                             
-                            with st.spinner("☁️ 情報を保存中...（混雑時は自動で再試行します）"):
+                            with st.spinner("☁️ 情報を保存中..."):
                                 def _update_info():
                                     update_student_info(
-                                        student_id,
-                                        selected_student, 
-                                        new_grade, 
-                                        new_school, 
-                                        new_target, 
-                                        new_subjects, 
-                                        info.get('能力', 3), 
-                                        info.get('やる気', 3), 
-                                        info.get('内申点', 3), 
-                                        info.get('最新偏差値', 50), 
-                                        info.get('宿題履行率', 100),
-                                        new_exam,        
-                                        new_school_type,
-                                        new_contract_str,
-                                        new_type_str
+                                        student_id, selected_student, new_grade, new_school, 
+                                        new_target, new_subjects, info.get('能力', 3), 
+                                        info.get('やる気', 3), info.get('内申点', 3), 
+                                        info.get('最新偏差値', 50), info.get('宿題履行率', 100),
+                                        new_exam, new_school_type, new_contract_str, new_type_str
                                     )
                                     return True
                                 
@@ -179,6 +164,52 @@ def render_student_details_page(selected_student_option):
                                     st.error("通信エラーが発生しました。もう一度お試しください。")
             else:
                 st.info("※プロフィールの編集は教室長のみ可能です。")
+
+            # ==========================================
+            # 🌟 【新規追加】自動コマ組みマッチング設定（NG講師）
+            # ==========================================
+            st.markdown("### 🧩 自動コマ組みマッチング設定")
+            with st.expander("🚫 NG講師の設定 (相性NG)", expanded=False):
+                st.write(f"**{selected_student}** さんと相性が合わない講師を設定します。ここで選んだ講師は自動コマ組みでアサインされなくなります。")
+                
+                df_ng = robust_api_call(load_compatibility_ng_master, fallback_value=pd.DataFrame())
+                df_teachers = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
+                
+                all_teachers = df_teachers["講師名"].tolist() if not df_teachers.empty and "講師名" in df_teachers.columns else []
+                
+                current_ng_teachers = []
+                if not df_ng.empty and "NG生徒名" in df_ng.columns and "講師名" in df_ng.columns:
+                    current_ng_teachers = df_ng[df_ng["NG生徒名"] == selected_student]["講師名"].tolist()
+                
+                # マスターに存在する講師のみをデフォルトに設定（エラー防止）
+                current_ng_teachers = [t for t in current_ng_teachers if t in all_teachers]
+
+                with st.form("ng_teacher_form"):
+                    selected_ngs = st.multiselect(
+                        "⛔ NG講師を選択",
+                        options=all_teachers,
+                        default=current_ng_teachers,
+                        help="複数選択可能です。候補が出ない場合は、アカウント管理から講師マスタを更新してください。"
+                    )
+                    
+                    if st.form_submit_button("💾 NG設定を保存", type="secondary"):
+                        with st.spinner("保存中..."):
+                            # この生徒の古いNGデータを削除
+                            if not df_ng.empty:
+                                df_ng_new = df_ng[df_ng["NG生徒名"] != selected_student].copy()
+                            else:
+                                df_ng_new = pd.DataFrame(columns=["講師名", "NG生徒名"])
+                            
+                            # 新しいNGデータを追加
+                            new_rows = [{"講師名": t, "NG生徒名": selected_student} for t in selected_ngs]
+                            if new_rows:
+                                df_ng_new = pd.concat([df_ng_new, pd.DataFrame(new_rows)], ignore_index=True)
+                            
+                            success = robust_api_call(lambda: save_compatibility_ng_master(df_ng_new), fallback_value=False)
+                            if success:
+                                st.success("✅ NG設定を更新しました！")
+                                time.sleep(1.5)
+                                st.rerun()
 
         with col_graph:
             st.markdown("### 🧭 科目別：能力 × やる気 マトリクス")
@@ -284,7 +315,7 @@ def render_student_details_page(selected_student_option):
                     submit_naishin = st.form_submit_button("💾 内申点を登録する", type="primary")
                     
                     if submit_naishin:
-                        with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
+                        with st.spinner("☁️ 保存中..."):
                             def _save_naishin():
                                 save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
                                                 None, None, None, None, None, None, None, 
@@ -354,7 +385,7 @@ def render_student_details_page(selected_student_option):
                     submit_test = st.form_submit_button("💾 この成績を登録する", type="primary")
                     
                     if submit_test:
-                        with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
+                        with st.spinner("☁️ 保存中..."):
                             def _save_test():
                                 save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, 
                                                 dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, None, None, 
@@ -442,11 +473,6 @@ def render_student_details_page(selected_student_option):
 
             st.divider()
             st.subheader("📋 成績履歴詳細")
-            
-            def color_attitude(val):
-                if val == 'A': return 'background-color: #d1e7dd'
-                if val == 'C': return 'background-color: #f8d7da'
-                return ''
 
             st.dataframe(
                 df_view.sort_values("日時", ascending=False),

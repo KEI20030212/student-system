@@ -6,8 +6,10 @@ from utils.g_sheets import (
     add_new_account, 
     delete_account, 
     update_account_role,
-    load_instructor_master,    # 🌟 追加：講師マスタの自動連動用
-    update_instructor_master   # 🌟 追加：講師マスタの自動連動用
+    load_instructor_master,
+    update_instructor_master,
+    load_teacher_master,          # 🌟 追加
+    save_teacher_master           # 🌟 追加
 )
 
 from utils.api_guard import robust_api_call
@@ -55,7 +57,7 @@ def render_account_manager_page():
     st.divider()
 
     # ==========================================
-    # 1. 新規アカウント追加フォーム（全自動給与マスタ連動版）
+    # 1. 新規アカウント追加フォーム
     # ==========================================
     st.subheader("➕ 新規アカウントの作成")
     st.info("💡 アカウントを作成すると、給与ダッシュボードの「講師マスタ」にもデフォルト単価で自動的に初期設定が登録されます！")
@@ -83,19 +85,15 @@ def render_account_manager_page():
                 st.error(f"⚠️ ユーザーID「{new_id}」は既に使われています。別のIDにしてください。")
             else:
                 with st.spinner("アカウントと基本給マスタを同時生成中..."):
-                    # 🌟 2つのシートへの登録をワンクリックで同時に行う強固なトランザクションロジック
                     def create_account_and_instructor_master():
-                        # 1. アカウントの作成
                         acc_success = add_new_account(new_id, new_pass, new_name, new_role)
                         if not acc_success:
                             return False
                         
-                        # 2. 講師マスタへの全自動基本給設定
                         df_instructors = load_instructor_master()
                         if df_instructors.empty or "講師名" not in df_instructors.columns:
                             df_instructors = pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
                         
-                        # 重複登録を防ぎつつ追記
                         if new_name.strip() not in df_instructors["講師名"].tolist():
                             new_row = pd.DataFrame([{"講師名": new_name.strip(), "1:1単価": 1875, "1:2単価": 1950, "1:3単価": 2100, "交通費": 0, "役職手当": 0}])
                             updated_df = pd.concat([df_instructors, new_row], ignore_index=True)
@@ -107,7 +105,7 @@ def render_account_manager_page():
                 if success:
                     if 'all_accounts' in st.session_state:
                         del st.session_state['all_accounts']
-                    st.cache_data.clear() # アプリ全体のキャッシュをクリアして確実に同期させる
+                    st.cache_data.clear() 
                     time.sleep(1.5)
                     st.session_state['toast_msg'] = f"🎉 {new_name} 先生のアカウント作成 ＆ 給与マスタ初期設定が完了しました！"
                     st.rerun()
@@ -187,3 +185,51 @@ def render_account_manager_page():
                             st.rerun()
                         else:
                             st.error("❌ アカウントの削除に失敗しました。")
+
+    # ==========================================
+    # 🌟 4. 講師マスタ設定（自動コマ組みマッチング用）
+    # ==========================================
+    st.divider()
+    st.subheader("🧩 講師マスタ（スキル・優先度設定）")
+    st.write("自動コマ組みで使用する「指導可能科目」と「アサイン優先度（数字が小さいほど優先）」を一括設定します。")
+
+    df_teachers = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
+    
+    # データがない場合の初期化
+    if df_teachers.empty:
+        df_teachers = pd.DataFrame(columns=["講師名", "指導可能科目", "優先度"])
+    else:
+        for col in ["講師名", "指導可能科目", "優先度"]:
+            if col not in df_teachers.columns:
+                df_teachers[col] = ""
+
+    # 💡 【自動化ギミック】アカウント一覧にいるが、講師マスタにいない講師を自動検出して追加
+    if accounts_dict:
+        account_teacher_names = [data.get('講師名', '').strip() for uid, data in accounts_dict.items() if data.get('講師名')]
+        existing_teachers = df_teachers["講師名"].tolist()
+        missing_teachers = [t for t in account_teacher_names if t not in existing_teachers and t != ""]
+        
+        if missing_teachers:
+            st.info(f"💡 アカウントマスタから新しい講師（{len(missing_teachers)}名）を検出しました。下の表に入力して保存ボタンを押すと登録完了です。")
+            new_rows = pd.DataFrame([{"講師名": t, "指導可能科目": "", "優先度": 3} for t in missing_teachers])
+            df_teachers = pd.concat([df_teachers, new_rows], ignore_index=True)
+
+    edited_teachers = st.data_editor(
+        df_teachers,
+        use_container_width=True,
+        num_rows="dynamic",
+        hide_index=True,
+        column_config={
+            "講師名": st.column_config.TextColumn("👩‍🏫 講師名", required=True),
+            "指導可能科目": st.column_config.TextColumn("📚 指導可能科目 (カンマ区切り)", help="例: 英語, 数学, 国語"),
+            "優先度": st.column_config.NumberColumn("👑 優先度", min_value=1, max_value=10, step=1, default=3, help="1が最優先です。")
+        }
+    )
+
+    if st.button("💾 講師マスタを保存する", type="primary", use_container_width=True):
+        with st.spinner("保存中..."):
+            success = robust_api_call(lambda: save_teacher_master(edited_teachers), fallback_value=False)
+            if success:
+                st.success("✅ 講師マスタを更新しました！")
+                time.sleep(1.5)
+                st.rerun()
