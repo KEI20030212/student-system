@@ -13,11 +13,11 @@ from utils.g_sheets import (
 )
 
 def render_shift_management_page():
-    st.header("📅 講習シフト一括入力フォーム")
-    st.write("講師と生徒の講習シフトを、1週間単位でエクセルのようにスマートに一括登録・更新できます🚀")
+    st.header("📅 講習シフト入力フォーム")
+    st.write("講師と生徒の講習シフトを登録・更新できます。スマホからでも押しやすい快適UIです🚀")
 
     # ------------------------------------------
-    # 0. 本番マスタデータのロード（ダミー卒業！🎓）
+    # 0. 本番マスタデータのロード
     # ------------------------------------------
     with st.spinner("マスタデータを読み込み中..."):
         df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
@@ -50,7 +50,7 @@ def render_shift_management_page():
     )
     
     if selected_member == "-- 選択してください --":
-        st.info("対象のメンバーを選択すると、シフト入力表が表示されます。")
+        st.info("対象のメンバーを選択すると、シフト入力フォームが表示されます。")
         st.stop()
 
     # ------------------------------------------
@@ -77,10 +77,10 @@ def render_shift_management_page():
     st.divider()
 
     # ------------------------------------------
-    # 3. 1週間分のシフト編集テーブル（心臓部）
+    # 3. 1週間分のシフト編集フォーム（スマホ最適化版 🌟）
     # ------------------------------------------
-    st.subheader(f"📝 {selected_member} さんのシフト編集")
-    st.caption("各コマのセルをクリックして「〇」または「×」を選択してください。空欄は未提出（×扱い）となります。")
+    st.subheader(f"📝 {selected_member} さんのシフト入力")
+    st.caption("日付をタップして開き、各コマの状況（〇：入れる、×：入れない、ー：未定）をタップしてください。")
     
     # 曜日定義
     days_of_week = ["月", "火", "水", "木", "金", "土", "日"]
@@ -113,45 +113,77 @@ def render_shift_management_page():
         # 既存データがある場合は、表示に必要な列だけを順番通りに並び替える
         df_shift_base = df_existing[columns].copy()
 
-    # UIのカラム設定
-    status_options = ["", "〇", "×"]
-    column_config = {
-        "日付": st.column_config.TextColumn("📅 日付", disabled=True, width="medium"),
-        "曜日": st.column_config.TextColumn("📆 曜日", disabled=True, width="small"),
-        "Aコマ": st.column_config.SelectboxColumn("Aコマ", options=status_options, help="9:30 ~ 11:00", width="small"),
-        "Bコマ": st.column_config.SelectboxColumn("Bコマ", options=status_options, help="11:10 ~ 12:40", width="small"),
-        "0コマ": st.column_config.SelectboxColumn("0コマ", options=status_options, help="13:10 ~ 14:40", width="small"),
-        "1コマ": st.column_config.SelectboxColumn("1コマ", options=status_options, help="14:50 ~ 16:20", width="small"),
-        "2コマ": st.column_config.SelectboxColumn("2コマ", options=status_options, help="16:40 ~ 18:10", width="small"),
-        "3コマ": st.column_config.SelectboxColumn("3コマ", options=status_options, help="18:20 ~ 19:50", width="small"),
-        "4コマ": st.column_config.SelectboxColumn("4コマ", options=status_options, help="20:00 ~ 21:30", width="small"),
-    }
+    # スマホ入力用のデータ受け皿とマッピング定義
+    edited_rows = []
+    status_map_display = {"": "ー", "〇": "〇", "×": "×"}
+    status_map_save = {"ー": "", "〇": "〇", "×": "×"}
+    options = ["ー", "〇", "×"]
+    
+    # コマ名と時間帯の対応リスト
+    slot_info = [
+        ("Aコマ", "9:30~11:00"),
+        ("Bコマ", "11:10~12:40"),
+        ("0コマ", "13:10~14:40"),
+        ("1コマ", "14:50~16:20"),
+        ("2コマ", "16:40~18:10"),
+        ("3コマ", "18:20~19:50"),
+        ("4コマ", "20:00~21:30")
+    ]
+    
+    # 選択した週に「今日」が含まれるか判定し、スマホを開いたときの初期展開を最適化する
+    is_current_week = (target_start_date <= today <= target_start_date + datetime.timedelta(days=6))
+    current_weekday_idx = today.weekday() if is_current_week else 0
 
-    # データエディタのレンダリング
-    edited_df = st.data_editor(
-        df_shift_base,
-        column_config=column_config,
-        use_container_width=True,
-        hide_index=True
-    )
+    # 1日ずつ縦にカード（Expander）として配置
+    for i in range(7):
+        row = df_shift_base.iloc[i]
+        date_str = row["日付"]
+        day_str = row["曜日"]
+        
+        # 今週なら「今日」の曜日を自動展開、それ以外の週なら「月曜日」を自動展開（画面をスッキリさせる工夫）
+        is_expanded = (i == current_weekday_idx)
+        
+        with st.expander(f"📅 {date_str} ({day_str}曜日)", expanded=is_expanded):
+            day_data = {"日付": date_str, "曜日": day_str}
+            
+            # 各コマをスマホで押しやすい横並びのラジオボタンに変換
+            for slot_name, slot_time in slot_info:
+                current_val = row[slot_name]
+                display_val = status_map_display.get(current_val, "ー")
+                idx = options.index(display_val)
+                
+                chosen = st.radio(
+                    f"**{slot_name}** ({slot_time})",
+                    options=options,
+                    index=idx,
+                    horizontal=True,
+                    key=f"shift_{i}_{slot_name}"
+                )
+                # スプレッドシート保存用の値（空文字、〇、×）に戻す
+                day_data[slot_name] = status_map_save[chosen]
+                
+            edited_rows.append(day_data)
+            
+    # スマホでバラバラに入力されたデータを、元のエクセルと同じDataFrame型に完全復元！
+    edited_df = pd.DataFrame(edited_rows)
 
     # ------------------------------------------
     # 4. 保存処理
     # ------------------------------------------
-    col_btn, _ = st.columns([1, 3])
-    submit_btn = col_btn.button(f"💾 {selected_member} さんのシフトを保存", type="primary", use_container_width=True)
+    st.write("") # 微調整用スペース
+    submit_btn = st.button(f"💾 {selected_member} さんのシフトを保存", type="primary", use_container_width=True)
     
     if submit_btn:
         with st.spinner("スプレッドシートにシフトデータを書き込み中..."):
             
-            # 🚨 編集されたデータを関数に渡して保存！
+            # 🚨 復元したデータをそのまま関数に渡して保存！（中身はエクセル形式と同じなのでそのまま動きます）
             success = robust_api_call(
                 lambda: save_shift_records(target_type, selected_member, edited_df),
                 fallback_value=False
             )
             
             if success:
-                st.success(f"🎉 {selected_member} さんのシフト（{week_options[selected_week_idx][1]}）を正常に保存しました！")
+                st.success(f"🎉 {selected_member} さんのシフトを正常に保存しました！")
                 
                 # 🚨 キャッシュをクリアして、次回開いたときに確実に最新データが読み込まれるようにする
                 st.cache_data.clear()
