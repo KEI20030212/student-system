@@ -2067,18 +2067,84 @@ def load_all_shifts(target_type):
     import pandas as pd
     return robust_api_call(lambda: _raw_load_all_shifts(target_type), fallback_value=pd.DataFrame())
 
+# ==========================================
+# 🛡️ 修正：講師マスタの読み書き（お手本の体裁に統一）
+# ==========================================
 def load_teacher_master():
     """設定_講師マスタから講師のスキルと優先度を取得する"""
-    return load_data_from_sheet("設定_講師マスタ")
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
+    try:
+        worksheet = sh.worksheet("設定_講師マスタ")
+    except gspread.exceptions.WorksheetNotFound:
+        # シートがない場合は空のデータを返す
+        return pd.DataFrame()
+        
+    return pd.DataFrame(worksheet.get_all_records())
 
 def save_teacher_master(df):
     """設定_講師マスタのデータを保存する"""
-    return save_data_to_sheet("設定_講師マスタ", df)
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("設定_講師マスタ")
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成（100行10列で仮作成）
+            ws = sh.add_worksheet(title="設定_講師マスタ", rows="100", cols="10")
+        
+        ws.clear()
+        if not df.empty:
+            # データフレームの列名を自動でヘッダーにして書き込む
+            data = [df.columns.values.tolist()] + df.values.tolist()
+            ws.update("A1", data)
+        else:
+            # データが空の場合はヘッダーだけ残す
+            if len(df.columns) > 0:
+                ws.update("A1", [df.columns.values.tolist()])
+        return True
+    except Exception as e:
+        print(f"講師マスタの更新エラー: {e}")
+        return False
 
+# ==========================================
+# 🛡️ 修正：相性NGマスタの読み書き（お手本の体裁に統一）
+# ==========================================
 def load_compatibility_ng_master():
     """設定_相性NGマスタからNGペアのリストを取得する"""
-    return load_data_from_sheet("設定_相性NGマスタ")
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
+    try:
+        worksheet = sh.worksheet("設定_相性NGマスタ")
+    except gspread.exceptions.WorksheetNotFound:
+        # シートがない場合は空のデータを返す
+        return pd.DataFrame()
+        
+    return pd.DataFrame(worksheet.get_all_records())
 
 def save_compatibility_ng_master(df):
     """設定_相性NGマスタのデータを保存する"""
-    return save_data_to_sheet("設定_相性NGマスタ", df)
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("設定_相性NGマスタ")
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成（100行5列で仮作成）
+            ws = sh.add_worksheet(title="設定_相性NGマスタ", rows="100", cols="5")
+        
+        ws.clear()
+        if not df.empty:
+            # データフレームの列名を自動でヘッダーにして書き込む
+            data = [df.columns.values.tolist()] + df.values.tolist()
+            ws.update("A1", data)
+        else:
+            # データが空の場合はヘッダーだけ残す
+            if len(df.columns) > 0:
+                ws.update("A1", [df.columns.values.tolist()])
+        return True
+    except Exception as e:
+        print(f"相性NGマスタの更新エラー: {e}")
+        return False
