@@ -1986,23 +1986,21 @@ def save_shift_records(target_type, member_name, edited_df):
 # ==========================================
 # 🌟 講習契約マスタの読み書き（超安全版）
 # ==========================================
-def _raw_load_contract_master():
+@st.cache_data(ttl=600)
+def load_contract_master():
+    """講習契約マスタをスプレッドシートから純粋に読み込む（10分間キャッシュ）"""
+    import pandas as pd
+    
     ws = get_worksheet("設定_講習契約マスタ")
     all_values = ws.get_all_values()
     
-    # 🚨 シートが完全に空、またはヘッダーしかない場合は空のDataFrameを返す
+    # シートが完全に空、またはヘッダーしかない場合は空のDataFrameを返す
     if not all_values or len(all_values) < 1:
         return pd.DataFrame()
         
     headers = all_values[0]
     data = all_values[1:]
     return pd.DataFrame(data, columns=headers)
-
-@st.cache_data(ttl=600)
-def load_contract_master():
-    from utils.api_guard import robust_api_call
-    import pandas as pd
-    return robust_api_call(_raw_load_contract_master, fallback_value=pd.DataFrame())
 
 def save_contract_master(df):
     """講習契約マスタを保存（一括上書き）する"""
