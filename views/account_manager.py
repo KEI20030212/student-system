@@ -245,16 +245,23 @@ def render_account_manager_page():
     for sub in SUBJECTS:
         col_config[sub] = st.column_config.CheckboxColumn(f"📚 {sub}", default=False)
 
-    # データエディタ（表）の表示
-    edited_teachers = st.data_editor(
-        df_teachers,
-        use_container_width=True,
-        num_rows="dynamic",
-        hide_index=True,
-        column_config=col_config
-    )
+    # 💡 フォームで囲むことで、保存ボタンを押すまで通信・再読み込みを完全にブロックします
+    with st.form("teacher_master_form"):
+        
+        # データエディタ（表）の表示
+        edited_teachers = st.data_editor(
+            df_teachers,
+            use_container_width=True,
+            num_rows="dynamic",
+            hide_index=True,
+            column_config=col_config
+        )
+        
+        # 💡 通常の st.button ではなく、フォーム専用の送信ボタンに変更
+        submit_btn = st.form_submit_button("💾 講師マスタを保存する", type="primary", use_container_width=True)
 
-    if st.button("💾 講師マスタを保存する", type="primary", use_container_width=True):
+    # 保存ボタンが押された時の処理
+    if submit_btn:
         with st.spinner("保存中..."):
             # 保存時にスプレッドシート側に古い列が残らないよう上書き処理されます
             success = robust_api_call(lambda: save_teacher_master(edited_teachers), fallback_value=False)
