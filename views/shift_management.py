@@ -49,8 +49,8 @@ def render_shift_management_page():
     
     if selected_member == "-- 選択してください --":
         # メンバー未選択時は、古いキャッシュキーを念のため削除
-        if "fixed_cache_key" in st.session_state: del st.session_state["fixed_cache_key"]
-        if "weekly_cache_key" in st.session_state: del st.session_state["weekly_cache_key"]
+        st.session_state.pop("fixed_cache_key", None)
+        st.session_state.pop("weekly_cache_key", None)
         st.info("対象のメンバーを選択すると、シフト入力フォームが表示されます。")
         st.stop()
 
@@ -92,7 +92,7 @@ def render_shift_management_page():
     
     # ① 固定シフトマスタのロード（メンバー変更時の最初の一度だけ通信する）
     fixed_cache_key = f"fixed_{target_type}_{selected_member}"
-    if "fixed_cache_key" not in st.session_state or st.session_state["fixed_cache_key"] != fixed_cache_key:
+    if st.session_state.get("fixed_cache_key") != fixed_cache_key:
         with st.spinner("スプレッドシートから現在の固定シフトを読み込み中..."):
             df_fixed_master = robust_api_call(
                 lambda: load_fixed_shift_master(target_type, selected_member),
@@ -107,14 +107,13 @@ def render_shift_management_page():
                 existing_day_data = fixed_master_dict.get(day_str, {})
                 for slot_name, _ in slot_info:
                     current_val = existing_day_data.get(slot_name, "")
-                    # ラジオボタンのキー名(fixed_0_Aコマ等)に直接、保存済みの値を突っ込む
                     st.session_state[f"fixed_{i}_{slot_name}"] = status_map_display.get(current_val, "ー")
                     
             st.session_state["fixed_cache_key"] = fixed_cache_key
 
     # ② 毎週のシフトデータのロード（メンバーや週が変わった最初の1回だけ通信する）
     weekly_cache_key = f"weekly_{target_type}_{selected_member}_{target_start_date.strftime('%Y%m%d')}"
-    if "weekly_cache_key" not in st.session_state or st.session_state["weekly_cache_key"] != weekly_cache_key:
+    if st.session_state.get("weekly_cache_key") != weekly_cache_key:
         with st.spinner("スプレッドシートから今週の既存データを読み込み中..."):
             df_existing = robust_api_call(
                 lambda: load_shift_records(target_type, selected_member, target_start_date),
@@ -126,16 +125,26 @@ def render_shift_management_page():
                 init_data[day_str] = {}
                 row_match = df_existing[df_existing["曜日"] == day_str] if not df_existing.empty else pd.DataFrame()
                 
+                # 💡【改善】すべて「ー」の空データかどうかを判定する
+                has_real_data = False
                 if not row_match.empty:
-                    # 既にその週の提出データがあるならそれを最優先で反映
+                    row = row_match.iloc[0]
+                    for slot_name, _ in slot_info:
+                        val = row.get(slot_name, "")
+                        if pd.notna(val) and val not in ["", "ー"]:
+                            has_real_data = True
+                            break
+                
+                if has_real_data:
+                    # すでに〇や×など「意味のある提出データ」があるならそれを最優先で反映
                     row = row_match.iloc[0]
                     for slot_name, _ in slot_info:
                         val = row.get(slot_name, "")
                         init_data[day_str][slot_name] = status_map_display.get(val, "ー")
                 else:
-                    # その週が未提出なら、先ほどロードした「最新の固定シフト」を初期値のベースにする
+                    # 完全に未提出、または空（すべて「ー」）の場合は、最新の固定シフトをベースにする
                     for slot_name, _ in slot_info:
-                        init_data[day_str][slot_name] = st.session_state[f"fixed_{i}_{slot_name}"]
+                        init_data[day_str][slot_name] = st.session_state.get(f"fixed_{i}_{slot_name}", "ー")
             
             # 毎週のシフト用のラジオボタンに初期値を一気に注入
             for i, day_str in enumerate(days_of_week):
@@ -154,6 +163,14 @@ def render_shift_management_page():
         st.subheader("今週以降のシフト提出・変更")
         st.caption("基本の固定シフトが自動反映されています。予定が変わる日だけ修正してください。")
 
+        # 💡【改善】ワンクリックで固定シフトを強制反映するボタン
+        if st.button("🔄 固定シフトの最新状態をこの週に上書きコピー", use_container_width=True):
+            for i in range(7):
+                for slot_name, _ in slot_info:
+                    # 固定シフト側の現在の状態を、毎週のシフト側に強制上書きする
+                    st.session_state[f"weekly_{i}_{slot_name}"] = st.session_state.get(f"fixed_{i}_{slot_name}", "ー")
+            st.rerun()
+
         edited_rows = []
         is_current_week = (target_start_date <= today <= target_start_date + datetime.timedelta(days=6))
         current_weekday_idx = today.weekday() if is_current_week else 0
@@ -168,7 +185,6 @@ def render_shift_management_page():
             with st.expander(f"📅 {date_str} ({day_str}曜日)", expanded=is_expanded):
                 day_data = {"日付": date_str, "曜日": day_str}
                 for slot_name, slot_time in slot_info:
-                    # keyを指定するだけで、セッションから初期値を自動読み込み＆カチカチ変えても一切バグりません！
                     chosen = st.radio(
                         f"**{slot_name}** ({slot_time})",
                         options=options,
@@ -191,14 +207,14 @@ def render_shift_management_page():
                     st.success("🎉 シフトデータを正常に保存しました！")
                     st.cache_data.clear()
                     # 保存成功したらこの週のキャッシュを消し、次回最新状態で再ロードさせる
-                    if "weekly_cache_key" in st.session_state: del st.session_state["weekly_cache_key"]
+                    st.session_state.pop("weekly_cache_key", None)
                     time.sleep(1)
                     st.rerun() 
                 else:
                     st.error("保存に失敗しました。ネットワークを確認してください。")
 
     # ==========================================
-    # 🌟 タブ2：基本の固定シフト設定（今回の修正メイン）
+    # 🌟 タブ2：基本の固定シフト設定
     # ==========================================
     with tab_fixed:
         st.subheader("基本シフト（ベース）の設定")
@@ -212,7 +228,6 @@ def render_shift_management_page():
             with st.expander(f"🔄 {day_str}曜日 の基本シフト"):
                 day_data = {"曜日": day_str}
                 for slot_name, slot_time in slot_info:
-                    # すでに保存されている内容が完璧に反映され、どれだけ動かしても通信が入らずサクサク動きます！
                     chosen = st.radio(
                         f"**{slot_name}** ({slot_time})",
                         options=options,
@@ -234,9 +249,9 @@ def render_shift_management_page():
                 if success:
                     st.success("🎉 固定シフトのベースを更新しました！次回からこの内容が初期値になります。")
                     st.cache_data.clear()
-                    # 更新成功時にキャッシュを消去して、最新の固定シフト状態を画面に強制再読込させる
-                    if "fixed_cache_key" in st.session_state: del st.session_state["fixed_cache_key"]
-                    if "weekly_cache_key" in st.session_state: del st.session_state["weekly_cache_key"]
+                    # 更新成功時にキャッシュを両方消去して、最新の固定シフト状態を強制再読込させる
+                    st.session_state.pop("fixed_cache_key", None)
+                    st.session_state.pop("weekly_cache_key", None)
                     time.sleep(1)
                     st.rerun() 
                 else:
