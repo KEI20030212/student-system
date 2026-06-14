@@ -2148,3 +2148,92 @@ def save_compatibility_ng_master(df):
     except Exception as e:
         print(f"相性NGマスタの更新エラー: {e}")
         return False
+
+def load_fixed_shift_master(target_type: str, member_name: str) -> pd.DataFrame:
+    """
+    スプレッドシートの「設定_講師固定シフト」または「設定_生徒固定シフト」シートから
+    指定されたメンバーの曜日ごとの固定シフトマスタを取得する（gspread版）
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        # 1. 対象によって読み込むワークシートを切り替え
+        sheet_name = "設定_講師固定シフト" if target_type == "講師" else "設定_生徒固定シフト"
+        
+        try:
+            ws = sh.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            # シートが存在しない場合は空のデータフレームを返す
+            return pd.DataFrame()
+            
+        # 2. 全データを読み込んでDataFrame化
+        records = ws.get_all_records()
+        if not records:
+            return pd.DataFrame()
+            
+        df_all = pd.DataFrame(records)
+        
+        # 3. 選択されたメンバーのデータだけを抽出（「名前」列でフィルタ）
+        # ※シート側の1列目は「名前」というヘッダーにしてください
+        if "名前" in df_all.columns:
+            df_member = df_all[df_all["名前"] == member_name].copy()
+            return df_member
+        else:
+            print(f"⚠️ {sheet_name} に '名前' 列が見つかりません。")
+            return pd.DataFrame()
+
+    except Exception as e:
+        print(f"固定シフトマスタの読み込みエラー: {e}")
+        return pd.DataFrame()
+
+def save_fixed_shift_master(target_type: str, member_name: str, edited_df: pd.DataFrame) -> bool:
+    """
+    設定_講師固定シフト または 設定_生徒固定シフト のデータを上書き保存する
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        sheet_name = "設定_講師固定シフト" if target_type == "講師" else "設定_生徒固定シフト"
+        
+        try:
+            ws = sh.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成
+            ws = sh.add_worksheet(title=sheet_name, rows="100", cols="10")
+            
+        records = ws.get_all_records()
+        if records:
+            df_all = pd.DataFrame(records)
+        else:
+            df_all = pd.DataFrame(columns=["名前", "曜日", "Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"])
+            
+        # 1. 既存データから、今回保存するメンバーの古い固定シフトを削除（リセット）
+        if not df_all.empty and "名前" in df_all.columns:
+            df_all = df_all[df_all["名前"] != member_name]
+            
+        # 2. 今回画面で入力された新しい固定シフトデータを準備
+        new_data = edited_df.copy()
+        new_data.insert(0, "名前", member_name) # 先頭に名前列を追加
+        
+        # ※データ容量節約のため、すべてが空欄(ー)の曜日は除外して保存する
+        slots = ["Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
+        mask = new_data[slots].apply(lambda x: x != "").any(axis=1)
+        new_data = new_data[mask]
+        
+        # 3. 古いデータ（他メンバー分）と新しいデータを結合
+        df_final = pd.concat([df_all, new_data], ignore_index=True)
+        df_final = df_final.fillna("") # NaNを空文字に
+        
+        # 4. スプレッドシートをクリアして一括書き込み
+        ws.clear()
+        if not df_final.empty:
+            data = [df_final.columns.values.tolist()] + df_final.values.tolist()
+            ws.update("A1", data)
+        else:
+            ws.update("A1", [["名前", "曜日", "Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]])
+            
+        return True
+    except Exception as e:
+        print(f"固定シフトマスタの更新エラー: {e}")
+        return False
