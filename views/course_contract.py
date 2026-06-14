@@ -136,5 +136,6 @@ def render_course_contract_page():
                 success = robust_api_call(lambda: save_contract_master(edited_df), fallback_value=False)
                 if success:
                     st.success("✅ スプレッドシートを更新しました！")
+                    st.cache_data.clear()
                     time.sleep(1)
                     st.rerun()
