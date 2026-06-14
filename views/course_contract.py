@@ -10,8 +10,8 @@ def render_course_contract_page():
 
     # 1. データの読み込み
     with st.spinner("データを読み込み中..."):
-        df_contracts = load_contract_master()
-        df_students = get_student_master()
+        df_contracts = robust_api_call(load_contract_master, fallback_value=pd.DataFrame())
+        df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
         
     if df_students.empty:
         st.error("生徒マスタが読み込めません。スプレッドシートの生徒マスタにデータがあるか確認してください。")
@@ -95,6 +95,7 @@ def render_course_contract_page():
                         
                         if success:
                             st.success(f"✅ {sname} さんの契約（{len(new_rows)}科目）を追加しました！")
+                            st.cache_data.clear()  # 🌟 フォーム追加の成功時にもキャッシュをクリア！
                             time.sleep(1.5)
                             st.rerun()
                     elif not skipped_subjects:
@@ -136,6 +137,6 @@ def render_course_contract_page():
                 success = robust_api_call(lambda: save_contract_master(edited_df), fallback_value=False)
                 if success:
                     st.success("✅ スプレッドシートを更新しました！")
-                    st.cache_data.clear()
-                    time.sleep(1)
+                    st.cache_data.clear()  # 一覧保存時もキャッシュをクリア
+                    time.sleep(1.0)
                     st.rerun()
