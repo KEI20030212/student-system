@@ -2066,3 +2066,19 @@ def load_all_shifts(target_type):
     from utils.api_guard import robust_api_call
     import pandas as pd
     return robust_api_call(lambda: _raw_load_all_shifts(target_type), fallback_value=pd.DataFrame())
+
+def load_teacher_master():
+    """設定_講師マスタから講師のスキルと優先度を取得する"""
+    return load_data_from_sheet("設定_講師マスタ")
+
+def save_teacher_master(df):
+    """設定_講師マスタのデータを保存する"""
+    return save_data_to_sheet("設定_講師マスタ", df)
+
+def load_compatibility_ng_master():
+    """設定_相性NGマスタからNGペアのリストを取得する"""
+    return load_data_from_sheet("設定_相性NGマスタ")
+
+def save_compatibility_ng_master(df):
+    """設定_相性NGマスタのデータを保存する"""
+    return save_data_to_sheet("設定_相性NGマスタ", df)
