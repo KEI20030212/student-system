@@ -1903,33 +1903,31 @@ def _get_shift_sheet_name(target_type):
 # ==========================================
 def load_shift_records(target_type, member_name, start_date):
     """
-    指定されたメンバーの1週間分のシフトをスプレッドシートから取得する
+    画面側 (views/shift_management.py) から呼び出される関数。
+    自動翻訳された全データの中から、特定のメンバー＆指定された1週間分を抜き出して画面に返します。
     """
-    sheet_name = _get_shift_sheet_name(target_type)
-    
-    # 💡 定義した共通関数を使ってシートを取得
-    worksheet = get_worksheet(sheet_name) 
-    
-    all_data = worksheet.get_all_records()
-    df_all = pd.DataFrame(all_data)
-    
+    import datetime
+    import pandas as pd
+
+    # 1. 前回作成した自動翻訳ロジックを使って、全データをきれいな縦長で取得
+    df_all = load_all_shifts(target_type)
     if df_all.empty:
         return pd.DataFrame()
-        
-    name_col = "講師名" if target_type == "講師" else "生徒名"
-    
-    if name_col not in df_all.columns:
+
+    # 2. 選択されたメンバー名（講師名 または 生徒名）で絞り込み
+    name_col = f"{target_type}名"
+    if name_col in df_all.columns:
+        df_filtered = df_all[df_all[name_col] == member_name].copy()
+    else:
         return pd.DataFrame()
-        
-    # 1. 該当メンバーのデータのみ抽出
-    df_member = df_all[df_all[name_col] == member_name].copy()
-    
-    # 2. 取得対象の日付リスト（月曜〜日曜の7日分）を文字列で生成して絞り込み
-    date_list = [(start_date + timedelta(days=i)).strftime("%Y/%m/%d") for i in range(7)]
-    df_filtered = df_member[df_member["日付"].isin(date_list)].copy()
-    
-    # NaNを空文字に変換（Streamlitのデータエディタでエラーになるのを防ぐ）
-    df_filtered = df_filtered.fillna("")
+
+    # 3. 画面で選択された「週」（月曜日〜日曜日までの7日間）の日付リストを作成
+    # start_date (datetime.date型) を 'YYYY/MM/DD' の文字列に変換して合わせます
+    date_list = [(start_date + datetime.timedelta(days=i)).strftime("%Y/%m/%d") for i in range(7)]
+
+    # 4. その 7日間 のデータだけをパッと抜き出す
+    if "日付" in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered["日付"].isin(date_list)]
     
     return df_filtered
 
