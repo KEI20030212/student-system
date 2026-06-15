@@ -28,6 +28,24 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
     if not teachers:
         return "<p style='color: gray; font-style: italic; padding: 10px;'>配置された講師がいません。</p>"
         
+    # 📛 生徒名の表示フォーマット用処理（同姓判定）
+    # 表示される生徒リストの中で苗字の被りをカウントします
+    last_names_count = {}
+    for full_name in df_source["生徒名"].dropna().unique():
+        # 全角スペースを半角に変換して分割
+        parts = str(full_name).replace(" ", " ").strip().split(" ")
+        last_name = parts[0]
+        last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
+
+    def get_display_name(full_name):
+        parts = str(full_name).replace(" ", " ").strip().split(" ")
+        last_name = parts[0]
+        # 同姓が複数いる、かつ下の名前が存在する場合に「苗字(下の一文字目)」にする
+        if last_names_count.get(last_name, 0) > 1 and len(parts) > 1:
+            first_name_initial = parts[1][0]
+            return f"{last_name}({first_name_initial})"
+        return last_name
+
     # 🎨 ユーザー指定の科目カラーマップ
     color_map = {
         "国語": "background-color: #C5A059; color: white;", # 黄土色
@@ -91,13 +109,14 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
                 if not df_cell.empty:
                     # 1:2や1:3の授業をセル内で縦に並べる
                     for _, row in df_cell.iterrows():
-                        s_name = row["生徒名"]
+                        # ここで先ほど作った関数を使って表示名を取得します
+                        disp_name = get_display_name(row["生徒名"])
                         subj = row["科目"]
                         style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
                         
                         html += f"""
-                        <span style='{style} padding: 3px 2px; border-radius: 3px; margin: 2px 0; display: inline-block; font-size: 0.75rem; font-weight: bold; width: calc(100% - 4px); text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.1);' title='{subj}'>
-                            {s_name}
+                        <span style='{style} padding: 3px 2px; border-radius: 3px; margin: 2px 0; display: inline-block; font-size: 0.75rem; font-weight: bold; width: calc(100% - 4px); text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.1);' title='{row["生徒名"]} ({subj})'>
+                            {disp_name}
                         </span>
                         """
                 html += "</td>"
