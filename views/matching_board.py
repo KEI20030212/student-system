@@ -126,7 +126,7 @@ def render_matching_page():
         st.stop()
 
     # ------------------------------------------
-    # 2. 校舎マッピングの準備 (生徒・講師) 🌟ここで最初に初期化します！
+    # 2. 校舎マッピングの準備 (生徒・講師)
     # ------------------------------------------
     student_branch_map = {}
     teacher_branch_map = {}
@@ -134,7 +134,6 @@ def render_matching_page():
     # 生徒の校舎をIDから判定
     if not df_student_master.empty and "生徒名" in df_student_master.columns and "生徒ID" in df_student_master.columns:
         for _, row in df_student_master.iterrows():
-            # 生徒名もスペースを消して登録
             s_name = str(row["生徒名"]).replace(" ", "").replace(" ", "").strip()
             sid = str(row.get("生徒ID", "")).strip().lower()
             if s_name:
@@ -158,14 +157,12 @@ def render_matching_page():
     # 講師の校舎を特定 (マスタ優先、講師IDによる判定)
     if not df_teacher_master.empty and "講師名" in df_teacher_master.columns:
         for _, row in df_teacher_master.iterrows():
-            # 講師名の全角・半角スペースをすべて消去してキーにする
             t_name = str(row["講師名"]).replace(" ", "").replace(" ", "").strip()
             if not t_name:
                 continue
                 
             t_branch = row.get("校舎", "")
             
-            # 校舎が空、または列自体がないなら講師IDから推測
             if not t_branch or pd.isna(t_branch):
                 t_id = str(row.get("講師ID", "")).strip().lower()
                 if t_id.startswith("t"):
@@ -184,7 +181,6 @@ def render_matching_page():
             t_name_raw = row.get("講師名")
             if pd.isna(t_name_raw):
                 continue
-            # シフト側の講師名もスペースを消去
             t_name = str(t_name_raw).replace(" ", "").replace(" ", "").strip()
             
             e_branch = row.get("抽出校舎")
@@ -201,7 +197,7 @@ def render_matching_page():
                     teacher_branch_map[t_name] = "両校"
 
     # ------------------------------------------
-    # 2. スケジュール作成・確認範囲の選択
+    # 3. スケジュール作成・確認範囲の選択
     # ------------------------------------------
     st.subheader("📅 表示・作成範囲の選択")
     st.caption("任意の期間をカレンダーから指定して自動生成・確認ができます。")
@@ -271,8 +267,8 @@ def render_matching_page():
                 schedule = {d: {s: {} for s in slots} for d in dates_in_scope}
                 busy_students = {d: {s: set() for s in slots} for d in dates_in_scope}
                 
-                # 講師の「一日における現在勤務中の校舎」を記録する辞書（移動ペナルティ計算用）
-                teacher_daily_branch = {d: {} for d in dates_in_scope}
+                # 講師の「一日におけるコマごとの配置校舎」を記録する辞書（厳密な移動制限用）
+                teacher_slot_branches = {d: {} for d in dates_in_scope}
                 
                 # 〇シフトの反映
                 if not t_shifts.empty:
@@ -284,7 +280,7 @@ def render_matching_page():
                             if row.get(s) == "〇":
                                 schedule[d][s][t_name] = []
                                 
-                # 既存授業の反映（これによって既に特定の校舎での勤務が決まっているかも記録）
+                # 既存授業の反映（既に特定のコマで校舎が決まっている状況を記録）
                 if not df_lessons.empty and "日付" in df_lessons.columns:
                     for _, row in df_lessons.iterrows():
                         d = row.get("日付")
@@ -299,14 +295,13 @@ def render_matching_page():
                             schedule[d][s][t_name].append(f"{s_name}({subj[0] if subj else '済'})")
                             busy_students[d][s].add(s_name)
                             
-                            # 既にアサイン済みの校舎を記録
-                            existing_s_branch = student_branch_map.get(s_name)
+                            # すでに配置されている生徒の校舎を記録
+                            s_name_clean = str(s_name).replace(" ", "").replace(" ", "").strip()
+                            existing_s_branch = student_branch_map.get(s_name_clean)
                             if existing_s_branch in ["田端", "東十条"]:
-                                curr_b = teacher_daily_branch[d].get(t_name)
-                                if not curr_b:
-                                    teacher_daily_branch[d][t_name] = existing_s_branch
-                                elif curr_b != existing_s_branch:
-                                    teacher_daily_branch[d][t_name] = "混在"
+                                if t_name not in teacher_slot_branches[d]:
+                                    teacher_slot_branches[d][t_name] = {}
+                                teacher_slot_branches[d][t_name][s] = existing_s_branch
 
                 # 自動マッチング実行
                 new_lessons = []
@@ -328,7 +323,8 @@ def render_matching_page():
                                     
                                 target_subject = list(contract_remains[s_name].keys())[0]
                                 available_teachers = schedule[d][s]
-                                s_branch = student_branch_map.get(s_name, "不明")
+                                s_name_clean = str(s_name).replace(" ", "").replace(" ", "").strip()
+                                s_branch = student_branch_map.get(s_name_clean, "不明")
                                 
                                 best_teacher = None
                                 best_score = 9999
@@ -347,31 +343,54 @@ def render_matching_page():
                                     # 🛑 2. 同じコマ(同時刻)に別校舎の生徒が混ざるのを防ぐ
                                     branch_conflict = False
                                     for assigned_s in assigned_students:
-                                        # assigned_s は "生徒名(科目)" などの形式のため、生徒名を抽出
-                                        a_name = assigned_s.split('(')[0]
+                                        a_name = assigned_s.split('(')[0].replace(" ", "").replace(" ", "").strip()
                                         a_branch = student_branch_map.get(a_name, "不明")
-                                        # すでにアサインされている生徒と、今回アサインする生徒の校舎が異なる場合はNG
                                         if s_branch in ["田端", "東十条"] and a_branch in ["田端", "東十条"] and s_branch != a_branch:
                                             branch_conflict = True
                                             break
-                                    
                                     if branch_conflict:
                                         continue # 同コマ内での校舎混在NG
 
-                                    # ⚠️ 「両校」講師の同日内移動ペナルティ計算
-                                    travel_penalty = 0
-                                    if t_branch == "両校" and s_branch in ["田端", "東十条"]:
-                                        current_day_branch = teacher_daily_branch[d].get(t_name)
-                                        if current_day_branch and current_day_branch != s_branch and current_day_branch != "混在":
-                                            # すでにその日別の校舎で教えている場合、重いペナルティ（なるべく別講師を探させる）
-                                            travel_penalty = 100 
-                                            
+                                    # 🛑 3. 【追加要望】同日内の校舎またぎ絶対NGルール
+                                    if s_branch in ["田端", "東十条"]:
+                                        t_slots_dict = teacher_slot_branches[d].get(t_name, {})
+                                        
+                                        am_slots = ["Aコマ", "Bコマ"]
+                                        pm_slots = ["0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
+                                        
+                                        conflict_rule = False
+                                        
+                                        # 現在検討中のコマが午前グループの場合
+                                        if s in am_slots:
+                                            # 同一グループ内で、すでに違う校舎がアサインされていたらNG
+                                            for am_s in am_slots:
+                                                if t_slots_dict.get(am_s) and t_slots_dict.get(am_s) != s_branch:
+                                                    conflict_rule = True
+                                                    break
+                                            # Bコマを検討中かつ、すでに0コマに違う校舎がいたらNG
+                                            if s == "Bコマ" and t_slots_dict.get("0コマ") and t_slots_dict.get("0コマ") != s_branch:
+                                                conflict_rule = True
+                                                
+                                        # 現在検討中のコマが午後グループの場合
+                                        elif s in pm_slots:
+                                            # 同一グループ内で、すでに違う校舎がアサインされていたらNG
+                                            for pm_s in pm_slots:
+                                                if t_slots_dict.get(pm_s) and t_slots_dict.get(pm_s) != s_branch:
+                                                    conflict_rule = True
+                                                    break
+                                            # 0コマを検討中かつ、すでにBコマに違う校舎がいたらNG
+                                            if s == "0コマ" and t_slots_dict.get("Bコマ") and t_slots_dict.get("Bコマ") != s_branch:
+                                                conflict_rule = True
+                                                
+                                        if conflict_rule:
+                                            continue # 移動時間不足のため配置NG
+
                                     skills = teacher_skills.get(t_name, {"priority": 5, "subjects": []})
                                     can_teach = target_subject in skills["subjects"] if skills["subjects"] else True
                                     
                                     if can_teach:
                                         # スコアが低いほど優先的にアサイン
-                                        score = (skills["priority"] * 10) + (len(assigned_students) * 15) + travel_penalty
+                                        score = (skills["priority"] * 10) + (len(assigned_students) * 15)
                                         if score < best_score:
                                             best_score = score
                                             best_teacher = t_name
@@ -380,13 +399,11 @@ def render_matching_page():
                                     schedule[d][s][best_teacher].append(f"{s_name}({target_subject[0]})")
                                     busy_students[d][s].add(s_name)
                                     
-                                    # その日その講師が勤務している校舎を記録・更新
+                                    # その講師がその日そのコマで勤務する校舎を記録
                                     if s_branch in ["田端", "東十条"]:
-                                        curr_b = teacher_daily_branch[d].get(best_teacher)
-                                        if not curr_b:
-                                            teacher_daily_branch[d][best_teacher] = s_branch
-                                        elif curr_b != s_branch:
-                                            teacher_daily_branch[d][best_teacher] = "混在"
+                                        if best_teacher not in teacher_slot_branches[d]:
+                                            teacher_slot_branches[d][best_teacher] = {}
+                                        teacher_slot_branches[d][best_teacher][s] = s_branch
                                     
                                     contract_remains[s_name][target_subject] -= 1
                                     if contract_remains[s_name][target_subject] <= 0:
@@ -460,7 +477,7 @@ def render_matching_page():
                             st.error("❌ 保存に失敗しました。ネットワーク状況を確認してください。")
 
     # ------------------------------------------
-    # 【タブ2】 確定済みデータの常時確認
+    # 【タブ2】 確定済みデータの常時確認（校舎ごとに表を分離）🌟
     # ------------------------------------------
     with tab_view:
         st.subheader(f"📋 確定済みの授業予定表")
@@ -478,10 +495,39 @@ def render_matching_page():
                     for idx, w_dates in enumerate(view_weeks[:4]):
                         with view_tabs[idx]:
                             df_view_week_data = df_scope_lessons[df_scope_lessons["日付"].isin(w_dates)]
-                            html_code_view = generate_weekly_matrix_html(
-                                df_view_week_data, w_dates, slots, days_of_week_map, teacher_branch_map
-                            )
-                            st.markdown(html_code_view, unsafe_allow_html=True)
+                            
+                            if not df_view_week_data.empty:
+                                df_view_week_data = df_view_week_data.copy()
+                                # 生徒名から校舎を判定して列を追加
+                                df_view_week_data["校舎"] = df_view_week_data["生徒名"].apply(
+                                    lambda x: student_branch_map.get(str(x).replace(" ", "").replace(" ", "").strip(), "不明")
+                                )
+                                
+                                # 校舎ごとにデータをフィルタリング
+                                df_tabata = df_view_week_data[df_view_week_data["校舎"] == "田端"]
+                                df_higashijujo = df_view_week_data[df_view_week_data["校舎"] == "東十条"]
+                                
+                                # 🏫 田端校舎の表
+                                st.markdown("### 🏫 田端校舎")
+                                if not df_tabata.empty:
+                                    html_code_tabata = generate_weekly_matrix_html(
+                                        df_tabata, w_dates, slots, days_of_week_map, teacher_branch_map
+                                    )
+                                    st.markdown(html_code_tabata, unsafe_allow_html=True)
+                                else:
+                                    st.caption("この週の田端校舎の確定予定はありません。")
+                                    
+                                st.write("") # スペース空け
+                                
+                                # 🏫 東十条校舎の表
+                                st.markdown("### 🏫 東十条校舎")
+                                if not df_higashijujo.empty:
+                                    html_code_higashijujo = generate_weekly_matrix_html(
+                                        df_higashijujo, w_dates, slots, days_of_week_map, teacher_branch_map
+                                    )
+                                    st.markdown(html_code_higashijujo, unsafe_allow_html=True)
+                                else:
+                                    st.caption("この週の東十条校舎の確定予定はありません。")
             else:
                 st.info("ℹ️ 指定された期間内に確定登録された授業はまだありません。")
         else:
