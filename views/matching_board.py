@@ -61,7 +61,7 @@ def render_matching_page():
     st.divider()
 
     # ==========================================================
-    # 新機能：常時確認タブの導入
+    # 常時確認タブの導入
     # ==========================================================
     tab_create, tab_view = st.tabs(["✨ 新しい予定表を作成する", "📋 確定済みの予定表を確認する"])
 
@@ -137,7 +137,7 @@ def render_matching_page():
                             schedule[d][s][t_name].append(f"{s_name}({subj[0] if subj else '済'})")
                             busy_students[d][s].add(s_name)
 
-                # ⑤ 自動マッチング実行！
+                # ⑤ 自動マッチング実行！ (1:2 優先、やむを得ない場合は 1:3 許容)
                 new_lessons = []
                 for d in dates_in_week:
                     for s in slots:
@@ -149,41 +149,58 @@ def render_matching_page():
                                 if row.get(s) == "〇" and s_name in contract_remains and s_name not in busy_students[d][s]:
                                     available_students.append(s_name)
                                     
-                        for s_name in available_students:
-                            if s_name not in contract_remains: continue
-                                
-                            target_subject = list(contract_remains[s_name].keys())[0]
-                            available_teachers = schedule[d][s]
-                            
-                            best_teacher = None
-                            best_priority = 999
-                            
-                            for t_name, assigned_students in available_teachers.items():
-                                if len(assigned_students) >= 2:
-                                    continue
+                        unassigned_students = available_students.copy()
+                        
+                        # 🌟 フェーズ1(上限2人) -> フェーズ2(上限3人) の順でアサインを試みる
+                        for max_students in [2, 3]:
+                            for s_name in unassigned_students[:]:
+                                if s_name not in contract_remains: continue
                                     
-                                skills = teacher_skills.get(t_name, {"priority": 5, "subjects": []})
-                                can_teach = target_subject in skills["subjects"] if skills["subjects"] else True
+                                target_subject = list(contract_remains[s_name].keys())[0]
+                                available_teachers = schedule[d][s]
                                 
-                                if can_teach and skills["priority"] < best_priority:
-                                    best_priority = skills["priority"]
-                                    best_teacher = t_name
+                                best_teacher = None
+                                best_score = 9999
+                                
+                                for t_name, assigned_students in available_teachers.items():
+                                    if len(assigned_students) >= max_students:
+                                        continue
                                         
-                            if best_teacher:
-                                schedule[d][s][best_teacher].append(f"{s_name}({target_subject[0]})")
-                                busy_students[d][s].add(s_name)
-                                
-                                contract_remains[s_name][target_subject] -= 1
-                                if contract_remains[s_name][target_subject] <= 0:
-                                    del contract_remains[s_name][target_subject]
-                                if not contract_remains[s_name]:
-                                    del contract_remains[s_name]
+                                    skills = teacher_skills.get(t_name, {"priority": 5, "subjects": []})
+                                    can_teach = target_subject in skills["subjects"] if skills["subjects"] else True
                                     
-                                new_lessons.append({
-                                    "授業ID": f"SCH-{d.replace('/', '')}-{s}-{s_name}",
-                                    "日付": d, "コマ名": s, "講師名": best_teacher,
-                                    "生徒名": s_name, "科目": target_subject, "指導形態": "1:2"
-                                })
+                                    if can_teach:
+                                        # 💡 平準化ロジック：受け持ち人数が少ない講師を優先し、人数バランスを均等に保つ
+                                        score = skills["priority"] * 10 + len(assigned_students)
+                                        if score < best_score:
+                                            best_score = score
+                                            best_teacher = t_name
+                                            
+                                if best_teacher:
+                                    schedule[d][s][best_teacher].append(f"{s_name}({target_subject[0]})")
+                                    busy_students[d][s].add(s_name)
+                                    
+                                    contract_remains[s_name][target_subject] -= 1
+                                    if contract_remains[s_name][target_subject] <= 0:
+                                        del contract_remains[s_name][target_subject]
+                                    if not contract_remains[s_name]:
+                                        del contract_remains[s_name]
+                                        
+                                    new_lessons.append({
+                                        "授業ID": f"SCH-{d.replace('/', '')}-{s}-{s_name}",
+                                        "日付": d, "コマ名": s, "講師名": best_teacher,
+                                        "生徒名": s_name, "科目": target_subject, "指導形態": "" # 後で計算
+                                    })
+                                    unassigned_students.remove(s_name)
+
+                # 🌟 全てのマッチングが終わった後、各レッスンの「指導形態(1:X)」を確定させる
+                for lesson in new_lessons:
+                    d_val = lesson["日付"]
+                    s_val = lesson["コマ名"]
+                    t_val = lesson["講師名"]
+                    # 既存の生徒と新規の生徒を合わせた最終的な人数をカウント
+                    total_students = len(schedule[d_val][s_val][t_val])
+                    lesson["指導形態"] = f"1:{total_students}"
 
                 # ⑥ プレビュー用マトリクス表の作成
                 all_teachers = set()
@@ -241,7 +258,7 @@ def render_matching_page():
                         st.warning("新たに割り当てられた授業がないため、保存をスキップしました。")
 
     # ------------------------------------------
-    # 【タブ2】 確定済みデータの常時確認（新機能）
+    # 【タブ2】 確定済みデータの常時確認
     # ------------------------------------------
     with tab_view:
         st.subheader(f"📋 確定済みの授業予定表")
