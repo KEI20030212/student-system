@@ -198,7 +198,9 @@ def render_account_manager_page():
     # 💡 科目と評価のリスト定義
     SUBJECTS = ["英語", "数学", "国語", "理科", "社会"]
     SKILL_LEVELS = ["×", "△", "〇", "◎"]
-    MASTER_COLUMNS = ["講師名"] + SUBJECTS + ["基本優先度"]
+    
+    # 🌟 修正：「講師ID」を列の定義に最初から含める
+    MASTER_COLUMNS = ["講師ID", "講師名"] + SUBJECTS + ["基本優先度"]
 
     if df_teachers.empty:
         df_teachers = pd.DataFrame(columns=MASTER_COLUMNS)
@@ -226,30 +228,32 @@ def render_account_manager_page():
                 return "×"
             df_teachers[sub] = df_teachers[sub].apply(convert_skill)
 
-    # 画面表示用にカラムの順番を整頓
+    # 画面表示用にカラムの順番を整頓（ここで講師IDが残るようになります）
     df_teachers = df_teachers[MASTER_COLUMNS]
 
     # 💡 【自動化ギミック】アカウント一覧にいるが、講師マスタにいない講師を自動検出して追加
     if accounts_dict:
-        account_teacher_names = [data.get('講師名', '').strip() for uid, data in accounts_dict.items() if data.get('講師名')]
         existing_teachers = df_teachers["講師名"].tolist()
-        missing_teachers = [t for t in account_teacher_names if t not in existing_teachers and t != ""]
         
-        if missing_teachers:
-            st.info(f"💡 アカウントマスタから新しい講師（{len(missing_teachers)}名）を検出しました。下の表に入力して保存ボタンを押すと登録完了です。")
-            
-            new_rows_data = []
-            for t in missing_teachers:
-                row_data = {"講師名": t, "基本優先度": 3}
+        # 🌟 修正：講師名だけでなく、対応するユーザーID（uid）も一緒に取得して追加するように変更
+        new_rows_data = []
+        for uid, data in accounts_dict.items():
+            t_name = data.get('講師名', '').strip()
+            if t_name and t_name not in existing_teachers:
+                row_data = {"講師ID": uid, "講師名": t_name, "基本優先度": 3}
                 for sub in SUBJECTS:
-                    row_data[sub] = "×"  # 新規追加の講師は一旦全科目「×」
+                    row_data[sub] = "×"
                 new_rows_data.append(row_data)
-                
+        
+        if new_rows_data:
+            st.info(f"💡 アカウントマスタから新しい講師（{len(new_rows_data)}名）を検出しました。下の表に入力して保存ボタンを押すと登録完了です。")
             new_rows = pd.DataFrame(new_rows_data)
             df_teachers = pd.concat([df_teachers, new_rows], ignore_index=True)
 
     # 💡 Streamlitの表のカラム設定
     col_config = {
+        # 🌟 変更：講師IDを表示しつつ、勝手に編集されないように disabled=True にする
+        "講師ID": st.column_config.TextColumn("🔑 講師ID", disabled=True),
         "講師名": st.column_config.TextColumn("👩‍🏫 講師名", required=True),
         "基本優先度": st.column_config.NumberColumn("👑 基本優先度", min_value=1, max_value=10, step=1, default=3, help="1が最優先（コマ数を多く確保します）。")
     }
