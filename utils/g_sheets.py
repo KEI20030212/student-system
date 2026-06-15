@@ -2055,115 +2055,102 @@ def _raw_load_all_shifts(target_type):
     ws = get_worksheet(sheet_name)
     all_values = ws.get_all_values()
     
-    # シートが空、またはデータが足りない場合は安全に空の DataFrame を返す
-    if not all_values or len(all_values) < 3:
+    # シートが空の場合は安全に空の DataFrame を返す
+    if not all_values or len(all_values) < 1:
         return pd.DataFrame()
         
-    # 2行目が日付（例: ["", "", "6/28", "6/29", ...]）
-    date_row = all_values[1]
-    
-    # 時間帯からシステム用の「コマ名」への翻訳辞書
-    time_to_slot = {
-        "9:30": "Aコマ",
-        "11:10": "Bコマ",
-        "13:10": "0コマ",
-        "14:50": "1コマ",
-        "16:40": "2コマ",
-        "16:20": "2コマ", # 16:20 という入力ミス用
-        "18:20": "3コマ",
-        "20:00": "4コマ"
-    }
-    
-    current_year = datetime.date.today().year
-    
-    # 日付列の場所をマッピング（列番号 -> "YYYY/MM/DD"）
-    date_map = {}
-    for col_idx in range(2, len(date_row)):
-        raw_date = date_row[col_idx].strip()
-        if not raw_date:
-            continue
+    # ==========================================
+    # パターンA：【講師】新・横長フォーマットの解析
+    # ==========================================
+    if target_type == "講師":
+        if len(all_values) < 3:
+            return pd.DataFrame()
             
-        # "6/28" のような文字列から「月」と「日」を抽出
-        match = re.search(r'(\d{1,2})/(\d{1,2})', raw_date)
-        if match:
-            m = int(match.group(1))
-            d = int(match.group(2))
-            formatted_date = f"{current_year}/{m:02d}/{d:02d}"
-            date_map[col_idx] = formatted_date
-
-    # 横長のデータを解析して縦長データに組み替える箱
-    shift_data = {}
-    current_name = ""
-    
-    for row in all_values[2:]:
-        if len(row) < 2:
-            continue
-            
-        # A列: 名前またはカテゴリ行
-        raw_name = row[0].strip()
-        if raw_name:
-            # 「社員」や「B1」などの見出し行（カテゴリ）はスキップ
-            if raw_name in ["社員", "M1", "M2", "B1", "B2", "B3", "B4", "B5"]:
+        date_row = all_values[1] # 2行目が日付
+        
+        time_to_slot = {
+            "9:30": "Aコマ", "11:10": "Bコマ", "13:10": "0コマ",
+            "14:50": "1コマ", "16:40": "2コマ", "16:20": "2コマ",
+            "18:20": "3コマ", "20:00": "4コマ"
+        }
+        current_year = datetime.date.today().year
+        
+        # 日付列のマッピング
+        date_map = {}
+        for col_idx in range(2, len(date_row)):
+            raw_date = date_row[col_idx].strip()
+            if not raw_date:
                 continue
-            # "槌屋\n両校" のように改行されていても、最初の名前の部分だけを抽出
-            current_name = raw_name.split('\n')[0].strip()
-            
-        if not current_name:
-            continue
-            
-        # B列: 時間帯
-        time_str = row[1].strip()
-        slot_name = time_to_slot.get(time_str)
+            match = re.search(r'(\d{1,2})/(\d{1,2})', raw_date)
+            if match:
+                m = int(match.group(1))
+                d = int(match.group(2))
+                date_map[col_idx] = f"{current_year}/{m:02d}/{d:02d}"
+
+        # 縦長データへの組み替え
+        shift_data = {}
+        current_name = ""
         
-        # 該当するコマがない（空白行など）ならスキップ
-        if not slot_name:
-            continue
-            
-        # C列以降: 各日付のシフト記号を回収
-        for col_idx, date_str in date_map.items():
-            if col_idx < len(row):
-                val = row[col_idx].strip()
+        for row in all_values[2:]:
+            if len(row) < 2:
+                continue
+            raw_name = row[0].strip()
+            if raw_name:
+                if raw_name in ["社員", "M1", "M2", "B1", "B2", "B3", "B4", "B5"]:
+                    continue
+                current_name = raw_name.split('\n')[0].strip()
                 
-                # "-" や 空白 はシステム上「シフト提出なし（空文字）」として扱う
-                if val in ["-", ""]:
-                    val = ""
+            if not current_name:
+                continue
+                
+            time_str = row[1].strip()
+            slot_name = time_to_slot.get(time_str)
+            if not slot_name:
+                continue
+                
+            for col_idx, date_str in date_map.items():
+                if col_idx < len(row):
+                    val = row[col_idx].strip()
+                    if val in ["-", ""]:
+                        val = ""
+                        
+                    if date_str not in shift_data:
+                        shift_data[date_str] = {}
+                    if current_name not in shift_data[date_str]:
+                        shift_data[date_str][current_name] = {
+                            "日付": date_str, "曜日": "", f"{target_type}名": current_name,
+                            "Aコマ": "", "Bコマ": "", "0コマ": "", "1コマ": "", "2コマ": "", "3コマ": "", "4コマ": ""
+                        }
+                    shift_data[date_str][current_name][slot_name] = val
                     
-                if date_str not in shift_data:
-                    shift_data[date_str] = {}
-                if current_name not in shift_data[date_str]:
-                    shift_data[date_str][current_name] = {
-                        "日付": date_str,
-                        "曜日": "", 
-                        f"{target_type}名": current_name,
-                        "Aコマ": "", "Bコマ": "", "0コマ": "", "1コマ": "", "2コマ": "", "3コマ": "", "4コマ": ""
-                    }
-                
-                # 該当する日付・講師/生徒・コマに記号（〇, ×, △）を代入
-                shift_data[date_str][current_name][slot_name] = val
-                
-    # 辞書形式からリスト形式に変換し、曜日を自動計算
-    result_list = []
-    days_of_week = ["月", "火", "水", "木", "金", "土", "日"]
-    
-    for date_str, name_dict in shift_data.items():
-        y, m, d = map(int, date_str.split('/'))
-        dt = datetime.date(y, m, d)
-        day_str = days_of_week[dt.weekday()]
+        result_list = []
+        days_of_week = ["月", "火", "水", "木", "金", "土", "日"]
         
-        for name, data in name_dict.items():
-            data["曜日"] = day_str
-            result_list.append(data)
-            
-    return pd.DataFrame(result_list)
+        for date_str, name_dict in shift_data.items():
+            y, m, d = map(int, date_str.split('/'))
+            dt = datetime.date(y, m, d)
+            day_str = days_of_week[dt.weekday()]
+            for name, data in name_dict.items():
+                data["曜日"] = day_str
+                result_list.append(data)
+                
+        return pd.DataFrame(result_list)
+        
+    # ==========================================
+    # パターンB：【生徒】旧・縦長フォーマットの解析
+    # ==========================================
+    else:
+        # 重複エラーが起きないよう get_all_records を使わずに安全に読み込みます
+        headers = all_values[0]
+        data = all_values[1:]
+        return pd.DataFrame(data, columns=headers)
 
 
 @st.cache_data(ttl=300)
 def load_all_shifts(target_type):
     from utils.api_guard import robust_api_call
     import pandas as pd
-    # 既存の robust_api_call を使って、安全に上記のパース処理を実行します
     return robust_api_call(lambda: _raw_load_all_shifts(target_type), fallback_value=pd.DataFrame())
-
 # ==========================================
 # 🛡️ 修正：講師マスタの読み書き（お手本の体裁に統一）
 # ==========================================
