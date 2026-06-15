@@ -13,11 +13,14 @@ from utils.g_sheets import (
     load_teacher_master
 )
 
-def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map):
+def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map, teacher_branch_map=None):
     """
     1週間分のデータを『縦軸：講師名』『横軸：日付（曜日）』のマトリクスHTMLとして生成する関数
     授業科目を指定された背景色で色分けします。
     """
+    if teacher_branch_map is None:
+        teacher_branch_map = {}
+        
     if df_source.empty or not dates_for_week:
         return "<p style='color: gray; font-style: italic; padding: 10px;'>この期間の授業予定はありません。</p>"
         
@@ -61,8 +64,11 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
     
     # --- データ行 (講師ごと) ---
     for t in teachers:
+        t_branch = teacher_branch_map.get(t, "")
+        branch_html = f"<br><span style='font-size: 0.7rem; color: #888; font-weight: normal; background-color:#eee; padding:2px 4px; border-radius:3px;'>{t_branch}</span>" if t_branch else ""
+        
         html += "<tr style='border-bottom: 1px solid #eee;'>"
-        html += f"<td style='border: 1px solid #ddd; padding: 10px; font-weight: bold; background-color: #fafafa; font-size: 0.85rem;'>{t}</td>"
+        html += f"<td style='border: 1px solid #ddd; padding: 10px; font-weight: bold; background-color: #fafafa; font-size: 0.85rem;'>{t}{branch_html}</td>"
         
         for d in dates_for_week:
             html += "<td style='border: 1px solid #ddd; padding: 6px; vertical-align: top; width: 14%;'>"
@@ -96,20 +102,19 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
         html += "</tr>"
         
     html += "</table></div>"
-    
-    # 💡【修正ポイント】改行と先頭の空白（インデント）を全て削除し、Markdownのコードブロックと誤認されるのを防ぐ
     html = "".join([line.strip() for line in html.split("\n")])
     return html
 
 
 def render_matching_page():
     st.header("🧩 スマート・自動予定表作成")
-    st.write("ボタン一つで、生徒の契約残数と双方のシフト・指導科目を計算し、授業予定表を期間指定で自動生成します🚀")
+    st.write("生徒と講師のシフト・指導科目・**所属校舎**を考慮して、最適な授業予定表を自動生成します🚀")
 
     # ------------------------------------------
     # 1. 本番データのロード
     # ------------------------------------------
     with st.spinner("スプレッドシートから最新データを同期中..."):
+        df_student_master = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
         df_contracts = robust_api_call(load_contract_master, fallback_value=pd.DataFrame())
         df_lessons = robust_api_call(load_lesson_schedule, fallback_value=pd.DataFrame())
         df_teacher_shifts = robust_api_call(lambda: load_all_shifts("講師"), fallback_value=pd.DataFrame())
@@ -121,10 +126,48 @@ def render_matching_page():
         st.stop()
 
     # ------------------------------------------
+    # 校舎マッピングの準備 (生徒・講師)
+    # ------------------------------------------
+    student_branch_map = {}
+    teacher_branch_map = {}
+
+    # 生徒の校舎をIDから判定 ('t'始まり=田端, 'h'始まり=東十条)
+    if not df_student_master.empty and "生徒名" in df_student_master.columns and "生徒ID" in df_student_master.columns:
+        for _, row in df_student_master.iterrows():
+            sid = str(row.get("生徒ID", "")).strip().lower()
+            if sid.startswith("t"):
+                student_branch_map[row["生徒名"]] = "田端"
+            elif sid.startswith("h"):
+                student_branch_map[row["生徒名"]] = "東十条"
+
+    # 生徒マスタになければ契約・シフトデータからもフォールバック推測
+    for df_temp in [df_contracts, df_student_shifts]:
+        if not df_temp.empty and "生徒ID" in df_temp.columns and "生徒名" in df_temp.columns:
+            for _, row in df_temp.iterrows():
+                s_name = row["生徒名"]
+                if s_name not in student_branch_map:
+                    sid = str(row.get("生徒ID", "")).strip().lower()
+                    if sid.startswith("t"):
+                        student_branch_map[s_name] = "田端"
+                    elif sid.startswith("h"):
+                        student_branch_map[s_name] = "東十条"
+
+    # 講師の校舎を特定 (マスタ優先、シフトの「校舎」列も確認)
+    if not df_teacher_master.empty and "校舎" in df_teacher_master.columns:
+        for _, row in df_teacher_master.iterrows():
+            teacher_branch_map[row["講師名"]] = row["校舎"]
+            
+    if not df_teacher_shifts.empty and "校舎" in df_teacher_shifts.columns:
+        for _, row in df_teacher_shifts.iterrows():
+            t_name = row.get("講師名")
+            if t_name and t_name not in teacher_branch_map and pd.notna(row.get("校舎")):
+                teacher_branch_map[t_name] = row["校舎"]
+
+    # ------------------------------------------
     # 2. スケジュール作成・確認範囲の選択
     # ------------------------------------------
     st.subheader("📅 表示・作成範囲の選択")
-    st.caption("1ヶ月一括や、任意の期間をカレンダーから自由に指定して自動生成・確認ができます。")
+    st.caption("任意の期間をカレンダーから指定して自動生成・確認ができます。")
     
     col1, col2 = st.columns(2)
     today = datetime.date.today()
@@ -152,11 +195,12 @@ def render_matching_page():
     with tab_create:
         btn_label = f"✨ {start_date.strftime('%m/%d')} 〜 {end_date.strftime('%m/%d')} の予定表を一括自動生成する"
         if st.button(btn_label, type="primary", use_container_width=True):
-            with st.spinner("高度な一括マッチングアルゴリズムを実行中...（数秒かかります）"):
+            with st.spinner("校舎間の移動制限などを考慮してアルゴリズムを実行中...（数秒かかります）"):
                 
                 t_shifts = df_teacher_shifts[df_teacher_shifts["日付"].isin(dates_in_scope)] if not df_teacher_shifts.empty else pd.DataFrame()
                 s_shifts = df_student_shifts[df_student_shifts["日付"].isin(dates_in_scope)] if not df_student_shifts.empty else pd.DataFrame()
                 
+                # 契約残数の計算
                 contract_remains = {} 
                 for _, row in df_contracts.iterrows():
                     s_name = row["生徒名"]
@@ -173,6 +217,7 @@ def render_matching_page():
                             contract_remains[s_name] = {}
                         contract_remains[s_name][subj] = remains
 
+                # 講師の指導スキルの用意
                 teacher_skills = {}
                 if not df_teacher_master.empty:
                     for _, row in df_teacher_master.iterrows():
@@ -189,6 +234,10 @@ def render_matching_page():
                 schedule = {d: {s: {} for s in slots} for d in dates_in_scope}
                 busy_students = {d: {s: set() for s in slots} for d in dates_in_scope}
                 
+                # 講師の「一日における現在勤務中の校舎」を記録する辞書（移動ペナルティ計算用）
+                teacher_daily_branch = {d: {} for d in dates_in_scope}
+                
+                # 〇シフトの反映
                 if not t_shifts.empty:
                     for _, row in t_shifts.iterrows():
                         d = row["日付"]
@@ -198,6 +247,7 @@ def render_matching_page():
                             if row.get(s) == "〇":
                                 schedule[d][s][t_name] = []
                                 
+                # 既存授業の反映（これによって既に特定の校舎での勤務が決まっているかも記録）
                 if not df_lessons.empty and "日付" in df_lessons.columns:
                     for _, row in df_lessons.iterrows():
                         d = row.get("日付")
@@ -211,7 +261,17 @@ def render_matching_page():
                                 schedule[d][s][t_name] = []
                             schedule[d][s][t_name].append(f"{s_name}({subj[0] if subj else '済'})")
                             busy_students[d][s].add(s_name)
+                            
+                            # 既にアサイン済みの校舎を記録
+                            existing_s_branch = student_branch_map.get(s_name)
+                            if existing_s_branch in ["田端", "東十条"]:
+                                curr_b = teacher_daily_branch[d].get(t_name)
+                                if not curr_b:
+                                    teacher_daily_branch[d][t_name] = existing_s_branch
+                                elif curr_b != existing_s_branch:
+                                    teacher_daily_branch[d][t_name] = "混在"
 
+                # 自動マッチング実行
                 new_lessons = []
                 for d in dates_in_scope:
                     for s in slots:
@@ -231,6 +291,7 @@ def render_matching_page():
                                     
                                 target_subject = list(contract_remains[s_name].keys())[0]
                                 available_teachers = schedule[d][s]
+                                s_branch = student_branch_map.get(s_name, "不明")
                                 
                                 best_teacher = None
                                 best_score = 9999
@@ -239,11 +300,27 @@ def render_matching_page():
                                     if len(assigned_students) >= max_students:
                                         continue
                                         
+                                    t_branch = teacher_branch_map.get(t_name, "両校")
+                                    
+                                    # 🛑 校舎の絶対ルールによるブロック
+                                    if s_branch in ["田端", "東十条"]:
+                                        if t_branch in ["田端", "東十条"] and t_branch != s_branch:
+                                            continue # 所属校舎が違うためNG
+                                            
+                                    # ⚠️ 「両校」講師の同日内移動ペナルティ計算
+                                    travel_penalty = 0
+                                    if t_branch == "両校" and s_branch in ["田端", "東十条"]:
+                                        current_day_branch = teacher_daily_branch[d].get(t_name)
+                                        if current_day_branch and current_day_branch != s_branch and current_day_branch != "混在":
+                                            # すでにその日別の校舎で教えている場合、重いペナルティ（なるべく別講師を探させる）
+                                            travel_penalty = 100 
+                                            
                                     skills = teacher_skills.get(t_name, {"priority": 5, "subjects": []})
                                     can_teach = target_subject in skills["subjects"] if skills["subjects"] else True
                                     
                                     if can_teach:
-                                        score = skills["priority"] * 10 + len(assigned_students)
+                                        # スコアが低いほど優先的にアサイン
+                                        score = (skills["priority"] * 10) + (len(assigned_students) * 15) + travel_penalty
                                         if score < best_score:
                                             best_score = score
                                             best_teacher = t_name
@@ -251,6 +328,14 @@ def render_matching_page():
                                 if best_teacher:
                                     schedule[d][s][best_teacher].append(f"{s_name}({target_subject[0]})")
                                     busy_students[d][s].add(s_name)
+                                    
+                                    # その日その講師が勤務している校舎を記録・更新
+                                    if s_branch in ["田端", "東十条"]:
+                                        curr_b = teacher_daily_branch[d].get(best_teacher)
+                                        if not curr_b:
+                                            teacher_daily_branch[d][best_teacher] = s_branch
+                                        elif curr_b != s_branch:
+                                            teacher_daily_branch[d][best_teacher] = "混在"
                                     
                                     contract_remains[s_name][target_subject] -= 1
                                     if contract_remains[s_name][target_subject] <= 0:
@@ -303,8 +388,9 @@ def render_matching_page():
                 for idx, w_dates in enumerate(weeks[:4]):
                     with preview_tabs[idx]:
                         df_week_data = df_combined[df_combined["日付"].isin(w_dates)]
-                        html_code = generate_weekly_matrix_html(df_week_data, w_dates, slots, days_of_week_map)
-                        # HTMLの安全な描画
+                        html_code = generate_weekly_matrix_html(
+                            df_week_data, w_dates, slots, days_of_week_map, teacher_branch_map
+                        )
                         st.markdown(html_code, unsafe_allow_html=True)
 
             st.write("")
@@ -323,7 +409,7 @@ def render_matching_page():
                             st.error("❌ 保存に失敗しました。ネットワーク状況を確認してください。")
 
     # ------------------------------------------
-    # 【タブ2】 確定済みデータの常時確認（1週間単位×4分割UI）
+    # 【タブ2】 確定済みデータの常時確認
     # ------------------------------------------
     with tab_view:
         st.subheader(f"📋 確定済みの授業予定表")
@@ -341,8 +427,9 @@ def render_matching_page():
                     for idx, w_dates in enumerate(view_weeks[:4]):
                         with view_tabs[idx]:
                             df_view_week_data = df_scope_lessons[df_scope_lessons["日付"].isin(w_dates)]
-                            html_code_view = generate_weekly_matrix_html(df_view_week_data, w_dates, slots, days_of_week_map)
-                            # HTMLの安全な描画
+                            html_code_view = generate_weekly_matrix_html(
+                                df_view_week_data, w_dates, slots, days_of_week_map, teacher_branch_map
+                            )
                             st.markdown(html_code_view, unsafe_allow_html=True)
             else:
                 st.info("ℹ️ 指定された期間内に確定登録された授業はまだありません。")
