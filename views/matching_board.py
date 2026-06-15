@@ -164,7 +164,7 @@ def render_matching_page():
     # 校舎マッピングの準備 (生徒・講師)
     # ------------------------------------------
     student_branch_map = {}
-    teacher_branch_map = {}
+    teacher_branch_map = {}  # 🌟必ずここ（すべてのif文の外側）で初期化します！
 
     # 生徒の校舎をIDから判定 ('t'始まり=田端, 'h'始まり=東十条)
     if not df_student_master.empty and "生徒名" in df_student_master.columns and "生徒ID" in df_student_master.columns:
@@ -187,17 +187,40 @@ def render_matching_page():
                     elif sid.startswith("h"):
                         student_branch_map[s_name] = "東十条"
 
-    # 講師の校舎を特定 (マスタ優先、シフトの「抽出校舎」列も確認)
-    if not df_teacher_master.empty and "校舎" in df_teacher_master.columns:
+    # 講師の校舎を特定 (マスタ優先、シフトの「抽出校舎」列も確認、講師IDによる判定も追加)
+    if not df_teacher_master.empty and "講師名" in df_teacher_master.columns:
         for _, row in df_teacher_master.iterrows():
-            teacher_branch_map[row["講師名"]] = row["校舎"]
+            t_name = row["講師名"]
+            t_branch = row.get("校舎", "")
             
-    if not df_teacher_shifts.empty and "抽出校舎" in df_teacher_shifts.columns:
+            # 校舎が空なら講師IDから推測
+            if not t_branch or pd.isna(t_branch):
+                t_id = str(row.get("講師ID", "")).strip().lower()
+                if t_id.startswith("t"):
+                    t_branch = "田端"
+                elif t_id.startswith("h"):
+                    t_branch = "東十条"
+                elif t_id.startswith("b"):
+                    t_branch = "両校"
+                    
+            if pd.notna(t_branch) and t_branch:
+                teacher_branch_map[t_name] = t_branch
+            
+    if not df_teacher_shifts.empty and "講師名" in df_teacher_shifts.columns:
         for _, row in df_teacher_shifts.iterrows():
             t_name = row.get("講師名")
             e_branch = row.get("抽出校舎")
-            if t_name and t_name not in teacher_branch_map and pd.notna(e_branch) and e_branch:
-                teacher_branch_map[t_name] = e_branch
+            t_id = str(row.get("講師ID", "")).strip().lower()
+            
+            if t_name and t_name not in teacher_branch_map:
+                if pd.notna(e_branch) and e_branch:
+                    teacher_branch_map[t_name] = e_branch
+                elif t_id.startswith("t"):
+                    teacher_branch_map[t_name] = "田端"
+                elif t_id.startswith("h"):
+                    teacher_branch_map[t_name] = "東十条"
+                elif t_id.startswith("b"):
+                    teacher_branch_map[t_name] = "両校"
 
     # ------------------------------------------
     # 2. スケジュール作成・確認範囲の選択
