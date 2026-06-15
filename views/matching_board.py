@@ -37,30 +37,6 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
         last_name = parts[0]
         last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
 
-    def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map, teacher_branch_map=None):
-    """
-    1週間分のデータを『縦軸：講師名』『横軸：日付 × コマ名』の横長マトリクスHTMLとして生成する関数
-    同じコマの列を縦に追うことで、他講師の状況や生徒の被りを一目で把握できます。
-    """
-    if teacher_branch_map is None:
-        teacher_branch_map = {}
-        
-    if df_source.empty or not dates_for_week:
-        return "<p style='color: gray; font-style: italic; padding: 10px;'>この期間の授業予定はありません。</p>"
-        
-    teachers = sorted(df_source["講師名"].dropna().unique())
-    if not teachers:
-        return "<p style='color: gray; font-style: italic; padding: 10px;'>配置された講師がいません。</p>"
-        
-    # 📛 生徒名の表示フォーマット用処理（同姓判定）
-    # 表示される生徒リストの中で苗字の被りをカウントします
-    last_names_count = {}
-    for full_name in df_source["生徒名"].dropna().unique():
-        # 全角スペースを半角に変換して分割
-        parts = str(full_name).replace(" ", " ").strip().split(" ")
-        last_name = parts[0]
-        last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
-
     def get_display_name(full_name):
         parts = str(full_name).replace(" ", " ").strip().split(" ")
         last_name = parts[0]
