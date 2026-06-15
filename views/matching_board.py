@@ -164,36 +164,43 @@ def render_matching_page():
     # 校舎マッピングの準備 (生徒・講師)
     # ------------------------------------------
     student_branch_map = {}
-    teacher_branch_map = {}  # 🌟必ずここ（すべてのif文の外側）で初期化します！
+    teacher_branch_map = {}
 
-    # 生徒の校舎をIDから判定 ('t'始まり=田端, 'h'始まり=東十条)
+    # 生徒の校舎をIDから判定
     if not df_student_master.empty and "生徒名" in df_student_master.columns and "生徒ID" in df_student_master.columns:
         for _, row in df_student_master.iterrows():
+            # 🌟 生徒名もスペースを消して登録
+            s_name = str(row["生徒名"]).replace(" ", "").replace(" ", "").strip()
             sid = str(row.get("生徒ID", "")).strip().lower()
-            if sid.startswith("t"):
-                student_branch_map[row["生徒名"]] = "田端"
-            elif sid.startswith("h"):
-                student_branch_map[row["生徒名"]] = "東十条"
+            if s_name:
+                if sid.startswith("t"):
+                    student_branch_map[s_name] = "田端"
+                elif sid.startswith("h"):
+                    student_branch_map[s_name] = "東十条"
 
     # 生徒マスタになければ契約・シフトデータからもフォールバック推測
     for df_temp in [df_contracts, df_student_shifts]:
         if not df_temp.empty and "生徒ID" in df_temp.columns and "生徒名" in df_temp.columns:
             for _, row in df_temp.iterrows():
-                s_name = row["生徒名"]
-                if s_name not in student_branch_map:
+                s_name = str(row["生徒名"]).replace(" ", "").replace(" ", "").strip()
+                if s_name and s_name not in student_branch_map:
                     sid = str(row.get("生徒ID", "")).strip().lower()
                     if sid.startswith("t"):
                         student_branch_map[s_name] = "田端"
                     elif sid.startswith("h"):
                         student_branch_map[s_name] = "東十条"
 
-    # 講師の校舎を特定 (マスタ優先、シフトの「抽出校舎」列も確認、講師IDによる判定も追加)
+    # 講師の校舎を特定 (マスタ優先、講師IDによる判定)
     if not df_teacher_master.empty and "講師名" in df_teacher_master.columns:
         for _, row in df_teacher_master.iterrows():
-            t_name = row["講師名"]
+            # 🌟 講師名の全角・半角スペースをすべて消去してキーにする
+            t_name = str(row["講師名"]).replace(" ", "").replace(" ", "").strip()
+            if not t_name:
+                continue
+                
             t_branch = row.get("校舎", "")
             
-            # 校舎が空なら講師IDから推測
+            # 校舎が空、または列自体がないなら講師IDから推測
             if not t_branch or pd.isna(t_branch):
                 t_id = str(row.get("講師ID", "")).strip().lower()
                 if t_id.startswith("t"):
@@ -206,9 +213,15 @@ def render_matching_page():
             if pd.notna(t_branch) and t_branch:
                 teacher_branch_map[t_name] = t_branch
             
+    # シフトデータ側からも確認
     if not df_teacher_shifts.empty and "講師名" in df_teacher_shifts.columns:
         for _, row in df_teacher_shifts.iterrows():
-            t_name = row.get("講師名")
+            t_name_raw = row.get("講師名")
+            if pd.isna(t_name_raw):
+                continue
+            # 🌟 シフト側の講師名もスペースを消去
+            t_name = str(t_name_raw).replace(" ", "").replace(" ", "").strip()
+            
             e_branch = row.get("抽出校舎")
             t_id = str(row.get("講師ID", "")).strip().lower()
             
