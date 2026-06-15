@@ -125,6 +125,23 @@ def render_matching_page():
         st.warning("⚠️ 講習契約マスタにデータが登録されていません。先に契約を登録してください。")
         st.stop()
 
+    # 🛠️ 【追加修正】講師シフトデータの「講師名」セル内の改行（講師名\n校舎名）を分離してクレンジング
+    if not df_teacher_shifts.empty and "講師名" in df_teacher_shifts.columns:
+        clean_names = []
+        extracted_branches = []
+        for val in df_teacher_shifts["講師名"]:
+            val_str = str(val).strip()
+            if "\n" in val_str:
+                parts = val_str.split("\n")
+                clean_names.append(parts[0].strip())      # 上段を講師名に
+                extracted_branches.append(parts[1].strip()) # 下段を抽出校舎に
+            else:
+                clean_names.append(val_str)
+                extracted_branches.append(None)
+                
+        df_teacher_shifts["講師名"] = clean_names
+        df_teacher_shifts["抽出校舎"] = extracted_branches
+
     # ------------------------------------------
     # 校舎マッピングの準備 (生徒・講師)
     # ------------------------------------------
@@ -152,16 +169,17 @@ def render_matching_page():
                     elif sid.startswith("h"):
                         student_branch_map[s_name] = "東十条"
 
-    # 講師の校舎を特定 (マスタ優先、シフトの「校舎」列も確認)
+    # 講師の校舎を特定 (マスタ優先、シフトの「抽出校舎」列も確認)
     if not df_teacher_master.empty and "校舎" in df_teacher_master.columns:
         for _, row in df_teacher_master.iterrows():
             teacher_branch_map[row["講師名"]] = row["校舎"]
             
-    if not df_teacher_shifts.empty and "校舎" in df_teacher_shifts.columns:
+    if not df_teacher_shifts.empty and "抽出校舎" in df_teacher_shifts.columns:
         for _, row in df_teacher_shifts.iterrows():
             t_name = row.get("講師名")
-            if t_name and t_name not in teacher_branch_map and pd.notna(row.get("校舎")):
-                teacher_branch_map[t_name] = row["校舎"]
+            e_branch = row.get("抽出校舎")
+            if t_name and t_name not in teacher_branch_map and pd.notna(e_branch) and e_branch:
+                teacher_branch_map[t_name] = e_branch
 
     # ------------------------------------------
     # 2. スケジュール作成・確認範囲の選択
