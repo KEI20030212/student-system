@@ -228,7 +228,7 @@ def render_matching_page():
     with tab_create:
         btn_label = f"✨ {start_date.strftime('%m/%d')} 〜 {end_date.strftime('%m/%d')} の予定表を一括自動生成する"
         if st.button(btn_label, type="primary", use_container_width=True):
-            with st.spinner("校舎間の移動制限などを考慮してアルゴリズムを実行中...（数秒かかります）"):
+            with st.spinner("アルゴリズムを実行中...（数秒かかります）"):
                 
                 t_shifts = df_teacher_shifts[df_teacher_shifts["日付"].isin(dates_in_scope)] if not df_teacher_shifts.empty else pd.DataFrame()
                 s_shifts = df_student_shifts[df_student_shifts["日付"].isin(dates_in_scope)] if not df_student_shifts.empty else pd.DataFrame()
@@ -267,8 +267,10 @@ def render_matching_page():
                 schedule = {d: {s: {} for s in slots} for d in dates_in_scope}
                 busy_students = {d: {s: set() for s in slots} for d in dates_in_scope}
                 
-                # 講師の「一日におけるコマごとの配置校舎」を記録する辞書（厳密な移動制限用）
+                # 講師の「一日におけるコマごとの配置校舎」を記録
                 teacher_slot_branches = {d: {} for d in dates_in_scope}
+                # 🆕 生徒の「一日における受講科目」を記録（3連続防止用）
+                student_daily_subjects = {d: {} for d in dates_in_scope} 
                 
                 # 〇シフトの反映
                 if not t_shifts.empty:
@@ -280,7 +282,7 @@ def render_matching_page():
                             if row.get(s) == "〇":
                                 schedule[d][s][t_name] = []
                                 
-                # 既存授業の反映（既に特定のコマで校舎が決まっている状況を記録）
+                # 既存授業の反映
                 if not df_lessons.empty and "日付" in df_lessons.columns:
                     for _, row in df_lessons.iterrows():
                         d = row.get("日付")
@@ -295,13 +297,19 @@ def render_matching_page():
                             schedule[d][s][t_name].append(f"{s_name}({subj[0] if subj else '済'})")
                             busy_students[d][s].add(s_name)
                             
-                            # すでに配置されている生徒の校舎を記録
+                            # 校舎記録
                             s_name_clean = str(s_name).replace(" ", "").replace(" ", "").strip()
                             existing_s_branch = student_branch_map.get(s_name_clean)
                             if existing_s_branch in ["田端", "東十条"]:
                                 if t_name not in teacher_slot_branches[d]:
                                     teacher_slot_branches[d][t_name] = {}
                                 teacher_slot_branches[d][t_name][s] = existing_s_branch
+                                
+                            # 🆕 科目記録
+                            if subj:
+                                if s_name not in student_daily_subjects[d]:
+                                    student_daily_subjects[d][s_name] = {}
+                                student_daily_subjects[d][s_name][s] = subj
 
                 # 自動マッチング実行
                 new_lessons = []
@@ -320,8 +328,31 @@ def render_matching_page():
                         for max_students in [2, 3]:
                             for s_name in unassigned_students[:]:
                                 if s_name not in contract_remains: continue
-                                    
-                                target_subject = list(contract_remains[s_name].keys())[0]
+                                
+                                # 🆕 3コマ連続を避けて科目を決定するロジック
+                                valid_subject = None
+                                s_idx = slots.index(s)
+                                
+                                # 残りの契約科目を多い順にソートして均等化を狙う
+                                available_subjects = list(contract_remains[s_name].keys())
+                                available_subjects.sort(key=lambda x: contract_remains[s_name][x], reverse=True)
+                                
+                                for subj in available_subjects:
+                                    if s_idx >= 2:
+                                        prev1 = slots[s_idx - 1]
+                                        prev2 = slots[s_idx - 2]
+                                        s_record = student_daily_subjects[d].get(s_name, {})
+                                        # 前2コマが同じ科目なら3連続になるためスキップ
+                                        if s_record.get(prev1) == subj and s_record.get(prev2) == subj:
+                                            continue 
+                                    valid_subject = subj
+                                    break
+                                
+                                # 全ての残科目が3連続になる場合は、このコマでの配置をスキップ
+                                if not valid_subject:
+                                    continue 
+
+                                target_subject = valid_subject
                                 available_teachers = schedule[d][s]
                                 s_name_clean = str(s_name).replace(" ", "").replace(" ", "").strip()
                                 s_branch = student_branch_map.get(s_name_clean, "不明")
@@ -338,7 +369,7 @@ def render_matching_page():
                                     # 🛑 1. 講師の所属校舎と生徒の校舎の絶対ルール
                                     if s_branch in ["田端", "東十条"]:
                                         if t_branch in ["田端", "東十条"] and t_branch != s_branch:
-                                            continue # 所属校舎が違うためNG
+                                            continue 
 
                                     # 🛑 2. 同じコマ(同時刻)に別校舎の生徒が混ざるのを防ぐ
                                     branch_conflict = False
@@ -349,9 +380,9 @@ def render_matching_page():
                                             branch_conflict = True
                                             break
                                     if branch_conflict:
-                                        continue # 同コマ内での校舎混在NG
+                                        continue 
 
-                                    # 🛑 3. 【追加要望】同日内の校舎またぎ絶対NGルール
+                                    # 🛑 3. 同日内の校舎またぎ絶対NGルール
                                     if s_branch in ["田端", "東十条"]:
                                         t_slots_dict = teacher_slot_branches[d].get(t_name, {})
                                         
@@ -360,37 +391,43 @@ def render_matching_page():
                                         
                                         conflict_rule = False
                                         
-                                        # 現在検討中のコマが午前グループの場合
                                         if s in am_slots:
-                                            # 同一グループ内で、すでに違う校舎がアサインされていたらNG
                                             for am_s in am_slots:
                                                 if t_slots_dict.get(am_s) and t_slots_dict.get(am_s) != s_branch:
                                                     conflict_rule = True
                                                     break
-                                            # Bコマを検討中かつ、すでに0コマに違う校舎がいたらNG
                                             if s == "Bコマ" and t_slots_dict.get("0コマ") and t_slots_dict.get("0コマ") != s_branch:
                                                 conflict_rule = True
                                                 
-                                        # 現在検討中のコマが午後グループの場合
                                         elif s in pm_slots:
-                                            # 同一グループ内で、すでに違う校舎がアサインされていたらNG
                                             for pm_s in pm_slots:
                                                 if t_slots_dict.get(pm_s) and t_slots_dict.get(pm_s) != s_branch:
                                                     conflict_rule = True
                                                     break
-                                            # 0コマを検討中かつ、すでにBコマに違う校舎がいたらNG
                                             if s == "0コマ" and t_slots_dict.get("Bコマ") and t_slots_dict.get("Bコマ") != s_branch:
                                                 conflict_rule = True
                                                 
                                         if conflict_rule:
-                                            continue # 移動時間不足のため配置NG
+                                            continue 
 
                                     skills = teacher_skills.get(t_name, {"priority": 5, "subjects": []})
                                     can_teach = target_subject in skills["subjects"] if skills["subjects"] else True
                                     
                                     if can_teach:
-                                        # スコアが低いほど優先的にアサイン
-                                        score = (skills["priority"] * 10) + (len(assigned_students) * 15)
+                                        # 🆕 同じ科目の生徒を集めるためのスコアリング修正
+                                        score = skills["priority"] * 10
+                                        
+                                        # 既に割り当てられている生徒のうち、同科目の人数をカウント
+                                        same_subj_count = sum(1 for a in assigned_students if f"({target_subject[0]})" in a)
+                                        mixed_subj_count = len(assigned_students) - same_subj_count
+                                        
+                                        if mixed_subj_count > 0:
+                                            score += 100 # 別科目が混ざるのを強く避ける（ペナルティ）
+                                        if same_subj_count > 0:
+                                            score -= 50  # 同じ科目の生徒をまとめるのを強く推奨（ボーナス）
+                                        
+                                        score += len(assigned_students) * 5 # 同条件なら人数が少ない方を優先
+                                        
                                         if score < best_score:
                                             best_score = score
                                             best_teacher = t_name
@@ -399,12 +436,17 @@ def render_matching_page():
                                     schedule[d][s][best_teacher].append(f"{s_name}({target_subject[0]})")
                                     busy_students[d][s].add(s_name)
                                     
-                                    # その講師がその日そのコマで勤務する校舎を記録
+                                    # 校舎記録
                                     if s_branch in ["田端", "東十条"]:
                                         if best_teacher not in teacher_slot_branches[d]:
                                             teacher_slot_branches[d][best_teacher] = {}
                                         teacher_slot_branches[d][best_teacher][s] = s_branch
                                     
+                                    # 🆕 連続科目チェック用に記録
+                                    if s_name not in student_daily_subjects[d]:
+                                        student_daily_subjects[d][s_name] = {}
+                                    student_daily_subjects[d][s_name][s] = target_subject
+                                        
                                     contract_remains[s_name][target_subject] -= 1
                                     if contract_remains[s_name][target_subject] <= 0:
                                         del contract_remains[s_name][target_subject]
