@@ -187,34 +187,46 @@ def render_account_manager_page():
                             st.error("❌ アカウントの削除に失敗しました。")
 
     # ==========================================
-    # 🌟 4. 講師マスタ設定（自動コマ組みマッチング用・チェックボックス版）
+    # 🌟 4. 講師マスタ設定（自動コマ組みマッチング用・科目別得意度版）
     # ==========================================
     st.divider()
     st.subheader("🧩 講師マスタ（スキル・優先度設定）")
-    st.write("自動コマ組みで使用する「指導可能科目」と「アサイン優先度（数字が小さいほど優先）」を一括設定します。")
+    st.write("自動コマ組みで使用する「基本優先度（全体としてコマ数を多く振りたいか）」と「科目別の得意度」を設定します。")
 
     df_teachers = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
     
-    # 💡 科目のリスト（ここで科目を自由に追加・変更できます）
+    # 💡 科目と評価のリスト定義
     SUBJECTS = ["英語", "数学", "国語", "理科", "社会"]
-    MASTER_COLUMNS = ["講師名"] + SUBJECTS + ["優先度"]
+    SKILL_LEVELS = ["×", "△", "〇", "◎"]
+    MASTER_COLUMNS = ["講師名"] + SUBJECTS + ["基本優先度"]
 
-    # データがない、または古い形式（1列のプルダウン時代）の場合の初期化
     if df_teachers.empty:
         df_teachers = pd.DataFrame(columns=MASTER_COLUMNS)
     else:
+        # 古い「優先度」列の名前を「基本優先度」に変更（もしあれば）
+        if "優先度" in df_teachers.columns and "基本優先度" not in df_teachers.columns:
+            df_teachers.rename(columns={"優先度": "基本優先度"}, inplace=True)
+
         for col in MASTER_COLUMNS:
             if col not in df_teachers.columns:
                 if col in SUBJECTS:
-                    df_teachers[col] = False  # 新しい科目列はFalse(チェックなし)で初期化
+                    df_teachers[col] = "×"  # 新しい科目列は「×」で初期化
+                elif col == "基本優先度":
+                    df_teachers[col] = 3
                 else:
                     df_teachers[col] = ""
                     
-        # スプレッドシートから読み込んだ文字の "TRUE"/"FALSE" を、Pythonのチェックボックス用の True/False に変換
+        # スプレッドシートから読み込んだ古いデータ("TRUE"/"FALSE")を、新しい記号("◎"など)に自動変換
         for sub in SUBJECTS:
-            df_teachers[sub] = df_teachers[sub].apply(lambda x: True if str(x).upper() == 'TRUE' else False)
+            def convert_skill(val):
+                val_str = str(val).upper().strip()
+                if val_str == 'TRUE': return "〇"
+                if val_str in ['FALSE', 'NAN', '']: return "×"
+                if val in SKILL_LEVELS: return val
+                return "×"
+            df_teachers[sub] = df_teachers[sub].apply(convert_skill)
 
-    # 画面表示用にカラムの順番を整頓（古い「指導可能科目」列があればここで除外）
+    # 画面表示用にカラムの順番を整頓
     df_teachers = df_teachers[MASTER_COLUMNS]
 
     # 💡 【自動化ギミック】アカウント一覧にいるが、講師マスタにいない講師を自動検出して追加
@@ -228,27 +240,29 @@ def render_account_manager_page():
             
             new_rows_data = []
             for t in missing_teachers:
-                row_data = {"講師名": t, "優先度": 3}
+                row_data = {"講師名": t, "基本優先度": 3}
                 for sub in SUBJECTS:
-                    row_data[sub] = False  # 新規追加の講師は一旦全科目チェックなし
+                    row_data[sub] = "×"  # 新規追加の講師は一旦全科目「×」
                 new_rows_data.append(row_data)
                 
             new_rows = pd.DataFrame(new_rows_data)
             df_teachers = pd.concat([df_teachers, new_rows], ignore_index=True)
 
-    # 💡 Streamlitの表のカラム設定を自動で組み立てる
+    # 💡 Streamlitの表のカラム設定
     col_config = {
         "講師名": st.column_config.TextColumn("👩‍🏫 講師名", required=True),
-        "優先度": st.column_config.NumberColumn("👑 優先度", min_value=1, max_value=10, step=1, default=3, help="1が最優先です。")
+        "基本優先度": st.column_config.NumberColumn("👑 基本優先度", min_value=1, max_value=10, step=1, default=3, help="1が最優先（コマ数を多く確保します）。")
     }
-    # リストにある科目をすべてチェックボックス列として追加
+    # リストにある科目をすべてプルダウン(Selectbox)列として追加
     for sub in SUBJECTS:
-        col_config[sub] = st.column_config.CheckboxColumn(f"📚 {sub}", default=False)
+        col_config[sub] = st.column_config.SelectboxColumn(
+            f"📚 {sub}", 
+            options=SKILL_LEVELS,
+            required=True,
+            help="◎:最優先でアサイン, 〇:得意, △:指導可能(別講師優先), ×:不可"
+        )
 
-    # 💡 フォームで囲むことで、保存ボタンを押すまで通信・再読み込みを完全にブロックします
     with st.form("teacher_master_form"):
-        
-        # データエディタ（表）の表示
         edited_teachers = st.data_editor(
             df_teachers,
             use_container_width=True,
@@ -257,13 +271,10 @@ def render_account_manager_page():
             column_config=col_config
         )
         
-        # 💡 通常の st.button ではなく、フォーム専用の送信ボタンに変更
         submit_btn = st.form_submit_button("💾 講師マスタを保存する", type="primary", use_container_width=True)
 
-    # 保存ボタンが押された時の処理
     if submit_btn:
         with st.spinner("保存中..."):
-            # 保存時にスプレッドシート側に古い列が残らないよう上書き処理されます
             success = robust_api_call(lambda: save_teacher_master(edited_teachers), fallback_value=False)
             if success:
                 st.success("✅ 講師マスタを更新しました！")

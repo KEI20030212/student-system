@@ -29,22 +29,18 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
         return "<p style='color: gray; font-style: italic; padding: 10px;'>配置された講師がいません。</p>"
         
     # 📛 生徒名の表示フォーマット用処理（同姓判定）
-    # 表示される生徒リストの中で苗字の被りをカウントします
     last_names_count = {}
     for full_name in df_source["生徒名"].dropna().unique():
-        # split() に引数を渡さないことで、全角・半角スペース両方で自動分割されます
         parts = str(full_name).strip().split()
-        if parts: # 空文字対策
+        if parts:
             last_name = parts[0]
             last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
 
     def get_display_name(full_name):
-        # ここも引数なしの split() に変更
         parts = str(full_name).strip().split()
         if not parts:
             return ""
         last_name = parts[0]
-        # 同姓が複数いる、かつ下の名前が存在する場合に「苗字(下の一文字目)」にする
         if last_names_count.get(last_name, 0) > 1 and len(parts) > 1:
             first_name_initial = parts[1][0]
             return f"{last_name}({first_name_initial})"
@@ -52,14 +48,13 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
 
     # 🎨 ユーザー指定の科目カラーマップ
     color_map = {
-        "国語": "background-color: #C5A059; color: white;", # 黄土色
-        "数学": "background-color: #B3E5FC; color: #1A237E;", # 水色
-        "英語": "background-color: #F8BBD0; color: #880E4F;", # ピンク
-        "理科": "background-color: #C8E6C9; color: #1B5E20;", # 緑
-        "社会": "background-color: #FFF9C4; color: #F57F17;"  # 黄色
+        "国語": "background-color: #C5A059; color: white;",
+        "数学": "background-color: #B3E5FC; color: #1A237E;",
+        "英語": "background-color: #F8BBD0; color: #880E4F;",
+        "理科": "background-color: #C8E6C9; color: #1B5E20;",
+        "社会": "background-color: #FFF9C4; color: #F57F17;"
     }
     
-    # PC閲覧前提のため、min-widthを広めに設定して横スクロールを快適に
     html = """
     <div style="overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 8px;">
     <table style="width:100%; border-collapse: collapse; min-width: 2400px; background-color: #ffffff; color: #333333; font-family: sans-serif;">
@@ -73,7 +68,6 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
         dt_obj = datetime.datetime.strptime(d, "%Y/%m/%d")
         day_str = days_of_week_map[dt_obj.weekday()]
         
-        # 土日の色分け
         day_color = "#333333"
         if day_str == "土": day_color = "#1565C0"
         elif day_str == "日": day_color = "#C62828"
@@ -98,22 +92,17 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
         branch_html = f"<br><span style='font-size: 0.65rem; color: #777; font-weight: normal; background-color:#eee; padding:1px 3px; border-radius:3px;'>{t_branch}</span>" if t_branch else ""
         
         html += "<tr style='border-bottom: 1px solid #eee;'>"
-        # 講師名列を左側に固定（スクロールしても見失わないように）
         html += f"<td style='border: 1px solid #ddd; padding: 10px; font-weight: bold; background-color: #fafafa; font-size: 0.85rem; position: sticky; left: 0; z-index: 1; box-shadow: 2px 0 5px rgba(0,0,0,0.05);'>{t}{branch_html}</td>"
         
         for d in dates_for_week:
-            # パフォーマンスのため日付単位で1度フィルタリング
             df_date = df_source[(df_source["講師名"] == t) & (df_source["日付"] == d)]
             
             for s in slots:
                 html += "<td style='border: 1px solid #ddd; padding: 4px; vertical-align: top; text-align: center; background-color: #ffffff; min-width: 75px;'>"
-                
                 df_cell = df_date[df_date["コマ名"] == s]
                 
                 if not df_cell.empty:
-                    # 1:2や1:3の授業をセル内で縦に並べる
                     for _, row in df_cell.iterrows():
-                        # ここで先ほど作った関数を使って表示名を取得します
                         disp_name = get_display_name(row["生徒名"])
                         subj = row["科目"]
                         style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
@@ -284,14 +273,20 @@ def render_matching_page():
                 teacher_slot_branches = {d: {} for d in dates_in_scope}
                 student_daily_subjects = {d: {} for d in dates_in_scope} 
                 
+                # 🌟 【アップデート】各コマの講師希望記号（◎, 〇, △）を保持する辞書を初期化
+                teacher_slot_symbols = {d: {s: {} for s in slots} for d in dates_in_scope}
+                
                 if not t_shifts.empty:
                     for _, row in t_shifts.iterrows():
                         d = row["日付"]
                         t_name = row.get("講師名")
                         if not t_name or d not in schedule: continue
                         for s in slots:
-                            if row.get(s) == "〇":
+                            # 🌟 【アップデート】「〇」だけでなく「◎」「△」もアサイン可能対象として読み込む
+                            val = row.get(s)
+                            if val in ["◎", "〇", "△"]:
                                 schedule[d][s][t_name] = []
+                                teacher_slot_symbols[d][s][t_name] = val # 記号を記録
                                 
                 if not df_lessons.empty and "日付" in df_lessons.columns:
                     for _, row in df_lessons.iterrows():
@@ -413,6 +408,15 @@ def render_matching_page():
                                     
                                     if can_teach:
                                         score = skills["priority"] * 10
+                                        
+                                        # 🌟 【アップデート】記号（◎・〇・△）によるスコア補正
+                                        # アルゴリズムの性質上「スコアが低い講師」が選ばれるため、◎は減算、△は加算します。
+                                        slot_symbol = teacher_slot_symbols[d][s].get(t_name, "〇")
+                                        if slot_symbol == "◎":
+                                            score -= 200  # 優先度大幅アップ（一気に選ばれやすくする）
+                                        elif slot_symbol == "△":
+                                            score += 500  # 優先度ダウン（高コスト化して他講師がいなければ選ばれる状態に）
+                                        
                                         same_subj_count = sum(1 for a in assigned_students if f"({target_subject[0]})" in a)
                                         mixed_subj_count = len(assigned_students) - same_subj_count
                                         
