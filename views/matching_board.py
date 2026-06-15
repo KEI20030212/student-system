@@ -125,43 +125,8 @@ def render_matching_page():
         st.warning("⚠️ 講習契約マスタにデータが登録されていません。先に契約を登録してください。")
         st.stop()
 
-    # 🛠️ 【追加修正】講師シフトデータの「講師名」セル内の改行（講師名\n校舎名）を分離してクレンジング
-    # 講師の校舎を特定 (マスタ優先、シフトの「抽出校舎」列も確認、講師IDによる判定も追加)
-    if not df_teacher_master.empty and "講師名" in df_teacher_master.columns:
-        for _, row in df_teacher_master.iterrows():
-            t_name = row["講師名"]
-            t_branch = row.get("校舎", "")
-            
-            # 校舎が空なら講師IDから推測
-            if not t_branch or pd.isna(t_branch):
-                t_id = str(row.get("講師ID", "")).strip().lower()
-                if t_id.startswith("t"):
-                    t_branch = "田端"
-                elif t_id.startswith("h"):
-                    t_branch = "東十条"
-                elif t_id.startswith("b"):  # 🌟 ここを追加！（b=両校 の場合）
-                    t_branch = "両校"
-                    
-            if pd.notna(t_branch) and t_branch:
-                teacher_branch_map[t_name] = t_branch
-            
-    if not df_teacher_shifts.empty and "講師名" in df_teacher_shifts.columns:
-        for _, row in df_teacher_shifts.iterrows():
-            t_name = row.get("講師名")
-            e_branch = row.get("抽出校舎")
-            t_id = str(row.get("講師ID", "")).strip().lower()
-            
-            if t_name and t_name not in teacher_branch_map:
-                if pd.notna(e_branch) and e_branch:
-                    teacher_branch_map[t_name] = e_branch
-                elif t_id.startswith("t"):
-                    teacher_branch_map[t_name] = "田端"
-                elif t_id.startswith("h"):
-                    teacher_branch_map[t_name] = "東十条"
-                elif t_id.startswith("b"):
-                    teacher_branch_map[t_name] = "両校"
     # ------------------------------------------
-    # 校舎マッピングの準備 (生徒・講師)
+    # 2. 校舎マッピングの準備 (生徒・講師) 🌟ここで最初に初期化します！
     # ------------------------------------------
     student_branch_map = {}
     teacher_branch_map = {}
@@ -169,7 +134,7 @@ def render_matching_page():
     # 生徒の校舎をIDから判定
     if not df_student_master.empty and "生徒名" in df_student_master.columns and "生徒ID" in df_student_master.columns:
         for _, row in df_student_master.iterrows():
-            # 🌟 生徒名もスペースを消して登録
+            # 生徒名もスペースを消して登録
             s_name = str(row["生徒名"]).replace(" ", "").replace(" ", "").strip()
             sid = str(row.get("生徒ID", "")).strip().lower()
             if s_name:
@@ -193,7 +158,7 @@ def render_matching_page():
     # 講師の校舎を特定 (マスタ優先、講師IDによる判定)
     if not df_teacher_master.empty and "講師名" in df_teacher_master.columns:
         for _, row in df_teacher_master.iterrows():
-            # 🌟 講師名の全角・半角スペースをすべて消去してキーにする
+            # 講師名の全角・半角スペースをすべて消去してキーにする
             t_name = str(row["講師名"]).replace(" ", "").replace(" ", "").strip()
             if not t_name:
                 continue
@@ -219,7 +184,7 @@ def render_matching_page():
             t_name_raw = row.get("講師名")
             if pd.isna(t_name_raw):
                 continue
-            # 🌟 シフト側の講師名もスペースを消去
+            # シフト側の講師名もスペースを消去
             t_name = str(t_name_raw).replace(" ", "").replace(" ", "").strip()
             
             e_branch = row.get("抽出校舎")
