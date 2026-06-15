@@ -13,6 +13,97 @@ from utils.g_sheets import (
     load_teacher_master
 )
 
+def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map):
+    """
+    1週間分のデータを『縦軸：講師名』『横軸：日付（曜日）』のマトリクスHTMLとして生成する関数
+    授業科目を指定された背景色で色分けします。
+    """
+    if df_source.empty or not dates_for_week:
+        return "<p style='color: gray; font-style: italic; padding: 10px;'>この期間の授業予定はありません。</p>"
+        
+    teachers = sorted(df_source["講師名"].dropna().unique())
+    if not teachers:
+        return "<p style='color: gray; font-style: italic; padding: 10px;'>配置された講師がいません。</p>"
+        
+    # 🎨 ユーザー指定の科目カラーマップ (視認性の高いパステル・マイルド調整)
+    color_map = {
+        "国語": "background-color: #C5A059; color: white;", # 黄土色
+        "数学": "background-color: #B3E5FC; color: #1A237E;", # 水色
+        "英語": "background-color: #F8BBD0; color: #880E4F;", # ピンク
+        "理科": "background-color: #C8E6C9; color: #1B5E20;", # 緑
+        "社会": "background-color: #FFF9C4; color: #F57F17;"  # 黄色
+    }
+    
+    # HTMLテーブルの構築開始 (Streamlitのテーマに影響されないよう背景・文字色を明示)
+    html = """
+    <div style="overflow-x: auto;">
+    <table style="width:100%; border-collapse: collapse; border: 1px solid #ddd; min-width: 800px; background-color: #ffffff; color: #333333; font-family: sans-serif;">
+    """
+    
+    # --- ヘッダー行 (日付・曜日) ---
+    html += "<tr style='background-color: #f7f9fa; border-bottom: 2px solid #ccc;'>"
+    html += "<th style='border: 1px solid #ddd; padding: 10px; text-align: center; font-size: 0.9rem; font-weight: bold; width: 120px;'>講師名</th>"
+    
+    for d in dates_for_week:
+        dt_obj = datetime.datetime.strptime(d, "%Y/%m/%d")
+        day_str = days_of_week_map[dt_obj.weekday()]
+        
+        # 土日の色分け
+        day_color = "#333333"
+        if day_str == "土": day_color = "#1565C0"
+        elif day_str == "日": day_color = "#C62828"
+        
+        html += f"""
+        <th style='border: 1px solid #ddd; padding: 10px; text-align: center; font-size: 0.85rem; color: {day_color};'>
+            <span style='font-size: 0.75rem; color: #666;'>{d.split('/', 1)[1]}</span><br>({day_str})
+        </th>
+        """
+    html += "</tr>"
+    
+    # --- データ行 (講師ごと) ---
+    for t in teachers:
+        html += "<tr style='border-bottom: 1px solid #eee;'>"
+        html += f"<td style='border: 1px solid #ddd; padding: 10px; font-weight: bold; background-color: #fafafa; font-size: 0.85rem;'>{t}</td>"
+        
+        for d in dates_for_week:
+            html += "<td style='border: 1px solid #ddd; padding: 6px; vertical-align: top; width: 14%;'>"
+            
+            # その講師・その日の授業を抽出
+            df_cell = df_source[(df_source["講師名"] == t) & (df_source["日付"] == d)]
+            
+            if not df_cell.empty:
+                # コマの定義順にソート
+                df_cell = df_cell.copy()
+                df_cell["slot_idx"] = df_cell["コマ名"].apply(lambda x: slots.index(x) if x in slots else 99)
+                df_cell = df_cell.sort_values("slot_idx")
+                
+                # コマごとにグループ化して表示 (1:2指導等に対応)
+                slot_groups = df_cell.groupby("コマ名")
+                for slot_name in slots:
+                    if slot_name in slot_groups.groups:
+                        group = slot_groups.get_group(slot_name)
+                        html += f"<div style='margin-bottom: 8px; padding: 4px; background-color: #fcfcfc; border: 1px solid #f0f0f0; border-radius: 4px;'>"
+                        html += f"<span style='font-size: 0.7rem; font-weight: bold; color: #777;'>{slot_name}</span><br>"
+                        
+                        for _, row in group.iterrows():
+                            s_name = row["生徒名"]
+                            subj = row["科目"]
+                            style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
+                            
+                            # 生徒名を科目ごとの色バッジで表示 ((英)などの文字は非表示)
+                            html += f"""
+                            <span style='{style} padding: 2px 6px; border-radius: 3px; margin: 2px 1px 0 1px; display: inline-block; font-size: 0.75rem; font-weight: bold; width: calc(100% - 4px); text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05);' title='{subj}'>
+                                {s_name}
+                            </span>
+                            """
+                        html += "</div>"
+            html += "</td>"
+        html += "</tr>"
+        
+    html += "</table></div>"
+    return html
+
+
 def render_matching_page():
     st.header("🧩 スマート・自動予定表作成")
     st.write("ボタン一つで、生徒の契約残数と双方のシフト・指導科目を計算し、授業予定表を期間指定で自動生成します🚀")
@@ -32,7 +123,7 @@ def render_matching_page():
         st.stop()
 
     # ------------------------------------------
-    # 2. スケジュール作成・確認範囲の選択（カレンダー自由指定化）
+    # 2. スケジュール作成・確認範囲の選択
     # ------------------------------------------
     st.subheader("📅 表示・作成範囲の選択")
     st.caption("1ヶ月一括や、任意の期間をカレンダーから自由に指定して自動生成・確認ができます。")
@@ -40,7 +131,6 @@ def render_matching_page():
     col1, col2 = st.columns(2)
     today = datetime.date.today()
     
-    # 🗓️ 週指定のセレクトボックスから、自由な期間指定カレンダーに変更
     start_date = col1.date_input("🗓️ 開始日を選択", today)
     end_date = col2.date_input("🗓️ 終了日を選択", today + datetime.timedelta(days=30)) # デフォルトはたっぷり1ヶ月
 
@@ -136,7 +226,7 @@ def render_matching_page():
                             schedule[d][s][t_name].append(f"{s_name}({subj[0] if subj else '済'})")
                             busy_students[d][s].add(s_name)
 
-                # ⑤ 自動マッチング実行！ (指定期間すべての日をループ)
+                # ⑤ 自動マッチング実行！
                 new_lessons = []
                 for d in dates_in_scope:
                     for s in slots:
@@ -190,7 +280,7 @@ def render_matching_page():
                                     })
                                     unassigned_students.remove(s_name)
 
-                # 全てのマッチング終了後、指導形態(1:X)を確定
+                # 指導形態(1:X)の確定
                 for lesson in new_lessons:
                     d_val = lesson["日付"]
                     s_val = lesson["コマ名"]
@@ -198,19 +288,16 @@ def render_matching_page():
                     total_students = len(schedule[d_val][s_val][t_val])
                     lesson["指導形態"] = f"1:{total_students}"
 
-                # 状態をセッションに退避（表示は下のブロックで動的に行います）
                 if new_lessons:
                     st.session_state["new_lessons"] = new_lessons
                     st.success(f"🎉 期間内の自動コマ組みが完了しました！下の一覧とボードで確認してください。")
                 else:
                     st.warning("⚠️ 指定された期間内で新しく割り当てられる授業が見つかりませんでした。")
 
-        # --- ⚡ プレビュー表示と保存処理（長期間対応版UI） ---
+        # --- ⚡ プレビュー表示と保存処理（1週間単位×4分割UI） ---
         if "new_lessons" in st.session_state:
             st.subheader("📋 【下書き】自動生成された授業予定表")
-            st.caption("※まだ保存されていません。内容を確認して、一番下の確定ボタンを押してください。")
             
-            # 👁️ 視認性向上の工夫1: 生成された全データをフラットな表でスッキリ全件見せる
             df_new_flat = pd.DataFrame(st.session_state["new_lessons"])
             st.markdown(f"**🔥 新規マッチング授業一覧（全 {len(df_new_flat)} 件）**")
             st.dataframe(
@@ -219,40 +306,26 @@ def render_matching_page():
                 hide_index=True
             )
             
-            # 👁️ 視認性向上の工夫2: 選択した日ピンポイントのマトリクス板を出す（横幅スッキリ！）
             st.markdown("---")
-            st.markdown("#### 🔍 日別スケジュールボードで配置を確認")
-            st.caption("指定期間内の特定の日付を選んで、コマ枠の埋まり具合を縦横マトリクスで確認できます。")
-            preview_date = st.selectbox("確認したい日付を選択してください", dates_in_scope, key="preview_date_select")
+            st.markdown("#### 🔍 週別スケジュールボードで配置を確認")
+            st.caption("指定された期間を1週間(7日間)ごとに分割しています。タブを切り替えてカラー配置を確認してください。")
             
-            # 既存の確定データと今回の下書きデータを合算してその日の状態を可視化
-            df_combined = pd.concat([df_lessons, df_new_flat], ignore_index=True) if not df_lessons.empty else df_new_flat
-            df_day = df_combined[df_combined["日付"] == preview_date]
+            # 日付リストを7日毎のグループ（週）に分割（最大4〜5週分を想定）
+            weeks = [dates_in_scope[i:i+7] for i in range(0, len(dates_in_scope), 7)]
             
-            if not df_day.empty:
-                day_teachers = sorted(df_day["講師名"].dropna().unique())
-                matrix_data = {t: {s: "" for s in slots} for t in day_teachers}
+            # 4分割（最大4ページ/タブ）のUIを作成
+            tab_labels = [f"📅 {w[0].split('/', 1)[1]} 〜 ({idx+1}週目)" for idx, w in enumerate(weeks[:4])]
+            
+            if tab_labels:
+                preview_tabs = st.tabs(tab_labels)
+                df_combined = pd.concat([df_lessons, df_new_flat], ignore_index=True) if not df_lessons.empty else df_new_flat
                 
-                for _, row in df_day.iterrows():
-                    t = row["講師名"]
-                    s = row["コマ名"]
-                    s_name = row["生徒名"]
-                    subj = row["科目"]
-                    if t in matrix_data and s in matrix_data[t]:
-                        subj_char = subj[0] if subj else ""
-                        existing_text = matrix_data[t][s]
-                        new_text = f"{s_name}({subj_char})"
-                        matrix_data[t][s] = f"{existing_text}\n{new_text}".strip() if existing_text else new_text
-                        
-                df_matrix = pd.DataFrame.from_dict(matrix_data, orient="index")
-                df_matrix.index.name = "教師名"
-                
-                # 安全に曜日を取得して表示（IndexErrorの完全防御）
-                dt_obj = datetime.datetime.strptime(preview_date, "%Y/%m/%d")
-                st.info(f"📅 **{preview_date} ({days_of_week_map[dt_obj.weekday()]}曜日)** の配置シミュレーション")
-                st.dataframe(df_matrix.reset_index(), use_container_width=True, hide_index=True)
-            else:
-                st.info("選択された日付の授業予定はありません。")
+                for idx, w_dates in enumerate(weeks[:4]):
+                    with preview_tabs[idx]:
+                        df_week_data = df_combined[df_combined["日付"].isin(w_dates)]
+                        # カスタムHTMLマトリクスの描画
+                        html_code = generate_weekly_matrix_html(df_week_data, w_dates, slots, days_of_week_map)
+                        st.markdown(html_code, unsafe_allow_html=True)
 
             st.write("")
             if st.button("💾 この予定表をすべて確定してスプレッドシートに保存", type="primary", use_container_width=True):
@@ -270,7 +343,7 @@ def render_matching_page():
                             st.error("❌ 保存に失敗しました。ネットワーク状況を確認してください。")
 
     # ------------------------------------------
-    # 【タブ2】 確定済みデータの常時確認（長期間対応版UI）
+    # 【タブ2】 確定済みデータの常時確認（1週間単位×4分割UI）
     # ------------------------------------------
     with tab_view:
         st.subheader(f"📋 確定済みの授業予定表")
@@ -280,34 +353,18 @@ def render_matching_page():
             df_scope_lessons = df_lessons[df_lessons["日付"].isin(dates_in_scope)]
             
             if not df_scope_lessons.empty:
-                # 1ヶ月などの長期間でも快適に見られるよう、見たい日をセレクトボックスで切り替え
-                view_date = st.selectbox("確認したい日付を選択してください", dates_in_scope, key="view_date_select")
-                df_view_day = df_scope_lessons[df_scope_lessons["日付"] == view_date]
+                # こちらも同様に1週間ごとに分割してタブ表示
+                view_weeks = [dates_in_scope[i:i+7] for i in range(0, len(dates_in_scope), 7)]
+                view_tab_labels = [f"📅 {w[0].split('/', 1)[1]} 〜 ({idx+1}週目)" for idx, w in enumerate(view_weeks[:4])]
                 
-                if not df_view_day.empty:
-                    view_teachers = sorted(df_view_day["講師名"].dropna().unique())
-                    view_matrix = {t: {s: "" for s in slots} for t in view_teachers}
-                    
-                    for _, row in df_view_day.iterrows():
-                        t = row["講師名"]
-                        s = row["コマ名"]
-                        s_name = row["生徒名"]
-                        subj = row["科目"]
-                        
-                        if t in view_matrix and s in view_matrix[t]:
-                            subj_char = subj[0] if subj else '済'
-                            existing_text = view_matrix[t][s]
-                            new_text = f"{s_name}({subj_char})"
-                            view_matrix[t][s] = f"{existing_text}\n{new_text}".strip() if existing_text else new_text
-                            
-                    df_view_matrix = pd.DataFrame.from_dict(view_matrix, orient="index")
-                    df_view_matrix.index.name = "教師名"
-                    
-                    dt_obj = datetime.datetime.strptime(view_date, "%Y/%m/%d")
-                    st.success(f"📅 **{view_date} ({days_of_week_map[dt_obj.weekday()]}曜日)** の確定スケジュール")
-                    st.dataframe(df_view_matrix.reset_index(), use_container_width=True, hide_index=True)
-                else:
-                    st.info("選択された日付に確定済みの授業はありません。")
+                if view_tab_labels:
+                    view_tabs = st.tabs(view_tab_labels)
+                    for idx, w_dates in enumerate(view_weeks[:4]):
+                        with view_tabs[idx]:
+                            df_view_week_data = df_scope_lessons[df_scope_lessons["日付"].isin(w_dates)]
+                            # カスタムHTMLマトリクスの描画
+                            html_code_view = generate_weekly_matrix_html(df_view_week_data, w_dates, slots, days_of_week_map)
+                            st.markdown(html_code_view, unsafe_allow_html=True)
             else:
                 st.info("ℹ️ 指定された期間内に確定登録された授業はまだありません。")
         else:
