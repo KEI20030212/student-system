@@ -2060,7 +2060,7 @@ def _raw_load_all_shifts(target_type):
         return pd.DataFrame()
         
     # ==========================================
-    # パターンA：【講師】新・横長フォーマットの解析
+    # パターンA：【講師】新·横長フォーマットの解析
     # ==========================================
     if target_type == "講師":
         if len(all_values) < 3:
@@ -2137,10 +2137,9 @@ def _raw_load_all_shifts(target_type):
         return pd.DataFrame(result_list)
         
     # ==========================================
-    # パターンB：【生徒】旧・縦長フォーマットの解析
+    # パターンB：【生徒】旧·縦長フォーマットの解析
     # ==========================================
     else:
-        # 重複エラーが起きないよう get_all_records を使わずに安全に読み込みます
         headers = all_values[0]
         data = all_values[1:]
         return pd.DataFrame(data, columns=headers)
