@@ -32,13 +32,17 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
     # 表示される生徒リストの中で苗字の被りをカウントします
     last_names_count = {}
     for full_name in df_source["生徒名"].dropna().unique():
-        # 全角スペースを半角に変換して分割
-        parts = str(full_name).replace(" ", " ").strip().split(" ")
-        last_name = parts[0]
-        last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
+        # split() に引数を渡さないことで、全角・半角スペース両方で自動分割されます
+        parts = str(full_name).strip().split()
+        if parts: # 空文字対策
+            last_name = parts[0]
+            last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
 
     def get_display_name(full_name):
-        parts = str(full_name).replace(" ", " ").strip().split(" ")
+        # ここも引数なしの split() に変更
+        parts = str(full_name).strip().split()
+        if not parts:
+            return ""
         last_name = parts[0]
         # 同姓が複数いる、かつ下の名前が存在する場合に「苗字(下の一文字目)」にする
         if last_names_count.get(last_name, 0) > 1 and len(parts) > 1:
