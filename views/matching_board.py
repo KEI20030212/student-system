@@ -126,22 +126,40 @@ def render_matching_page():
         st.stop()
 
     # 🛠️ 【追加修正】講師シフトデータの「講師名」セル内の改行（講師名\n校舎名）を分離してクレンジング
+    # 講師の校舎を特定 (マスタ優先、シフトの「抽出校舎」列も確認、講師IDによる判定も追加)
+    if not df_teacher_master.empty and "講師名" in df_teacher_master.columns:
+        for _, row in df_teacher_master.iterrows():
+            t_name = row["講師名"]
+            t_branch = row.get("校舎", "")
+            
+            # 校舎が空なら講師IDから推測
+            if not t_branch or pd.isna(t_branch):
+                t_id = str(row.get("講師ID", "")).strip().lower()
+                if t_id.startswith("t"):
+                    t_branch = "田端"
+                elif t_id.startswith("h"):
+                    t_branch = "東十条"
+                elif t_id.startswith("b"):  # 🌟 ここを追加！（b=両校 の場合）
+                    t_branch = "両校"
+                    
+            if pd.notna(t_branch) and t_branch:
+                teacher_branch_map[t_name] = t_branch
+            
     if not df_teacher_shifts.empty and "講師名" in df_teacher_shifts.columns:
-        clean_names = []
-        extracted_branches = []
-        for val in df_teacher_shifts["講師名"]:
-            val_str = str(val).strip()
-            if "\n" in val_str:
-                parts = val_str.split("\n")
-                clean_names.append(parts[0].strip())      # 上段を講師名に
-                extracted_branches.append(parts[1].strip()) # 下段を抽出校舎に
-            else:
-                clean_names.append(val_str)
-                extracted_branches.append(None)
-                
-        df_teacher_shifts["講師名"] = clean_names
-        df_teacher_shifts["抽出校舎"] = extracted_branches
-
+        for _, row in df_teacher_shifts.iterrows():
+            t_name = row.get("講師名")
+            e_branch = row.get("抽出校舎")
+            t_id = str(row.get("講師ID", "")).strip().lower()
+            
+            if t_name and t_name not in teacher_branch_map:
+                if pd.notna(e_branch) and e_branch:
+                    teacher_branch_map[t_name] = e_branch
+                elif t_id.startswith("t"):
+                    teacher_branch_map[t_name] = "田端"
+                elif t_id.startswith("h"):
+                    teacher_branch_map[t_name] = "東十条"
+                elif t_id.startswith("b"):
+                    teacher_branch_map[t_name] = "両校"
     # ------------------------------------------
     # 校舎マッピングの準備 (生徒・講師)
     # ------------------------------------------
@@ -320,11 +338,25 @@ def render_matching_page():
                                         
                                     t_branch = teacher_branch_map.get(t_name, "両校")
                                     
-                                    # 🛑 校舎の絶対ルールによるブロック
+                                    # 🛑 1. 講師の所属校舎と生徒の校舎の絶対ルール
                                     if s_branch in ["田端", "東十条"]:
                                         if t_branch in ["田端", "東十条"] and t_branch != s_branch:
                                             continue # 所属校舎が違うためNG
-                                            
+
+                                    # 🛑 2. 同じコマ(同時刻)に別校舎の生徒が混ざるのを防ぐ
+                                    branch_conflict = False
+                                    for assigned_s in assigned_students:
+                                        # assigned_s は "生徒名(科目)" などの形式のため、生徒名を抽出
+                                        a_name = assigned_s.split('(')[0]
+                                        a_branch = student_branch_map.get(a_name, "不明")
+                                        # すでにアサインされている生徒と、今回アサインする生徒の校舎が異なる場合はNG
+                                        if s_branch in ["田端", "東十条"] and a_branch in ["田端", "東十条"] and s_branch != a_branch:
+                                            branch_conflict = True
+                                            break
+                                    
+                                    if branch_conflict:
+                                        continue # 同コマ内での校舎混在NG
+
                                     # ⚠️ 「両校」講師の同日内移動ペナルティ計算
                                     travel_penalty = 0
                                     if t_branch == "両校" and s_branch in ["田端", "東十条"]:
