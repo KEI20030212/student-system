@@ -18,7 +18,7 @@ from utils.g_sheets import (
 def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map, teacher_branch_map=None, is_print_mode=False):
     """
     1週間分のデータを『縦軸：講師名』『横軸：日付 × コマ名』の横長マトリクスHTMLとして生成する関数。
-    is_print_mode=True の場合、印刷に最適化されたシンプルなデザインになります。
+    ※Streamlitの暴走を防ぐため、改行を一切使わずにHTMLを組み立てます。
     """
     if teacher_branch_map is None:
         teacher_branch_map = {}
@@ -39,8 +39,7 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
 
     def get_display_name(full_name):
         parts = str(full_name).strip().split()
-        if not parts:
-            return ""
+        if not parts: return ""
         last_name = parts[0]
         if last_names_count.get(last_name, 0) > 1 and len(parts) > 1:
             first_name_initial = parts[1][0]
@@ -55,121 +54,77 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
         "社会": "background-color: #FFF9C4; color: #F57F17;"
     }
     
-    # 🌟 【印刷対応】印刷用のCSSクラス `print-optimized-table` を付与
     container_class = "print-container" if is_print_mode else "scroll-container"
-    html = f"""
-    <div class="{container_class}">
-    <table class="print-optimized-table">
-    """
     
-    html += "<tr>"
-    html += f"<th rowspan='2' class='sticky-col header-col'>講師名</th>"
+    # 🌟 HTMLをリストで組み立てて最後に1行に結合（マークダウンの誤作動を完全に防ぐ）
+    h = []
+    h.append(f"<div class='{container_class}'><table class='print-optimized-table'>")
+    h.append("<tr>")
+    h.append("<th rowspan='2' class='sticky-col header-col'>講師名</th>")
     
     for d in dates_for_week:
         dt_obj = datetime.datetime.strptime(d, "%Y/%m/%d")
         day_str = days_of_week_map[dt_obj.weekday()]
-        
-        day_color = "#333333"
-        if day_str == "土": day_color = "#1565C0"
-        elif day_str == "日": day_color = "#C62828"
-        
-        html += f"""
-        <th colspan='{len(slots)}' class='date-header' style='color: {day_color};'>
-            <span class='date-text'>{d.split('/', 1)[1]}</span> ({day_str})
-        </th>
-        """
-    html += "</tr>"
+        day_color = "#1565C0" if day_str == "土" else "#C62828" if day_str == "日" else "#333333"
+        date_short = d.split('/', 1)[1]
+        h.append(f"<th colspan='{len(slots)}' class='date-header' style='color: {day_color};'><span class='date-text'>{date_short}</span> ({day_str})</th>")
+    h.append("</tr><tr>")
     
-    html += "<tr>"
     for d in dates_for_week:
         for s in slots:
-            html += f"<th class='slot-header'>{s.replace('コマ', '')}</th>"
-    html += "</tr>"
+            h.append(f"<th class='slot-header'>{s.replace('コマ', '')}</th>")
+    h.append("</tr>")
     
     for t in teachers:
         t_branch = teacher_branch_map.get(t, "")
         branch_html = f"<br><span class='branch-badge'>{t_branch}</span>" if t_branch else ""
-        
-        html += "<tr>"
-        html += f"<td class='sticky-col name-col'>{t}{branch_html}</td>"
+        h.append(f"<tr><td class='sticky-col name-col'>{t}{branch_html}</td>")
         
         for d in dates_for_week:
             df_date = df_source[(df_source["講師名"] == t) & (df_source["日付"] == d)]
-            
             for s in slots:
-                html += "<td class='data-cell'>"
+                h.append("<td class='data-cell'>")
                 df_cell = df_date[df_date["コマ名"] == s]
-                
                 if not df_cell.empty:
                     for _, row in df_cell.iterrows():
                         disp_name = get_display_name(row["生徒名"])
                         subj = row["科目"]
                         style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
-                        
-                        html += f"""
-                        <div class='student-badge' style='{style}' title='{row["生徒名"]} ({subj})'>
-                            {disp_name}
-                        </div>
-                        """
-                html += "</td>"
-        html += "</tr>"
+                        h.append(f"<div class='student-badge' style='{style}' title='{row['生徒名']} ({subj})'>{disp_name}</div>")
+                h.append("</td>")
+        h.append("</tr>")
     
-    html += "</table></div>"
-    return html
-
+    h.append("</table></div>")
+    return "".join(h)
 
 def render_matching_page():
-    # 🌟 【印刷対応】印刷時にレイアウトを最適化するための隠しCSSを注入
+    # 🌟 印刷用・スクロール用のCSS設定
     st.markdown("""
     <style>
-        /* 通常時のスクロール用コンテナ */
         .scroll-container { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; }
         .print-container { overflow-x: visible; width: 100%; margin-bottom: 30px; }
-        
-        /* テーブルの基本スタイル */
         .print-optimized-table { width:100%; border-collapse: collapse; min-width: 1800px; background-color: #ffffff; color: #333333; font-family: sans-serif; font-size: 12px; }
         .print-optimized-table th, .print-optimized-table td { border: 1px solid #444; padding: 4px; text-align: center; }
-        
-        /* ヘッダーの装飾 */
         .header-col { width: 90px; background-color: #f7f9fa; font-weight: bold; }
         .date-header { background-color: #f7f9fa; font-weight: bold; font-size: 13px; }
         .date-text { font-size: 11px; color: #666; }
         .slot-header { background-color: #fcfcfc; font-size: 11px; font-weight: bold; color: #555; width: 55px; }
-        
-        /* データセルの装飾 */
         .name-col { font-weight: bold; background-color: #fafafa; font-size: 12px; text-align: left; padding-left: 8px; }
         .branch-badge { font-size: 9px; color: #777; font-weight: normal; background-color:#eee; padding:1px 3px; border-radius:3px; display: inline-block; margin-top: 2px; }
         .data-cell { vertical-align: top; min-width: 55px; background-color: #ffffff; }
         .student-badge { padding: 2px; border-radius: 3px; margin: 1px 0; display: block; font-size: 11px; font-weight: bold; width: 100%; box-sizing: border-box; }
-        
-        /* 左列の固定（ブラウザ表示用） */
         .scroll-container .sticky-col { position: sticky; left: 0; z-index: 2; box-shadow: 2px 0 5px rgba(0,0,0,0.05); }
         .scroll-container .name-col { z-index: 1; }
-
-        /* 🖨️ 印刷時の専用スタイル (A4横に最適化) */
         @media print {
             @page { size: A4 landscape; margin: 10mm; }
-            
-            /* Streamlitの余計なUIをすべて消す */
             header, .stSidebar, .stButton, .stTabs > div:first-child, .stSelectbox, .stDateInput, footer { display: none !important; }
-            
-            /* 全体幅をリセット */
             .main .block-container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
-            
-            /* 印刷専用コンテナの設定 */
             .print-container { display: block !important; width: 100% !important; page-break-after: always; }
-            .scroll-container { display: none !important; } /* スクロール版は印刷しない */
-            
-            /* テーブルをA4横幅に強制フィット */
+            .scroll-container { display: none !important; }
             .print-optimized-table { min-width: 100% !important; width: 100% !important; font-size: 10px !important; }
             .print-optimized-table th, .print-optimized-table td { border: 1px solid #000 !important; padding: 2px !important; }
-            
-            /* 固定を解除 */
             .sticky-col { position: static !important; box-shadow: none !important; }
-            
-            /* カラー印刷を強制 */
             .student-badge, .header-col, .date-header, .slot-header, .name-col { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            
             .student-badge { font-size: 9px !important; padding: 1px !important; border: 1px solid rgba(0,0,0,0.2) !important; }
             .header-col { width: 60px !important; }
             .slot-header { width: auto !important; font-size: 9px !important; }
@@ -187,7 +142,6 @@ def render_matching_page():
         df_teacher_shifts = robust_api_call(lambda: load_all_shifts("講師"), fallback_value=pd.DataFrame())
         df_student_shifts = robust_api_call(lambda: load_all_shifts("生徒"), fallback_value=pd.DataFrame())
         df_teacher_master = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
-        
         df_nominate = robust_api_call(load_nominated_teacher_master, fallback_value=pd.DataFrame())
         df_ng = robust_api_call(load_compatibility_ng_master, fallback_value=pd.DataFrame())
 
@@ -284,7 +238,7 @@ def render_matching_page():
                 t_shifts = df_teacher_shifts[df_teacher_shifts["日付"].isin(dates_in_scope)] if not df_teacher_shifts.empty else pd.DataFrame()
                 s_shifts = df_student_shifts[df_student_shifts["日付"].isin(dates_in_scope)] if not df_student_shifts.empty else pd.DataFrame()
                 
-                # 🌟 【アップデート3】過去の固定履歴（同じ曜日・コマ・生徒・科目）を抽出してマップ化
+                # 過去の固定履歴
                 history_map = {}
                 if not df_lessons.empty and "日付" in df_lessons.columns:
                     df_lessons['DateObj'] = pd.to_datetime(df_lessons['日付'], errors='coerce')
@@ -303,11 +257,7 @@ def render_matching_page():
                             if s_name not in history_map: history_map[s_name] = {}
                             if weekday not in history_map[s_name]: history_map[s_name][weekday] = {}
                             if slot not in history_map[s_name][weekday]: history_map[s_name][weekday][slot] = {}
-                            
-                            if subj not in history_map[s_name][weekday][slot]:
-                                history_map[s_name][weekday][slot][subj] = {}
-                            
-                            # 過去に担当した回数をカウントアップ（一番多く教えている先生を「固定」とみなす）
+                            if subj not in history_map[s_name][weekday][slot]: history_map[s_name][weekday][slot][subj] = {}
                             history_map[s_name][weekday][slot][subj][t_name] = history_map[s_name][weekday][slot][subj].get(t_name, 0) + 1
 
                 contract_remains = {} 
@@ -370,7 +320,7 @@ def render_matching_page():
 
                 new_lessons = []
                 for d in dates_in_scope:
-                    current_weekday = datetime.datetime.strptime(d, "%Y/%m/%d").weekday() # 曜日を取得
+                    current_weekday = datetime.datetime.strptime(d, "%Y/%m/%d").weekday() 
                     
                     for s in slots:
                         available_students = []
@@ -404,11 +354,9 @@ def render_matching_page():
                                 if not valid_subject: continue 
                                 target_subject = valid_subject
                                 
-                                # 🌟 【アップデート3】過去の固定講師を抽出
                                 past_fixed_teacher = None
                                 if s_name_clean in history_map and current_weekday in history_map[s_name_clean] and s in history_map[s_name_clean][current_weekday] and target_subject in history_map[s_name_clean][current_weekday][s]:
                                     teacher_counts = history_map[s_name_clean][current_weekday][s][target_subject]
-                                    # 一番多く教えている講師を取得
                                     if teacher_counts:
                                         past_fixed_teacher = max(teacher_counts, key=teacher_counts.get)
                                 
@@ -459,7 +407,6 @@ def render_matching_page():
                                         if t_name_clean in nomination_map.get(s_name_clean, set()):
                                             score -= 400  
                                             
-                                        # 🌟 【アップデート3】過去の固定履歴と一致したらスコアを大幅優遇（指名に次ぐ強さ）
                                         if t_name_clean == past_fixed_teacher:
                                             score -= 300
                                         
@@ -516,7 +463,7 @@ def render_matching_page():
                 df_combined = pd.concat([df_lessons, df_new_flat], ignore_index=True) if not df_lessons.empty else df_new_flat
                 for idx, w_dates in enumerate(weeks[:4]):
                     with preview_tabs[idx]:
-                        html_code = generate_weekly_matrix_html(df_combined[df_combined["日付"].isin(w_dates)], w_dates, slots, days_of_week_map, teacher_branch_map)
+                        html_code = generate_weekly_matrix_html(df_combined[df_combined["日付"].isin(w_dates)], w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=False)
                         st.markdown(html_code, unsafe_allow_html=True)
 
             st.write("")
@@ -572,7 +519,6 @@ def render_matching_page():
                                 
                                 st.markdown("### 🏫 田端校舎")
                                 if not df_tabata.empty:
-                                    # 🌟 【印刷対応】印刷用のHTMLとスクロール用のHTMLを両方出力する
                                     html_scroll = generate_weekly_matrix_html(df_tabata, w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=False)
                                     html_print = generate_weekly_matrix_html(df_tabata, w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=True)
                                     st.markdown(html_scroll + html_print, unsafe_allow_html=True)
