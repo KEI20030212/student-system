@@ -102,7 +102,10 @@ def render_matching_page():
     st.markdown("""
     <style>
         .scroll-container { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; }
-        .print-container { overflow-x: visible; width: 100%; margin-bottom: 30px; }
+        
+        /* 🌟 修正：通常画面では印刷用のコンテナを隠す！ */
+        .print-container { display: none; } 
+        
         .print-optimized-table { width:100%; border-collapse: collapse; min-width: 1800px; background-color: #ffffff; color: #333333; font-family: sans-serif; font-size: 12px; }
         .print-optimized-table th, .print-optimized-table td { border: 1px solid #444; padding: 4px; text-align: center; }
         .header-col { width: 90px; background-color: #f7f9fa; font-weight: bold; }
@@ -115,12 +118,16 @@ def render_matching_page():
         .student-badge { padding: 2px; border-radius: 3px; margin: 1px 0; display: block; font-size: 11px; font-weight: bold; width: 100%; box-sizing: border-box; }
         .scroll-container .sticky-col { position: sticky; left: 0; z-index: 2; box-shadow: 2px 0 5px rgba(0,0,0,0.05); }
         .scroll-container .name-col { z-index: 1; }
+        
         @media print {
             @page { size: A4 landscape; margin: 10mm; }
             header, .stSidebar, .stButton, .stTabs > div:first-child, .stSelectbox, .stDateInput, footer { display: none !important; }
             .main .block-container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+            
+            /* 🌟 印刷のときだけ、印刷用コンテナを表示し、スクロール用を隠す */
             .print-container { display: block !important; width: 100% !important; page-break-after: always; }
             .scroll-container { display: none !important; }
+            
             .print-optimized-table { min-width: 100% !important; width: 100% !important; font-size: 10px !important; }
             .print-optimized-table th, .print-optimized-table td { border: 1px solid #000 !important; padding: 2px !important; }
             .sticky-col { position: static !important; box-shadow: none !important; }
