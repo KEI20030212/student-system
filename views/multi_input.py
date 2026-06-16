@@ -26,32 +26,35 @@ from utils.calc_logic import (
 )
 from utils.api_guard import robust_api_call
 
-# --- 🚀 データ取得を高速化＆保護するキャッシュ関数 ---
-@st.cache_data(ttl=600, show_spinner=False)
 def cached_get_student_master():
-    return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+    df = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+    return df.copy() if not df.empty else df
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_teacher_names():
-    return robust_api_call(get_all_teacher_names, fallback_value=[])
+    lst = robust_api_call(get_all_teacher_names, fallback_value=[])
+    return list(lst)
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_textbook_master():
-    return robust_api_call(get_textbook_master, fallback_value={})
+    dct = robust_api_call(get_textbook_master, fallback_value={})
+    return dict(dct)
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_quiz_master():
-    return robust_api_call(get_quiz_master_dict, fallback_value={})
+    dct = robust_api_call(get_quiz_master_dict, fallback_value={})
+    return dict(dct)
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_type_advice():
-    return robust_api_call(get_type_advice_dict, fallback_value={})
+    dct = robust_api_call(get_type_advice_dict, fallback_value={})
+    return dict(dct)
 
-@st.cache_data(ttl=60, show_spinner=False)
 def cached_get_all_logs():
-    return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
+    df = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
+    return df.copy() if not df.empty else df
 
-# 🌟 変更: 飛び石進捗用の新しいキー "adv_ranges_num", "adv_s", "adv_e" を追加
+# 🌟 下書きキーのプレフィックス
 DRAFT_PREFIXES = (
     "num_blocks", "class_date", "class_type", 
     "sb_", "sel_student", "new_name", "att", "late", "sub", "texts", "new_usage_text", 
@@ -208,6 +211,22 @@ def render_multi_input_page():
                 continue 
 
             num_students = int(class_type.split(":")[1])
+            
+            # ==========================================
+            # 🌟 ブロック全体での「本当の出席者数」を事前計算
+            # ==========================================
+            actual_attendees = 0
+            for temp_i in range(num_students):
+                if st.session_state.get(f"saved_flag_{b}_{temp_i}", False):
+                    att_status = st.session_state.get(f"saved_att_{b}_{temp_i}", "出席")
+                else:
+                    att_status = st.session_state.get(f"att_{b}_{temp_i}", "出席（通常）")
+                    
+                if "欠席" not in att_status:
+                    actual_attendees += 1
+
+            actual_class_type = f"1:{actual_attendees}" if actual_attendees > 0 else class_type
+
             st.divider()
             cols = st.columns(num_students)
             input_data_list = []
@@ -399,7 +418,7 @@ def render_multi_input_page():
                                                             hw_reason_val = f"その他: {reason_other}" if reason_other else "その他"
                                                         else:
                                                             hw_reason_val = reason_sel
-                                                        
+                                                    
                                                     with r_col2:
                                                         fix_sel = st.selectbox("本日の修正策", ["", "文量調整(減らす)", "期限延長(スライド)", "内容変更(基礎へ戻る)", "再約束(マインドセット)", "その他"], key=f"hw_fix_sel_{b}_{i}")
                                                         if fix_sel == "その他":
@@ -447,7 +466,6 @@ def render_multi_input_page():
                                                         else:
                                                             advanced_p_list.append(f"{text_name}: -")
                                                     else:
-                                                        # 🌟 変更: 進捗でも飛び石入力ができるように変更
                                                         num_adv_ranges = st.number_input(f"進捗の範囲の数 (飛び石対応)", min_value=1, max_value=5, value=1, key=f"adv_ranges_num_{b}_{i}_{t_idx}")
                                                         
                                                         has_valid_range = False
@@ -562,7 +580,7 @@ def render_multi_input_page():
                                                                     
                                                                     if next_end >= next_start and next_end > 0:
                                                                         next_hw_pages_list.append(f"{hw_text}: P.{next_start}〜{next_end}")
-                                                                    
+                                                                        
                                                         next_hw_pages_str = "\n".join(next_hw_pages_list) if next_hw_pages_list else "-"
                                                         selected_hw_text_str = "、".join(selected_hw_texts)
                                                     else:
@@ -613,7 +631,9 @@ def render_multi_input_page():
                                                     save_to_spreadsheet,
                                                     student_id=student_id, name=name, subject=subject, text_name=text_name_str,
                                                     advanced_p=advanced_p_str, quiz_records=[], date=date, 
-                                                    teacher_name=teacher_name, class_type=class_type, attendance=attendance,
+                                                    teacher_name=teacher_name, 
+                                                    class_type=actual_class_type, # 🌟【修正】計算した「本当の授業形態」を使用
+                                                    attendance=attendance,
                                                     class_slot=class_slot, advice=advice, parent_msg=parent_msg,
                                                     next_handover=next_handover, assigned_p=assigned_p, completed_p=completed_p, 
                                                     motivation_rank=motivation_rank, next_hw_text=selected_hw_text_str,
@@ -645,6 +665,7 @@ def render_multi_input_page():
                                                     
                                                     st.session_state[f"saved_flag_{b}_{i}"] = True
                                                     st.session_state[f"saved_name_{b}_{i}"] = name
+                                                    st.session_state[f"saved_att_{b}_{i}"] = attendance # 🌟 出欠状態も確実に記録
                                                     single_save_triggered = True
                                                 else:
                                                     status.update(label="保存失敗", state="error", expanded=True)
@@ -653,11 +674,9 @@ def render_multi_input_page():
             st.divider()
             
             if len(input_data_list) > 0:
-                actual_attendees = sum(1 for data in input_data_list if "欠席" not in data["attendance"])
-                actual_class_type = f"1:{actual_attendees}" if actual_attendees > 0 else class_type
-                
-                if actual_attendees < len(input_data_list) and actual_attendees > 0:
-                    st.info(f"💡 欠席者がいるため、実際の授業形態は「{actual_class_type}」として記録されます。")
+                # 🌟 タブ全体で欠席者がいるかどうかの案内表示
+                if actual_attendees < num_students and actual_attendees > 0:
+                    st.info(f"💡 タブ内に欠席者がいるため、実際の授業形態は「{actual_class_type}」として記録されます。")
 
                 btn_label = f"🚀 コマ {b+1} の全員の記録をまとめて保存する" if len(input_data_list) == num_students else f"🚀 コマ {b+1} の【未保存の {len(input_data_list)}名】をまとめて保存する"
 
@@ -669,6 +688,7 @@ def render_multi_input_page():
                             
                             if "欠席" in data.get("attendance", ""):
                                 st.session_state[f"saved_flag_{b}_{o_idx}"] = True
+                                st.session_state[f"saved_att_{b}_{o_idx}"] = data.get("attendance", "")
                                 continue
 
                             if st.session_state.get(f"saved_flag_{b}_{o_idx}", False):
@@ -678,7 +698,8 @@ def render_multi_input_page():
                                 save_to_spreadsheet,
                                 student_id=data.get("student_id", ""), name=data.get("name", ""), subject=data.get("subject", ""),
                                 text_name=data.get("text_name_str", data.get("text_name", "")), advanced_p=data.get("advanced_p_str", ""),
-                                quiz_records=[], date=date, teacher_name=teacher_name, class_type=actual_class_type,  
+                                quiz_records=[], date=date, teacher_name=teacher_name, 
+                                class_type=actual_class_type, # 🌟【修正】全体計算済みの本当の授業形態
                                 attendance=data.get("attendance", ""), class_slot=class_slot, advice=data.get("advice", ""),
                                 parent_msg=data.get("parent_msg", ""), next_handover=data.get("next_handover", ""),
                                 assigned_p=data.get("assigned_p", 0), completed_p=data.get("completed_p", 0), 
@@ -708,6 +729,7 @@ def render_multi_input_page():
                                         
                                 st.session_state[f"saved_flag_{b}_{o_idx}"] = True
                                 st.session_state[f"saved_name_{b}_{o_idx}"] = data["name"]
+                                st.session_state[f"saved_att_{b}_{o_idx}"] = data.get("attendance", "")
                             else:
                                 all_success = False
                                 st.error(f"❌ {data['name']} さんの保存に失敗しました。")
@@ -732,14 +754,14 @@ def render_multi_input_page():
             if f"{k}_{b_idx}" in st.session_state:
                 del st.session_state[f"{k}_{b_idx}"]
 
-        # 🌟 変更: 新しいキーもここでお掃除するように追加しました
+        # 🌟 変更: 新しいキーと出欠(saved_att)もここでお掃除するように追加
         target_prefixes = [
             "sel_student", "new_name", "att", "late", "sub", "cont", "hw_forgot", 
             "done_start", "done_end", "texts", "new_usage_text", "adv_start", 
             "adv_end", "num_q", "q_name", "q_chap", "q_score", "w", 
             "conc", "reac", "hw_texts", "new_hw_text", "hw_ranges_num", 
             "n_s", "n_e", "advc", "p_msg", "next_h", "d_s", "d_e",
-            "saved_flag", "saved_name", "hw_reason", "hw_fix", "bring", "adv_unit", "hw_unit",
+            "saved_flag", "saved_name", "saved_att", "hw_reason", "hw_fix", "bring", "adv_unit", "hw_unit",
             "adv_ranges_num", "adv_s", "adv_e"
         ]
         for i_idx in range(students_count):
@@ -749,11 +771,9 @@ def render_multi_input_page():
                         del st.session_state[key]
                         break
         
-        st.cache_data.clear()
         time.sleep(1.5)
         st.rerun()
 
     elif single_save_triggered:
-        st.cache_data.clear()
         time.sleep(1.5)
         st.rerun()
