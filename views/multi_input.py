@@ -197,7 +197,7 @@ def render_multi_input_page():
                 
                 date = c1.date_input("授業日", datetime.date.today(), key=f"class_date_{b}")
                 teacher_name = c2.selectbox("👨‍🏫 担当講師", teacher_names, index=None, placeholder="講師を選択", key=f"sb_teacher_{b}")
-                class_type = c3.radio("👥 授業形態", ["1:1", "1:2", "1:3"], horizontal=True, key=f"class_type_{b}")
+                class_type = c3.radio("👥 授業形態", ["1:1", "1:2", "1:3", "1:1(Q)"], horizontal=True, key=f"class_type_{b}")
                 
                 time_slots = [
                     "Aコマ目 (9:30~11:00)", "Bコマ目 (11:10~12:40)",
@@ -210,7 +210,7 @@ def render_multi_input_page():
                 st.info(f"👆 コマ {b+1} の「担当講師」と「授業コマ」を選択してください。")
                 continue 
 
-            num_students = int(class_type.split(":")[1])
+            num_students = int(class_type.split(":")[1].replace("(Q)", ""))
             
             # ==========================================
             # 🌟 ブロック全体での「本当の出席者数」を事前計算
