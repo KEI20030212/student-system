@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import datetime
 import time
@@ -493,11 +494,15 @@ def render_matching_page():
     with tab_view:
         c_title, c_print = st.columns([0.8, 0.2])
         c_title.subheader(f"📋 確定済みの授業予定表")
-        c_print.markdown("""
-            <button onclick="window.print()" style="padding: 8px 15px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%;">
-                🖨️ A4横で印刷・PDF化
-            </button>
-        """, unsafe_allow_html=True)
+        
+        # 🌟 Streamlitのセキュリティを突破する魔法のボタン！
+        # （隔離エリアから大元の画面に印刷命令を出すため、window.parent.print() にしています）
+        with c_print:
+            components.html("""
+                <button onclick="window.parent.print()" style="padding: 8px 15px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; font-family: sans-serif; font-size: 14px; box-sizing: border-box;">
+                    🖨️ A4横で印刷・PDF化
+                </button>
+            """, height=50)
         
         st.caption(f"現在本番登録されている **{start_date.strftime('%Y/%m/%d')} 〜 {end_date.strftime('%m/%d')}** の確定スケジュールです。")
         st.info("💡 **【印刷時のコツ】** 右上の「🖨️ A4横で印刷・PDF化」ボタンを押し、印刷設定のレイアウトを「横」に、余白を「最小」に設定してください。")
