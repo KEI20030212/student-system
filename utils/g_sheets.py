@@ -2230,6 +2230,44 @@ def save_compatibility_ng_master(df):
         print(f"相性NGマスタの更新エラー: {e}")
         return False
 
+def load_nominated_teacher_master():
+    """設定_指名講師マスタからデータを取得する"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
+    try:
+        worksheet = sh.worksheet("設定_指名講師マスタ")
+    except gspread.exceptions.WorksheetNotFound:
+        # シートがない場合は空のデータを返す
+        return pd.DataFrame()
+        
+    return pd.DataFrame(worksheet.get_all_records())
+
+def save_nominated_teacher_master(df):
+    """設定_指名講師マスタのデータを保存する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("設定_指名講師マスタ")
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成（100行5列で仮作成）
+            ws = sh.add_worksheet(title="設定_指名講師マスタ", rows="100", cols="5")
+        
+        ws.clear()
+        if not df.empty:
+            # データフレームの列名を自動でヘッダーにして書き込む
+            data = [df.columns.values.tolist()] + df.values.tolist()
+            ws.update("A1", data)
+        else:
+            # データが空の場合はヘッダーだけ残す
+            if len(df.columns) > 0:
+                ws.update("A1", [df.columns.values.tolist()])
+        return True
+    except Exception as e:
+        print(f"指名講師マスタの更新エラー: {e}")
+        return False
+
 def load_fixed_shift_master(target_type: str, member_name: str) -> pd.DataFrame:
     """
     スプレッドシートの「設定_講師固定シフト」または「設定_生徒固定シフト」シートから
