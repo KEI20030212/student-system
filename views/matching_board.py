@@ -1,5 +1,5 @@
 import streamlit as st
-import streamlit.components.v1 as components  # 🌟 PDF化ツールを読み込むために追加
+import streamlit.components.v1 as components
 import pandas as pd
 import datetime
 import time
@@ -16,26 +16,30 @@ from utils.g_sheets import (
     load_compatibility_ng_master   
 )
 
-def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map, teacher_branch_map=None, is_print_mode=False):
+def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map, teacher_branch_map=None, all_branch_teachers=None, is_print_mode=False):
     """
-    1週間分のデータを『縦軸：講師名』『横軸：日付 × コマ名』の横長マトリクスHTMLとして生成する関数。
+    1週間分のデータを『縦軸：講師名』『横軸：日付 × コマ名』の横長マトリクスHTMLとして生成。
+    ※ all_branch_teachers にその校舎の全講師リストを渡すことで、予定がなくても「枠」を表示します。
     """
     if teacher_branch_map is None:
         teacher_branch_map = {}
+    if all_branch_teachers is None:
+        all_branch_teachers = []
         
-    if df_source.empty or not dates_for_week:
-        return "<p style='color: gray; font-style: italic; padding: 10px;'>この期間の授業予定はありません。</p>"
-        
-    teachers = sorted(df_source["講師名"].dropna().unique())
-    if not teachers:
-        return "<p style='color: gray; font-style: italic; padding: 10px;'>配置された講師がいません。</p>"
+    # 🌟 予定がなくても、その校舎の全講師を必ずリストに含める（空枠の生成）
+    active_teachers = set(df_source["講師名"].dropna().unique()) if not df_source.empty else set()
+    all_target_teachers = sorted(list(active_teachers.union(set(all_branch_teachers))))
+    
+    if not all_target_teachers:
+        return "<p style='color: gray; font-style: italic; padding: 10px;'>この校舎に所属する講師がいません。</p>"
         
     last_names_count = {}
-    for full_name in df_source["生徒名"].dropna().unique():
-        parts = str(full_name).strip().split()
-        if parts:
-            last_name = parts[0]
-            last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
+    if not df_source.empty:
+        for full_name in df_source["生徒名"].dropna().unique():
+            parts = str(full_name).strip().split()
+            if parts:
+                last_name = parts[0]
+                last_names_count[last_name] = last_names_count.get(last_name, 0) + 1
 
     def get_display_name(full_name):
         parts = str(full_name).strip().split()
@@ -74,22 +78,23 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
             h.append(f"<th class='slot-header'>{s.replace('コマ', '')}</th>")
     h.append("</tr>")
     
-    for t in teachers:
+    for t in all_target_teachers:
         t_branch = teacher_branch_map.get(t, "")
         branch_html = f"<br><span class='branch-badge'>{t_branch}</span>" if t_branch else ""
         h.append(f"<tr><td class='sticky-col name-col'>{t}{branch_html}</td>")
         
         for d in dates_for_week:
-            df_date = df_source[(df_source["講師名"] == t) & (df_source["日付"] == d)]
+            df_date = df_source[(df_source["講師名"] == t) & (df_source["日付"] == d)] if not df_source.empty else pd.DataFrame()
             for s in slots:
                 h.append("<td class='data-cell'>")
-                df_cell = df_date[df_date["コマ名"] == s]
+                df_cell = df_date[df_date["コマ名"] == s] if not df_date.empty else pd.DataFrame()
                 if not df_cell.empty:
                     for _, row in df_cell.iterrows():
                         disp_name = get_display_name(row["生徒名"])
                         subj = row["科目"]
                         style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
                         h.append(f"<div class='student-badge' style='{style}' title='{row['生徒名']} ({subj})'>{disp_name}</div>")
+                # 🌟 予定がなくても空のtdを出力して枠をキープする
                 h.append("</td>")
         h.append("</tr>")
     
@@ -97,14 +102,10 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
     return "".join(h)
 
 def render_matching_page():
-    # 🌟 ブラウザの印刷機能はもう使わないため、CSSをシンプルにしました
     st.markdown("""
     <style>
         .scroll-container { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; }
-        
-        /* 🌟 PDF変換用の裏データは画面上では隠しておく */
         .print-container { display: none; } 
-        
         .print-optimized-table { width:100%; border-collapse: collapse; min-width: 1800px; background-color: #ffffff; color: #333333; font-family: sans-serif; font-size: 12px; }
         .print-optimized-table th, .print-optimized-table td { border: 1px solid #444; padding: 4px; text-align: center; }
         .header-col { width: 90px; background-color: #f7f9fa; font-weight: bold; }
@@ -184,6 +185,10 @@ def render_matching_page():
                 elif t_id.startswith("h"): teacher_branch_map[t_name] = "東十条"
                 elif t_id.startswith("b"): teacher_branch_map[t_name] = "両校"
 
+    # 🌟 拠点ごとに全講師をリストアップ（枠の作成用）
+    tabata_teachers = [t for t, b in teacher_branch_map.items() if b in ["田端", "両校"]]
+    higashijujo_teachers = [t for t, b in teacher_branch_map.items() if b in ["東十条", "両校"]]
+
     nomination_map = {}
     if not df_nominate.empty and "指名生徒名" in df_nominate.columns and "講師名" in df_nominate.columns:
         for _, row in df_nominate.iterrows():
@@ -226,7 +231,6 @@ def render_matching_page():
                 t_shifts = df_teacher_shifts[df_teacher_shifts["日付"].isin(dates_in_scope)] if not df_teacher_shifts.empty else pd.DataFrame()
                 s_shifts = df_student_shifts[df_student_shifts["日付"].isin(dates_in_scope)] if not df_student_shifts.empty else pd.DataFrame()
                 
-                # 過去の固定履歴
                 history_map = {}
                 if not df_lessons.empty and "日付" in df_lessons.columns:
                     df_lessons['DateObj'] = pd.to_datetime(df_lessons['日付'], errors='coerce')
@@ -451,7 +455,7 @@ def render_matching_page():
                 df_combined = pd.concat([df_lessons, df_new_flat], ignore_index=True) if not df_lessons.empty else df_new_flat
                 for idx, w_dates in enumerate(weeks[:4]):
                     with preview_tabs[idx]:
-                        html_code = generate_weekly_matrix_html(df_combined[df_combined["日付"].isin(w_dates)], w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=False)
+                        html_code = generate_weekly_matrix_html(df_combined[df_combined["日付"].isin(w_dates)], w_dates, slots, days_of_week_map, teacher_branch_map, all_branch_teachers=list(teacher_branch_map.keys()), is_print_mode=False)
                         st.markdown(html_code, unsafe_allow_html=True)
 
             st.write("")
@@ -475,7 +479,6 @@ def render_matching_page():
         c_title, c_print = st.columns([0.8, 0.2])
         c_title.subheader(f"📋 確定済みの授業予定表")
         
-        # 🌟 完全にフリーズしない魔法のPDFダウンロードボタンへ進化！
         with c_print:
             components.html("""
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -497,10 +500,8 @@ def render_matching_page():
                             return;
                         }
                         
-                        // PDFエンジンに渡すためのダミー箱を用意
                         const wrapper = document.createElement('div');
                         
-                        // 🌟 PDF内でレイアウトが崩れないよう、専用のスタイルを強制注入
                         const style = document.createElement('style');
                         style.innerHTML = `
                             .print-optimized-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 12px; }
@@ -515,14 +516,13 @@ def render_matching_page():
                         `;
                         wrapper.appendChild(style);
                         
-                        // 画面上に隠れている印刷用テーブルをコピーして集める
                         elements.forEach(el => {
                             const clone = el.cloneNode(true);
                             clone.style.display = 'block';
                             wrapper.appendChild(clone);
                         });
                         
-                        // PDFの設定（A4横、綺麗に収める）
+                        // html2pdfが処理し終わった後に確実に復元させるためにより安全なPromise処理へ変更
                         const opt = {
                             margin:       0.2,
                             filename:     '授業予定表.pdf',
@@ -531,8 +531,10 @@ def render_matching_page():
                             jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
                         };
                         
-                        // PDF生成とダウンロードを実行
                         html2pdf().set(opt).from(wrapper).save().then(() => {
+                            btn.innerText = '📄 PDFとしてダウンロード';
+                        }).catch(err => {
+                            alert("PDFの生成に失敗しました。時間をおいて再試行してください。");
                             btn.innerText = '📄 PDFとしてダウンロード';
                         });
                     }, 100);
@@ -543,46 +545,44 @@ def render_matching_page():
         st.caption(f"現在本番登録されている **{start_date.strftime('%Y/%m/%d')} 〜 {end_date.strftime('%m/%d')}** の確定スケジュールです。")
         st.info("💡 右上のボタンを一度クリックし、「⏳ PDF変換中...」と表示されたまま少しお待ちいただくと、ダウンロードが開始されます。")
         
-        if not df_lessons.empty and "日付" in df_lessons.columns:
-            df_scope_lessons = df_lessons[df_lessons["日付"].isin(dates_in_scope)]
+        if not df_lessons.empty:
+            date_col = "日付" if "日付" in df_lessons.columns else "日時" if "日時" in df_lessons.columns else None
             
-            if not df_scope_lessons.empty:
-                view_weeks = [dates_in_scope[i:i+7] for i in range(0, len(dates_in_scope), 7)]
-                view_tab_labels = [f"📅 {w[0].split('/', 1)[1]} 〜 ({idx+1}週目)" for idx, w in enumerate(view_weeks[:4])]
+            if date_col:
+                df_lessons_ready = df_lessons.rename(columns={date_col: "日付"})
+                df_scope_lessons = df_lessons_ready[df_lessons_ready["日付"].isin(dates_in_scope)]
                 
-                if view_tab_labels:
-                    view_tabs = st.tabs(view_tab_labels)
-                    for idx, w_dates in enumerate(view_weeks[:4]):
-                        with view_tabs[idx]:
-                            df_view_week_data = df_scope_lessons[df_scope_lessons["日付"].isin(w_dates)]
-                            
-                            if not df_view_week_data.empty:
-                                df_view_week_data = df_view_week_data.copy()
-                                df_view_week_data["校舎"] = df_view_week_data["生徒名"].apply(
-                                    lambda x: student_branch_map.get(str(x).replace(" ", "").replace(" ", "").strip(), "不明")
-                                )
+                if not df_scope_lessons.empty:
+                    view_weeks = [dates_in_scope[i:i+7] for i in range(0, len(dates_in_scope), 7)]
+                    view_tab_labels = [f"📅 {w[0].split('/', 1)[1]} 〜 ({idx+1}週目)" for idx, w in enumerate(view_weeks[:4])]
+                    
+                    if view_tab_labels:
+                        view_tabs = st.tabs(view_tab_labels)
+                        for idx, w_dates in enumerate(view_weeks[:4]):
+                            with view_tabs[idx]:
+                                df_view_week_data = df_scope_lessons[df_scope_lessons["日付"].isin(w_dates)]
                                 
-                                df_tabata = df_view_week_data[df_view_week_data["校舎"] == "田端"]
-                                df_higashijujo = df_view_week_data[df_view_week_data["校舎"] == "東十条"]
-                                
-                                st.markdown("### 🏫 田端校舎")
-                                if not df_tabata.empty:
-                                    html_scroll = generate_weekly_matrix_html(df_tabata, w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=False)
-                                    html_print = generate_weekly_matrix_html(df_tabata, w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=True)
-                                    st.markdown(html_scroll + html_print, unsafe_allow_html=True)
-                                else:
-                                    st.caption("この週の田端校舎の確定予定はありません。")
+                                if not df_view_week_data.empty:
+                                    df_view_week_data = df_view_week_data.copy()
+                                    df_view_week_data["校舎"] = df_view_week_data["生徒名"].apply(
+                                        lambda x: student_branch_map.get(str(x).replace(" ", "").replace(" ", "").strip(), "不明")
+                                    )
                                     
-                                st.write("") 
-                                
-                                st.markdown("### 🏫 東十条校舎")
-                                if not df_higashijujo.empty:
-                                    html_scroll2 = generate_weekly_matrix_html(df_higashijujo, w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=False)
-                                    html_print2 = generate_weekly_matrix_html(df_higashijujo, w_dates, slots, days_of_week_map, teacher_branch_map, is_print_mode=True)
+                                    df_tabata = df_view_week_data[df_view_week_data["校舎"] == "田端"]
+                                    df_higashijujo = df_view_week_data[df_view_week_data["校舎"] == "東十条"]
+                                    
+                                    st.markdown("### 🏫 田端校舎")
+                                    html_scroll = generate_weekly_matrix_html(df_tabata, w_dates, slots, days_of_week_map, teacher_branch_map, all_branch_teachers=tabata_teachers, is_print_mode=False)
+                                    html_print = generate_weekly_matrix_html(df_tabata, w_dates, slots, days_of_week_map, teacher_branch_map, all_branch_teachers=tabata_teachers, is_print_mode=True)
+                                    st.markdown(html_scroll + html_print, unsafe_allow_html=True)
+                                        
+                                    st.write("") 
+                                    
+                                    st.markdown("### 🏫 東十条校舎")
+                                    html_scroll2 = generate_weekly_matrix_html(df_higashijujo, w_dates, slots, days_of_week_map, teacher_branch_map, all_branch_teachers=higashijujo_teachers, is_print_mode=False)
+                                    html_print2 = generate_weekly_matrix_html(df_higashijujo, w_dates, slots, days_of_week_map, teacher_branch_map, all_branch_teachers=higashijujo_teachers, is_print_mode=True)
                                     st.markdown(html_scroll2 + html_print2, unsafe_allow_html=True)
-                                else:
-                                    st.caption("この週の東十条校舎の確定予定はありません。")
+                else:
+                    st.info("ℹ️ 指定された期間内に確定登録された授業はまだありません。")
             else:
-                st.info("ℹ️ 指定された期間内に確定登録された授業はまだありません。")
-        else:
-            st.info("ℹ️ 確定済みの授業スケジュールデータ自体がありません。")
+                st.info("ℹ️ 確定済みの授業スケジュールデータ自体がありません。")
