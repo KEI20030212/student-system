@@ -28,7 +28,6 @@ def cached_load_quiz_records():
 def cached_load_hw_records():
     return robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
 
-@st.cache_data(ttl=600, show_spinner=False)
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
@@ -49,8 +48,8 @@ def render_line_report_page():
     
     user_role = st.session_state.get('role', '')
     
-    can_use_report = user_role in ['admin', 'owner', 'AM', 'head_teacher']
-    can_use_reply = user_role in ['admin', 'owner', 'AM']
+    can_use_report = user_role in ['admin', 'owner', 'am', 'head_teacher']
+    can_use_reply = user_role in ['admin', 'owner', 'am']
 
     if not can_use_report and not can_use_reply:
         st.error("🔒 このページへのアクセス権限がありません。管理者または教室長（社員）のみ利用可能です。")
@@ -152,6 +151,9 @@ def render_line_report_page():
                             subject = row.get("科目", "（未入力）")
                             period = row.get("授業コマ", "（未入力）")
                             
+                            # 🌟 授業形態を取得
+                            c_type = str(row.get("授業形態", "")).strip()
+                            
                             text_name = str(row.get("テキスト", "")).strip()
                             if text_name == "nan": text_name = ""
                             end_page = str(row.get("終了ページ", "")).strip()
@@ -188,12 +190,16 @@ def render_line_report_page():
                             if next_hw_pages: hw_content = f"{next_hw_pages}"
 
                             prefix = "🎨 【体験内容】" if bucket_name == "体験授業" else "📅 【授業内容】"
-                            class_text = f"{prefix}（{period} / {subject} / 担当：{teacher}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
+                            
+                            # 🌟 「1:1(Q)」のときだけ形態を表示するロジック
+                            type_display = f" / {c_type}" if "1:1(Q)" in c_type else ""
+                            
+                            class_text = f"{prefix}（{period} / {subject} / 担当：{teacher}{type_display}）\n・進捗：{progress}\n・様子：{attitude}{hw_status_line}"
                             class_sections.append(class_text)
 
-                            if advice and advice != "nan": advice_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{advice}")
-                            if parent_msg and parent_msg != "nan": parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
-                            if hw_content: hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw_content}")
+                        if advice and advice != "nan": advice_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{advice}")
+                        if parent_msg and parent_msg != "nan": parent_msg_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{parent_msg}")
+                        if hw_content: hw_sections.append(f"《{subject if bucket_name != '体験授業' else ''} {teacher}先生より》\n{hw_content}")
 
                         classes_text = "\n\n".join(class_sections)
                         bring_text = f"🎒 【次回の持ち物】\n" + "\n".join(bring_sections) + "\n\n" if bring_sections else ""
@@ -250,7 +256,8 @@ def render_line_report_page():
         with reply_container:
             st.write("LINE報告に対する保護者様からのリアクションや返信を記録し、信頼関係の見える化（ファン化分析）に活用します✨")
             
-            df_students = cached_get_student_master()
+            df_students_raw = cached_get_student_master()
+            df_students = df_students_raw.copy()
             teacher_names = cached_get_teacher_names()
             
             if df_students.empty:
