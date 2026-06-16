@@ -1,5 +1,5 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import streamlit.components.v1 as components  # 🌟 PDF化ツールを読み込むために追加
 import pandas as pd
 import datetime
 import time
@@ -19,7 +19,6 @@ from utils.g_sheets import (
 def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map, teacher_branch_map=None, is_print_mode=False):
     """
     1週間分のデータを『縦軸：講師名』『横軸：日付 × コマ名』の横長マトリクスHTMLとして生成する関数。
-    ※Streamlitの暴走を防ぐため、改行を一切使わずにHTMLを組み立てます。
     """
     if teacher_branch_map is None:
         teacher_branch_map = {}
@@ -57,7 +56,6 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
     
     container_class = "print-container" if is_print_mode else "scroll-container"
     
-    # 🌟 HTMLをリストで組み立てて最後に1行に結合（マークダウンの誤作動を完全に防ぐ）
     h = []
     h.append(f"<div class='{container_class}'><table class='print-optimized-table'>")
     h.append("<tr>")
@@ -99,12 +97,12 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
     return "".join(h)
 
 def render_matching_page():
-    # 🌟 印刷用・スクロール用のCSS設定
+    # 🌟 ブラウザの印刷機能はもう使わないため、CSSをシンプルにしました
     st.markdown("""
     <style>
         .scroll-container { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; }
         
-        /* 🌟 修正：通常画面では印刷用のコンテナを隠す！ */
+        /* 🌟 PDF変換用の裏データは画面上では隠しておく */
         .print-container { display: none; } 
         
         .print-optimized-table { width:100%; border-collapse: collapse; min-width: 1800px; background-color: #ffffff; color: #333333; font-family: sans-serif; font-size: 12px; }
@@ -119,24 +117,6 @@ def render_matching_page():
         .student-badge { padding: 2px; border-radius: 3px; margin: 1px 0; display: block; font-size: 11px; font-weight: bold; width: 100%; box-sizing: border-box; }
         .scroll-container .sticky-col { position: sticky; left: 0; z-index: 2; box-shadow: 2px 0 5px rgba(0,0,0,0.05); }
         .scroll-container .name-col { z-index: 1; }
-        
-        @media print {
-            @page { size: A4 landscape; margin: 10mm; }
-            header, .stSidebar, .stButton, .stTabs > div:first-child, .stSelectbox, .stDateInput, footer { display: none !important; }
-            .main .block-container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
-            
-            /* 🌟 印刷のときだけ、印刷用コンテナを表示し、スクロール用を隠す */
-            .print-container { display: block !important; width: 100% !important; page-break-after: always; }
-            .scroll-container { display: none !important; }
-            
-            .print-optimized-table { min-width: 100% !important; width: 100% !important; font-size: 10px !important; }
-            .print-optimized-table th, .print-optimized-table td { border: 1px solid #000 !important; padding: 2px !important; }
-            .sticky-col { position: static !important; box-shadow: none !important; }
-            .student-badge, .header-col, .date-header, .slot-header, .name-col { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            .student-badge { font-size: 9px !important; padding: 1px !important; border: 1px solid rgba(0,0,0,0.2) !important; }
-            .header-col { width: 60px !important; }
-            .slot-header { width: auto !important; font-size: 9px !important; }
-        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -495,26 +475,73 @@ def render_matching_page():
         c_title, c_print = st.columns([0.8, 0.2])
         c_title.subheader(f"📋 確定済みの授業予定表")
         
-        # 🌟 修正：フリーズ（ぐるぐる）を防止するJavaScriptを組み込んだボタン
+        # 🌟 完全にフリーズしない魔法のPDFダウンロードボタンへ進化！
         with c_print:
             components.html("""
-                <script>
-                    function triggerPrint() {
-                        // 1. まず親ウィンドウ（システム全体の画面）にフォーカスを当てる
-                        window.parent.focus();
-                        // 2. 0.2秒（200ミリ秒）だけ待ってから印刷を実行する（これでブラウザのパニックを防ぐ！）
-                        setTimeout(function() {
-                            window.parent.print();
-                        }, 200);
-                    }
-                </script>
-                <button onclick="triggerPrint()" style="padding: 8px 15px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; font-family: sans-serif; font-size: 14px; box-sizing: border-box; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    🖨️ A4横で印刷・PDF化
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+                <button onclick="downloadPDF()" id="pdfBtn" style="padding: 8px 15px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; font-family: sans-serif; font-size: 14px; box-sizing: border-box; transition: 0.2s;">
+                    📄 PDFとしてダウンロード
                 </button>
-            """, height=70)
+                <script>
+                function downloadPDF() {
+                    const btn = document.getElementById('pdfBtn');
+                    btn.innerText = '⏳ PDF変換中...';
+                    
+                    setTimeout(() => {
+                        const parentDoc = window.parent.document;
+                        const elements = parentDoc.querySelectorAll('.print-container');
+                        
+                        if(elements.length === 0) {
+                            alert('PDF化する予定表が見つかりません。');
+                            btn.innerText = '📄 PDFとしてダウンロード';
+                            return;
+                        }
+                        
+                        // PDFエンジンに渡すためのダミー箱を用意
+                        const wrapper = document.createElement('div');
+                        
+                        // 🌟 PDF内でレイアウトが崩れないよう、専用のスタイルを強制注入
+                        const style = document.createElement('style');
+                        style.innerHTML = `
+                            .print-optimized-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 12px; }
+                            .print-optimized-table th, .print-optimized-table td { border: 1px solid #000; padding: 4px; text-align: center; }
+                            .header-col { background-color: #f7f9fa; font-weight: bold; width: 60px; }
+                            .date-header { background-color: #f7f9fa; font-weight: bold; font-size: 14px; }
+                            .slot-header { background-color: #fcfcfc; font-size: 12px; font-weight: bold; color: #555; }
+                            .name-col { font-weight: bold; background-color: #fafafa; font-size: 13px; text-align: left; padding-left: 5px; }
+                            .branch-badge { font-size: 10px; color: #777; background-color:#eee; padding:1px 3px; border-radius:2px; margin-left: 5px; }
+                            .student-badge { font-size: 11px; font-weight: bold; padding: 4px; margin: 2px 0; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); }
+                            .print-container { margin-bottom: 20px; page-break-after: always; display: block !important; }
+                        `;
+                        wrapper.appendChild(style);
+                        
+                        // 画面上に隠れている印刷用テーブルをコピーして集める
+                        elements.forEach(el => {
+                            const clone = el.cloneNode(true);
+                            clone.style.display = 'block';
+                            wrapper.appendChild(clone);
+                        });
+                        
+                        // PDFの設定（A4横、綺麗に収める）
+                        const opt = {
+                            margin:       0.2,
+                            filename:     '授業予定表.pdf',
+                            image:        { type: 'jpeg', quality: 0.98 },
+                            html2canvas:  { scale: 2, useCORS: true },
+                            jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
+                        };
+                        
+                        // PDF生成とダウンロードを実行
+                        html2pdf().set(opt).from(wrapper).save().then(() => {
+                            btn.innerText = '📄 PDFとしてダウンロード';
+                        });
+                    }, 100);
+                }
+                </script>
+            """, height=60)
         
         st.caption(f"現在本番登録されている **{start_date.strftime('%Y/%m/%d')} 〜 {end_date.strftime('%m/%d')}** の確定スケジュールです。")
-        st.info("💡 **【印刷時のコツ】** 右上の「🖨️ A4横で印刷・PDF化」ボタンを押し、印刷設定のレイアウトを「横」に、余白を「最小」に設定してください。")
+        st.info("💡 右上のボタンを一度クリックし、「⏳ PDF変換中...」と表示されたまま少しお待ちいただくと、ダウンロードが開始されます。")
         
         if not df_lessons.empty and "日付" in df_lessons.columns:
             df_scope_lessons = df_lessons[df_lessons["日付"].isin(dates_in_scope)]
