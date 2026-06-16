@@ -522,7 +522,7 @@ def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_r
         # 🌟【重要：スプレッドシートの呪い強制解除】
         # 頭にシングルクォーテーションを付けることで、コロン(単位)が含まれていても
         # 勝手に時刻変換されず、確実に「1:1(Q)」というテキストのまま保存させます！
-        safe_class_type = f"'{class_type}"
+        safe_class_type = f'="{class_type}"'
         
         if not quiz_records:
             worksheet.append_row([
