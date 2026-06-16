@@ -14,9 +14,11 @@ from utils.g_sheets import (
     get_student_quiz_records,
     get_quiz_master_dict,
     get_type_advice_dict,
-    load_compatibility_ng_master, # 🌟 追加
-    save_compatibility_ng_master, # 🌟 追加
-    load_teacher_master           # 🌟 追加
+    load_compatibility_ng_master,
+    save_compatibility_ng_master,
+    load_nominated_teacher_master, # 🌟 追加: 指名講師読み込み
+    save_nominated_teacher_master, # 🌟 追加: 指名講師保存
+    load_teacher_master
 )
 from utils.calc_logic import (
     calculate_ability_rank,
@@ -56,6 +58,22 @@ def render_student_details_page(selected_student_option):
         df_student_tests = pd.DataFrame()
         if not df_test.empty and 'APIエラー発生' not in df_test.columns:
             df_student_tests = df_test[df_test['生徒名'] == selected_student]
+            
+        # 🌟 マッチング用データの事前読み込み（表示と設定の両方で使用）
+        df_ng = robust_api_call(load_compatibility_ng_master, fallback_value=pd.DataFrame())
+        df_nominate = robust_api_call(load_nominated_teacher_master, fallback_value=pd.DataFrame())
+        df_teachers = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
+        
+        all_teachers = df_teachers["講師名"].tolist() if not df_teachers.empty and "講師名" in df_teachers.columns else []
+        
+        current_ng_teachers = []
+        if not df_ng.empty and "NG生徒名" in df_ng.columns and "講師名" in df_ng.columns:
+            current_ng_teachers = df_ng[df_ng["NG生徒名"] == selected_student]["講師名"].tolist()
+            
+        current_nominate_teachers = []
+        if not df_nominate.empty and "指名生徒名" in df_nominate.columns and "講師名" in df_nominate.columns:
+            # カラム名は適宜お使いのGoogleシートの仕様に合わせて調整してください
+            current_nominate_teachers = df_nominate[df_nominate["指名生徒名"] == selected_student]["講師名"].tolist()
 
         col_prof, col_graph = st.columns([1, 1])
         
@@ -77,6 +95,12 @@ def render_student_details_page(selected_student_option):
             st.markdown(f"**🎯 志望校・目的**: {info.get('志望校・目的', '') or '未設定'}")
             st.markdown(f"**📚 受講科目**: {info.get('受講科目', '') or '未設定'}")
             st.markdown(f"**📋 契約コース**: {info.get('契約コース', '') or '未設定'}")
+            
+            # 🌟 【新規追加】NG講師・指名講師の表示欄
+            st.markdown("---")
+            st.markdown(f"**🚫 NG講師**: {', '.join(current_ng_teachers) if current_ng_teachers else 'なし'}")
+            st.markdown(f"**💖 指名講師**: {', '.join(current_nominate_teachers) if current_nominate_teachers else 'なし'}")
+            st.markdown("---")
             
             if disp_types:
                 st.markdown(f"**🎯 生徒タイプ**: {disp_types.replace('、', ' / ')}")
@@ -166,41 +190,32 @@ def render_student_details_page(selected_student_option):
                 st.info("※プロフィールの編集は教室長のみ可能です。")
 
             # ==========================================
-            # 🌟 【新規追加】自動コマ組みマッチング設定（NG講師）
+            # 🌟 自動コマ組みマッチング設定（NG講師・指名講師）
             # ==========================================
             st.markdown("### 🧩 自動コマ組みマッチング設定")
+            
+            # マスターに存在する講師のみをデフォルトに設定（エラー防止）
+            safe_ng_teachers = [t for t in current_ng_teachers if t in all_teachers]
+            safe_nominate_teachers = [t for t in current_nominate_teachers if t in all_teachers]
+
             with st.expander("🚫 NG講師の設定 (相性NG)", expanded=False):
                 st.write(f"**{selected_student}** さんと相性が合わない講師を設定します。ここで選んだ講師は自動コマ組みでアサインされなくなります。")
                 
-                df_ng = robust_api_call(load_compatibility_ng_master, fallback_value=pd.DataFrame())
-                df_teachers = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
-                
-                all_teachers = df_teachers["講師名"].tolist() if not df_teachers.empty and "講師名" in df_teachers.columns else []
-                
-                current_ng_teachers = []
-                if not df_ng.empty and "NG生徒名" in df_ng.columns and "講師名" in df_ng.columns:
-                    current_ng_teachers = df_ng[df_ng["NG生徒名"] == selected_student]["講師名"].tolist()
-                
-                # マスターに存在する講師のみをデフォルトに設定（エラー防止）
-                current_ng_teachers = [t for t in current_ng_teachers if t in all_teachers]
-
                 with st.form("ng_teacher_form"):
                     selected_ngs = st.multiselect(
                         "⛔ NG講師を選択",
                         options=all_teachers,
-                        default=current_ng_teachers,
+                        default=safe_ng_teachers,
                         help="複数選択可能です。候補が出ない場合は、アカウント管理から講師マスタを更新してください。"
                     )
                     
                     if st.form_submit_button("💾 NG設定を保存", type="secondary"):
                         with st.spinner("保存中..."):
-                            # この生徒の古いNGデータを削除
                             if not df_ng.empty:
                                 df_ng_new = df_ng[df_ng["NG生徒名"] != selected_student].copy()
                             else:
                                 df_ng_new = pd.DataFrame(columns=["講師名", "NG生徒名"])
                             
-                            # 新しいNGデータを追加
                             new_rows = [{"講師名": t, "NG生徒名": selected_student} for t in selected_ngs]
                             if new_rows:
                                 df_ng_new = pd.concat([df_ng_new, pd.DataFrame(new_rows)], ignore_index=True)
@@ -208,6 +223,35 @@ def render_student_details_page(selected_student_option):
                             success = robust_api_call(lambda: save_compatibility_ng_master(df_ng_new), fallback_value=False)
                             if success:
                                 st.success("✅ NG設定を更新しました！")
+                                time.sleep(1.5)
+                                st.rerun()
+
+            # 🌟 【新規追加】指名講師の設定
+            with st.expander("💖 指名講師の設定", expanded=False):
+                st.write(f"**{selected_student}** さんの指名講師を設定します。ここで選んだ講師は自動コマ組みで優先的にアサインされます。")
+                
+                with st.form("nominate_teacher_form"):
+                    selected_nominates = st.multiselect(
+                        "💖 指名講師を選択",
+                        options=all_teachers,
+                        default=safe_nominate_teachers,
+                        help="複数選択可能です。"
+                    )
+                    
+                    if st.form_submit_button("💾 指名設定を保存", type="secondary"):
+                        with st.spinner("保存中..."):
+                            if not df_nominate.empty:
+                                df_nominate_new = df_nominate[df_nominate["指名生徒名"] != selected_student].copy()
+                            else:
+                                df_nominate_new = pd.DataFrame(columns=["講師名", "指名生徒名"])
+                            
+                            new_rows_nom = [{"講師名": t, "指名生徒名": selected_student} for t in selected_nominates]
+                            if new_rows_nom:
+                                df_nominate_new = pd.concat([df_nominate_new, pd.DataFrame(new_rows_nom)], ignore_index=True)
+                            
+                            success_nom = robust_api_call(lambda: save_nominated_teacher_master(df_nominate_new), fallback_value=False)
+                            if success_nom:
+                                st.success("✅ 指名設定を更新しました！")
                                 time.sleep(1.5)
                                 st.rerun()
 
