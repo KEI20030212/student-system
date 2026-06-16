@@ -519,13 +519,30 @@ def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_r
         
         date_str = date.strftime("%Y/%m/%d") if hasattr(date, 'strftime') else str(date)
         
-        # 🚨 超重要ポイント！
-        # リストの2番目に「student_id」を追加しました！
+        # 🌟【重要：スプレッドシートの呪い強制解除】
+        # 頭にシングルクォーテーションを付けることで、コロン(単位)が含まれていても
+        # 勝手に時刻変換されず、確実に「1:1(Q)」というテキストのまま保存させます！
+        safe_class_type = f"'{class_type}"
+        
         if not quiz_records:
-            worksheet.append_row([date_str, student_id, name, subject, text_name, advanced_p, "-", "-", "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, hw_reason, hw_fix, next_hw_text, next_hw_pages, late_time, concentration, reaction, next_bring])
+            worksheet.append_row([
+                date_str, student_id, name, subject, text_name, advanced_p, 
+                "-", "-", "-", teacher_name, 
+                safe_class_type, # 🌟 変換防止版を書き込む
+                attendance, class_slot, advice, parent_msg, next_handover, 
+                assigned_p, completed_p, motivation_rank, hw_reason, hw_fix, 
+                next_hw_text, next_hw_pages, late_time, concentration, reaction, next_bring
+            ])
         else:
             for q in quiz_records:
-                worksheet.append_row([date_str, student_id, name, subject, text_name, advanced_p, f"第{q['unit']}章", q['score'], "-", teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, assigned_p, completed_p, motivation_rank, next_hw_text, next_hw_pages, late_time, concentration, reaction])
+                worksheet.append_row([
+                    date_str, student_id, name, subject, text_name, advanced_p, 
+                    f"第{q['unit']}章", q['score'], "-", teacher_name, 
+                    safe_class_type, # 🌟 変換防止版を書き込む
+                    attendance, class_slot, advice, parent_msg, next_handover, 
+                    assigned_p, completed_p, motivation_rank, next_hw_text, 
+                    next_hw_pages, late_time, concentration, reaction
+                ])
         return True
     except Exception as e:
         import streamlit as st
