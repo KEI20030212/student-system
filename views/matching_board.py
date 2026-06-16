@@ -495,14 +495,23 @@ def render_matching_page():
         c_title, c_print = st.columns([0.8, 0.2])
         c_title.subheader(f"📋 確定済みの授業予定表")
         
-        # 🌟 Streamlitのセキュリティを突破する魔法のボタン！
-        # （隔離エリアから大元の画面に印刷命令を出すため、window.parent.print() にしています）
+        # 🌟 修正：フリーズ（ぐるぐる）を防止するJavaScriptを組み込んだボタン
         with c_print:
             components.html("""
-                <button onclick="window.parent.print()" style="padding: 8px 15px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; font-family: sans-serif; font-size: 14px; box-sizing: border-box;">
+                <script>
+                    function triggerPrint() {
+                        // 1. まず親ウィンドウ（システム全体の画面）にフォーカスを当てる
+                        window.parent.focus();
+                        // 2. 0.2秒（200ミリ秒）だけ待ってから印刷を実行する（これでブラウザのパニックを防ぐ！）
+                        setTimeout(function() {
+                            window.parent.print();
+                        }, 200);
+                    }
+                </script>
+                <button onclick="triggerPrint()" style="padding: 8px 15px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; font-family: sans-serif; font-size: 14px; box-sizing: border-box; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     🖨️ A4横で印刷・PDF化
                 </button>
-            """, height=50)
+            """, height=70)
         
         st.caption(f"現在本番登録されている **{start_date.strftime('%Y/%m/%d')} 〜 {end_date.strftime('%m/%d')}** の確定スケジュールです。")
         st.info("💡 **【印刷時のコツ】** 右上の「🖨️ A4横で印刷・PDF化」ボタンを押し、印刷設定のレイアウトを「横」に、余白を「最小」に設定してください。")
