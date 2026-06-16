@@ -2033,9 +2033,13 @@ def save_lesson_schedule(df_new_lessons):
     from utils.api_guard import robust_api_call
     ws = get_worksheet("データ_授業予定表")
     
-    values_to_append = df_new_lessons.values.tolist()
+    # 🌟 安全対策: NaN(空データ)を空文字に変換し、すべて文字列にして送信エラーを防ぐ
+    df_safe = df_new_lessons.fillna("").astype(str)
+    
+    values_to_append = df_safe.values.tolist()
     if values_to_append:
-        ws.append_rows(values_to_append)
+        # 🌟 USER_ENTERED を付けることで、日付が文字化けせずカレンダー通りに認識されます
+        ws.append_rows(values_to_append, value_input_option="USER_ENTERED")
         st.cache_data.clear() 
         return True
     return False
