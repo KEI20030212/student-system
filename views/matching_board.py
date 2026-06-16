@@ -10,7 +10,9 @@ from utils.g_sheets import (
     load_lesson_schedule, 
     load_all_shifts,
     save_lesson_schedule,
-    load_teacher_master
+    load_teacher_master,
+    load_nominated_teacher_master, # 🌟 追加: 指名講師マスタ
+    load_compatibility_ng_master   # 🌟 追加: NG講師マスタ
 )
 
 def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_map, teacher_branch_map=None):
@@ -122,7 +124,7 @@ def generate_weekly_matrix_html(df_source, dates_for_week, slots, days_of_week_m
 
 def render_matching_page():
     st.header("🧩 スマート・自動予定表作成")
-    st.write("生徒と講師のシフト・指導科目・**所属校舎**を考慮して、最適な授業予定表を自動生成します🚀")
+    st.write("生徒と講師のシフト・指導科目・**所属校舎・指名/NG講師**を考慮して、最適な授業予定表を自動生成します🚀")
 
     # ------------------------------------------
     # 1. 本番データのロード
@@ -134,6 +136,10 @@ def render_matching_page():
         df_teacher_shifts = robust_api_call(lambda: load_all_shifts("講師"), fallback_value=pd.DataFrame())
         df_student_shifts = robust_api_call(lambda: load_all_shifts("生徒"), fallback_value=pd.DataFrame())
         df_teacher_master = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
+        
+        # 🌟 指名講師とNG講師のマスタを追加ロード
+        df_nominate = robust_api_call(load_nominated_teacher_master, fallback_value=pd.DataFrame())
+        df_ng = robust_api_call(load_compatibility_ng_master, fallback_value=pd.DataFrame())
 
     if df_contracts.empty:
         st.warning("⚠️ 講習契約マスタにデータが登録されていません。先に契約を登録してください。")
@@ -201,6 +207,27 @@ def render_matching_page():
                     teacher_branch_map[t_name] = "東十条"
                 elif t_id.startswith("b"):
                     teacher_branch_map[t_name] = "両校"
+
+    # ------------------------------------------
+    # 2.5 🌟 指名講師・NG講師マッピングの準備
+    # ------------------------------------------
+    nomination_map = {}
+    if not df_nominate.empty and "指名生徒名" in df_nominate.columns and "講師名" in df_nominate.columns:
+        for _, row in df_nominate.iterrows():
+            sn = str(row["指名生徒名"]).replace(" ", "").replace(" ", "").strip()
+            tn = str(row["講師名"]).replace(" ", "").replace(" ", "").strip()
+            if sn not in nomination_map:
+                nomination_map[sn] = set()
+            nomination_map[sn].add(tn)
+
+    ng_map = {}
+    if not df_ng.empty and "NG生徒名" in df_ng.columns and "講師名" in df_ng.columns:
+        for _, row in df_ng.iterrows():
+            sn = str(row["NG生徒名"]).replace(" ", "").replace(" ", "").strip()
+            tn = str(row["講師名"]).replace(" ", "").replace(" ", "").strip()
+            if sn not in ng_map:
+                ng_map[sn] = set()
+            ng_map[sn].add(tn)
 
     # ------------------------------------------
     # 3. スケジュール作成・確認範囲の選択
@@ -273,7 +300,6 @@ def render_matching_page():
                 teacher_slot_branches = {d: {} for d in dates_in_scope}
                 student_daily_subjects = {d: {} for d in dates_in_scope} 
                 
-                # 🌟 【アップデート】各コマの講師希望記号（◎, 〇, △）を保持する辞書を初期化
                 teacher_slot_symbols = {d: {s: {} for s in slots} for d in dates_in_scope}
                 
                 if not t_shifts.empty:
@@ -282,11 +308,10 @@ def render_matching_page():
                         t_name = row.get("講師名")
                         if not t_name or d not in schedule: continue
                         for s in slots:
-                            # 🌟 【アップデート】「〇」だけでなく「◎」「△」もアサイン可能対象として読み込む
                             val = row.get(s)
                             if val in ["◎", "〇", "△"]:
                                 schedule[d][s][t_name] = []
-                                teacher_slot_symbols[d][s][t_name] = val # 記号を記録
+                                teacher_slot_symbols[d][s][t_name] = val 
                                 
                 if not df_lessons.empty and "日付" in df_lessons.columns:
                     for _, row in df_lessons.iterrows():
@@ -362,6 +387,12 @@ def render_matching_page():
                                     if len(assigned_students) >= max_students:
                                         continue
                                         
+                                    t_name_clean = str(t_name).replace(" ", "").replace(" ", "").strip()
+                                    
+                                    # 🌟 【アップデート1】NG講師チェック（候補から絶対除外）
+                                    if t_name_clean in ng_map.get(s_name_clean, set()):
+                                        continue
+                                        
                                     t_branch = teacher_branch_map.get(t_name, "両校")
                                     
                                     if s_branch in ["田端", "東十条"]:
@@ -409,13 +440,15 @@ def render_matching_page():
                                     if can_teach:
                                         score = skills["priority"] * 10
                                         
-                                        # 🌟 【アップデート】記号（◎・〇・△）によるスコア補正
-                                        # アルゴリズムの性質上「スコアが低い講師」が選ばれるため、◎は減算、△は加算します。
                                         slot_symbol = teacher_slot_symbols[d][s].get(t_name, "〇")
                                         if slot_symbol == "◎":
-                                            score -= 200  # 優先度大幅アップ（一気に選ばれやすくする）
+                                            score -= 200  
                                         elif slot_symbol == "△":
-                                            score += 500  # 優先度ダウン（高コスト化して他講師がいなければ選ばれる状態に）
+                                            score += 500  
+                                            
+                                        # 🌟 【アップデート2】指名講師の優先アサイン
+                                        if t_name_clean in nomination_map.get(s_name_clean, set()):
+                                            score -= 400  # シフト「◎」よりもさらに強い力で引き寄せる
                                         
                                         same_subj_count = sum(1 for a in assigned_students if f"({target_subject[0]})" in a)
                                         mixed_subj_count = len(assigned_students) - same_subj_count
