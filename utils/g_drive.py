@@ -8,13 +8,14 @@ from googleapiclient.discovery import build
 # 🌟 大元フォルダのID
 MAIN_FOLDER_ID = "1PptAgfwzUT-wR5bPyYHaCO_olsEzi8FS" 
 
-# 🌟 ステップ1でコピーしたGASのウェブアプリURLを貼り付けます！
+# 🌟 GASのウェブアプリURL
 GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbw5HuhPiaY8TwX190H5ya9uLDOsHqiT706n51vHDjHFCmd_sTQQb0654q2QyBavOTGqyA/exec"
 
-SCOPES = ['https://www.googleapis.com/auth/drive.readonly'] # 読み取り専用権限に変更（安全）
+# 🌟 変更点: 削除機能を追加するため、readonlyを外してフルアクセス権限に変更します
+SCOPES = ['https://www.googleapis.com/auth/drive'] 
 
 def get_drive_service():
-    """Google Drive APIに接続する（読み取り専用）"""
+    """Google Drive APIに接続する"""
     secret_dict = json.loads(st.secrets["gcp_service_account_json"])
     creds = Credentials.from_service_account_info(secret_dict, scopes=SCOPES)
     service = build('drive', 'v3', credentials=creds)
@@ -40,7 +41,6 @@ def get_or_create_student_folder(student_id, student_name):
 def upload_image_to_drive(student_id, student_name, file_name, file_bytes, mime_type):
     """GAS（ウェブアプリ）を経由して画像をアップロードする"""
     try:
-        # 画像を文字列（Base64）に変換して安全に送る
         b64_data = base64.b64encode(file_bytes).decode('utf-8')
         
         payload = {
@@ -51,7 +51,6 @@ def upload_image_to_drive(student_id, student_name, file_name, file_bytes, mime_
             "fileData": b64_data
         }
         
-        # GASへデータを送信！
         response = requests.post(GAS_WEBHOOK_URL, json=payload)
         result = response.json()
         
@@ -69,7 +68,7 @@ def list_student_images(student_id, student_name):
     try:
         student_folder_id = get_student_folder_id(student_id, student_name)
         if not student_folder_id:
-            return [] # フォルダがまだない場合は空リストを返す
+            return []
             
         service = get_drive_service()
         query = f"'{student_folder_id}' in parents and trashed=false"
@@ -84,3 +83,17 @@ def list_student_images(student_id, student_name):
     except Exception as e:
         print(f"画像リスト取得エラー: {e}")
         return []
+
+# ==========================================
+# 🗑️ 【新規追加】画像を直接削除する関数
+# ==========================================
+def delete_file_from_drive(file_id):
+    """指定されたファイルIDの画像をGoogle Driveから完全に削除する"""
+    try:
+        service = get_drive_service()
+        # Google Drive APIのdelete命令を実行
+        service.files().delete(fileId=file_id).execute()
+        return True
+    except Exception as e:
+        print(f"Drive画像削除エラー: {e}")
+        return False
