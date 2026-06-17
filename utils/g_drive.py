@@ -85,15 +85,65 @@ def list_student_images(student_id, student_name):
         return []
 
 # ==========================================
-# 🗑️ 【新規追加】画像を直接削除する関数
+# 🗑️ 【改善版】画像を「gomi」フォルダへ移動する関数群
 # ==========================================
+
+def get_or_create_gomi_folder(service):
+    """大元フォルダの中に「gomi」フォルダがあるか探し、なければ作成してIDを返す"""
+    query = f"'{MAIN_FOLDER_ID}' in parents and name='gomi' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    items = results.get('files', [])
+    
+    if items:
+        return items[0]['id']
+    
+    # 存在しない場合は新規作成
+    folder_metadata = {
+        'name': 'gomi',
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [MAIN_FOLDER_ID]
+    }
+    folder = service.files().create(body=folder_metadata, fields='id').execute()
+    return folder.get('id')
+
+
 def delete_file_from_drive(file_id):
-    """指定されたファイルIDの画像をGoogle Driveから完全に削除する"""
+    """指定されたファイルIDの画像を元の生徒フォルダから除外し、「gomi」フォルダへ移動する"""
     try:
         service = get_drive_service()
-        # Google Drive APIのdelete命令を実行
-        service.files().delete(fileId=file_id).execute()
+        
+        # 1. 「gomi」フォルダのIDを取得（なければ自動作成）
+        gomi_folder_id = get_or_create_gomi_folder(service)
+        
+        # 2. 現在の画像が入っている親フォルダ（生徒フォルダ）のIDを特定する
+        file_info = service.files().get(fileId=file_id, fields='parents').execute()
+        previous_parents = ",".join(file_info.get('parents', []))
+        
+        if previous_parents:
+            # 3. 生徒フォルダから除外（removeParents）し、同時にgomiフォルダへ追加（addParents）
+            service.files().update(
+                fileId=file_id,
+                addParents=gomi_folder_id,
+                removeParents=previous_parents,
+                fields='id, parents'
+            ).execute()
+        else:
+            # 万が一、すでに親フォルダを失っている場合はgomiフォルダに直接紐付ける
+            service.files().update(
+                fileId=file_id,
+                addParents=gomi_folder_id,
+                fields='id, parents'
+            ).execute()
+            
         return True
+        
     except Exception as e:
-        print(f"Drive画像削除エラー: {e}")
-        return False
+        print(f"Drive画像移動（gomi）エラー: {e}")
+        
+        # API制限や予期せぬエラー時のセーフティネットとしてゴミ箱移動を試みる
+        try:
+            service.files().update(fileId=file_id, body={'trashed': True}).execute()
+            return True
+        except Exception as e2:
+            print(f"Drive画像ゴミ箱移動エラー: {e2}")
+            return False
