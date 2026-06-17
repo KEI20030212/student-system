@@ -519,30 +519,27 @@ def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_r
         
         date_str = date.strftime("%Y/%m/%d") if hasattr(date, 'strftime') else str(date)
         
-        # 🌟【重要：スプレッドシートの呪い強制解除】
-        # 頭にシングルクォーテーションを付けることで、コロン(単位)が含まれていても
-        # 勝手に時刻変換されず、確実に「1:1(Q)」というテキストのまま保存させます！
-        safe_class_type = f"''{class_type}"
+        # 🌟 safe_class_type やシングルクォーテーションなどの小細工はすべて削除！
         
         if not quiz_records:
             worksheet.append_row([
                 date_str, student_id, name, subject, text_name, advanced_p, 
                 "-", "-", "-", teacher_name, 
-                safe_class_type, # 🌟 変換防止版を書き込む
+                class_type, # 🌟 そのまま渡す！
                 attendance, class_slot, advice, parent_msg, next_handover, 
                 assigned_p, completed_p, motivation_rank, hw_reason, hw_fix, 
                 next_hw_text, next_hw_pages, late_time, concentration, reaction, next_bring
-            ])
+            ], value_input_option="RAW") # 🌟 【最強の解決策】RAW指定でGoogleの自動変換を完全ブロック！
         else:
             for q in quiz_records:
                 worksheet.append_row([
                     date_str, student_id, name, subject, text_name, advanced_p, 
                     f"第{q['unit']}章", q['score'], "-", teacher_name, 
-                    safe_class_type, # 🌟 変換防止版を書き込む
+                    class_type, # 🌟 そのまま渡す！
                     attendance, class_slot, advice, parent_msg, next_handover, 
                     assigned_p, completed_p, motivation_rank, next_hw_text, 
                     next_hw_pages, late_time, concentration, reaction
-                ])
+                ], value_input_option="RAW") # 🌟 【最強の解決策】RAW指定でGoogleの自動変換を完全ブロック！
         return True
     except Exception as e:
         import streamlit as st
