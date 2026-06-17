@@ -212,20 +212,18 @@ def render_multi_input_page():
 
             num_students = int(class_type.split(":")[1].replace("(Q)", ""))
             
-            # ==========================================
-            # 🌟 ブロック全体での「本当の出席者数」を事前計算
-            # ==========================================
             actual_attendees = 0
             for temp_i in range(num_students):
                 if st.session_state.get(f"saved_flag_{b}_{temp_i}", False):
                     att_status = st.session_state.get(f"saved_att_{b}_{temp_i}", "出席")
                 else:
                     att_status = st.session_state.get(f"att_{b}_{temp_i}", "出席（通常）")
-                    
                 if "欠席" not in att_status:
                     actual_attendees += 1
-
-            actual_class_type = f"1:{actual_attendees}" if actual_attendees > 0 else class_type
+            
+            is_quality = "(Q)" in class_type
+            q_suffix = "(Q)" if is_quality else ""
+            actual_class_type = f"1:{actual_attendees}{q_suffix}" if actual_attendees > 0 else class_type
 
             st.divider()
             cols = st.columns(num_students)
