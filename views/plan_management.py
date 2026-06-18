@@ -3,12 +3,19 @@ import datetime
 import time
 import pandas as pd
 
-from utils.g_sheets import get_student_master
+# 🌟 テキストマスタ取得関数を追加
+from utils.g_sheets import get_student_master, get_textbook_master
 from utils.api_guard import robust_api_call
 
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
+
+# 🌟 テキスト一覧を呼び出すためのキャッシュ関数を追加
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_get_textbook_master():
+    dct = robust_api_call(get_textbook_master, fallback_value={})
+    return dict(dct)
 
 def render_plan_management_page():
     st.header("🗺️ 生徒別 カリキュラム・学習計画管理")
@@ -51,8 +58,8 @@ def render_plan_management_page():
 
     st.write("")
 
-    # 🌟 本機能の核：年間・月間・週間をタブで綺麗に切り替える
-    tab_year, tab_month, tab_week = st.tabs(["📅 ① 年間ロードマップ", "🗓️ ② 月間単元計画", "📋 ③ 週間To-Do・宿題指示"])
+    # 🌟 タブを4つに拡張！「授業フロー」を追加
+    tab_year, tab_month, tab_week, tab_flow = st.tabs(["📅 ① 年間ロードマップ", "🗓️ ② 月間単元計画", "📋 ③ 週間To-Do", "🏫 ④ 標準授業フロー(型)"])
 
     # ==========================================
     # 📅 タブ1: 年間ロードマップ
@@ -60,13 +67,11 @@ def render_plan_management_page():
     with tab_year:
         st.subheader("🎯 年間大目標・シーズンロードマップ")
         
-        # 将来的にスプレッドシートに保存する用の入力欄
         target_goal = st.text_input("🏆 今年の絶対達成目標", value=info.get('志望校・目的', '') or "定期テストでの自己ベスト更新！", key="year_goal")
         
         st.write("")
         st.markdown("#### 🌊 シーズン別ロードマップ")
         
-        # 塾の標準的なスケジュールを学年に応じて可視化
         col_phase1, col_phase2, col_phase3, col_phase4 = st.columns(4)
         
         with col_phase1:
@@ -104,7 +109,6 @@ def render_plan_management_page():
         st.subheader(f"🗓️ {current_month}月の月間進捗目標")
         st.caption(f"※ {course or '登録コース'} の月間授業回数に基づき、消化すべき単元を定義します。")
 
-        # 科目ごとの進捗計画（モックデータですが、セレクトボックス等で変更可能にします）
         with st.container(border=True):
             st.markdown("#### 📘 英語の月間計画")
             st.markdown("**使用教材:** フォレスタ英語")
@@ -131,20 +135,64 @@ def render_plan_management_page():
         st.subheader("🚀 今週のTo-Do ＆ 自習タスク指示")
         st.caption("日々の自習室利用時や、自宅学習で生徒が迷わないための明確なタスク表です。")
 
-        # 1週間の曜日ごとのTo-Doリスト
         days = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
         
         for idx, day in enumerate(days):
             with st.expander(f"📅 {day} の学習タスク", expanded=(idx==0)):
                 c_task1, c_task2 = st.columns([3, 1])
                 
-                # タスク内容の入力欄
                 default_task = "宿題のテキスト P.12〜15 を解き直す" if idx % 2 == 0 else "単元テストのミス直し ＆ 自習室で30分暗記"
                 if idx == 2: default_task = "🏫 通塾日：小テスト合格に向けて20分前に入室すること！"
                 
-                # 🌟 修正ポイント： key の {b} を削除しました！
                 task_content = c_task1.text_input("タスク内容", value=default_task, key=f"task_val_{idx}")
                 status = c_task2.selectbox("進捗", ["未着手", "進行中", "完了！"], index=2 if idx==0 else 0, key=f"task_status_{idx}")
                 
         st.write("")
         st.button("💾 週間To-Doを確定・保存", key="save_week_plan", type="primary")
+
+    # ==========================================
+    # 🏫 タブ4: 標準授業フロー(型)の設計
+    # ==========================================
+    with tab_flow:
+        st.subheader("🏫 1回の授業の「型」をデザインする")
+        st.write("この生徒の普段の授業（1コマ）の流れを設定します。**将来的に、この設定が授業記録画面に自動入力されるようになります！**")
+        
+        text_options = list(cached_get_textbook_master().keys())
+        
+        st.markdown("##### 🔄 授業フローのステップ")
+        
+        # 3ステップ構成のUI
+        for step in range(1, 4):
+            with st.container(border=True):
+                st.markdown(f"**🟢 Step {step}**")
+                c_f1, c_f2, c_f3 = st.columns([2, 2, 1])
+                
+                selected_text = c_f1.selectbox(
+                    f"使用テキスト (Step {step})", 
+                    ["設定なし", "🔥 小テスト実施"] + text_options, 
+                    key=f"flow_txt_{step}"
+                )
+                
+                target_range = c_f2.text_input(
+                    "実施範囲の目安", 
+                    placeholder="例: 1章分, P.10〜15 など", 
+                    key=f"flow_range_{step}"
+                )
+                
+                time_est = c_f3.number_input(
+                    "目安時間(分)", 
+                    min_value=5, max_value=90, value=30 if step==1 else 20, step=5, 
+                    key=f"flow_time_{step}"
+                )
+                
+                # 宿題に回すかどうかのカスタマイズ条件
+                if selected_text not in ["設定なし", "🔥 小テスト実施"]:
+                    st.checkbox(
+                        f"⚠️ {selected_text} が時間内に終わらなかった場合は、そのまま「次回の宿題」に回す", 
+                        value=True, 
+                        key=f"flow_hw_flag_{step}"
+                    )
+
+        st.write("")
+        st.button("💾 授業フローを保存（準備中）", key="save_flow_plan", type="primary")
+        st.info("💡 **【今後の連携イメージ】**\nこれを保存しておくと、将来 `multi_input.py` を開いた時に、Step1〜3のテキストが自動で選択され、宿題指示の部分も「フローで決めた通り」に自動でセットされるようになります！")
