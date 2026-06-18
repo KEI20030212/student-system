@@ -1529,6 +1529,39 @@ def load_parent_reply_data():
     except:
         return pd.DataFrame()
 
+#plan_management.py
+def save_learning_plan(student_id, student_name, plan_type, plan_details):
+    """
+    年間・月間・週間・授業フローの計画データを「生徒学習計画」シートに保存する。
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        # 「生徒学習計画」シートを探す。なければ自動で作成する安全設計！
+        sheet_name = "生徒学習計画"
+        try:
+            worksheet = sh.worksheet(sheet_name)
+        except:
+            # シートが存在しない場合は新規作成し、ヘッダーをセット
+            worksheet = sh.add_worksheet(title=sheet_name, rows="1000", cols="10")
+            worksheet.append_row(["更新日時", "生徒ID", "生徒名", "計画の種類", "計画データ詳細"])
+
+        import datetime
+        now_str = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        
+        # 🌟 例の「RAW」指定で、Googleの勝手な自動変換をブロックして保存！
+        worksheet.append_row(
+            [now_str, student_id, student_name, plan_type, plan_details], 
+            value_input_option="RAW"
+        )
+        return True
+        
+    except Exception as e:
+        import streamlit as st
+        st.error(f"🚨 学習計画の保存でエラーが発生しました: {e}")
+        return False
+
 #my_salary.py
 @st.cache_data(ttl=600)
 def load_published_salary():
