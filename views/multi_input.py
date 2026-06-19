@@ -11,7 +11,7 @@ from utils.g_sheets import (
     update_student_homework_rate,
     add_new_textbook,        
     get_textbook_master,
-    save_quiz_to_dedicated_sheet,
+    save_quizzes_to_dedicated_sheet,
     get_quiz_master_dict,
     get_type_advice_dict,
     save_draft_to_sheet,
