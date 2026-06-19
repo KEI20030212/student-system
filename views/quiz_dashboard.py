@@ -7,16 +7,12 @@ import re
 from utils.g_sheets import (
     get_student_master, 
     get_quiz_master_dict,                 
-    save_quiz_to_dedicated_sheet,        
+    save_quizzes_to_dedicated_sheet,  # 🌟 修正：先ほど作ったバルクインサート関数（複数形）に変更！
     load_quiz_records,
     get_textbook_master
 )
 from utils.api_guard import robust_api_call
 
-# ==========================================
-# 🌟 APIエラー対策：キャッシュ機能 + 強化版APIコール
-# ==========================================
-@st.cache_data(ttl=600)  
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
@@ -38,7 +34,8 @@ def render_quiz_list_page():
     st.header("📝 小テスト進捗＆習熟度マップ")
     st.write("実施した小テストの結果を入力・確認できるページです🎨")
 
-    df_students = cached_get_student_master()
+    df_students_raw = cached_get_student_master()
+    df_students = df_students_raw.copy()
     
     if df_students.empty:
         st.error("生徒データの取得に失敗しました。時間をおいて再読み込みしてください。")
@@ -94,15 +91,21 @@ def render_quiz_list_page():
                         st.error("⚠️ 「単元・回」を入力してください。")
                     else:
                         with st.spinner("記録中..."):
-                            success = robust_api_call(
-                                save_quiz_to_dedicated_sheet,
+                            # 🌟 修正：データを二次元リスト（1行分だけのリスト）の形に梱包する
+                            quiz_row_data = [[
                                 test_date.strftime("%Y/%m/%d"), 
                                 student_name,  
                                 target_quiz,  
                                 target_unit,  
                                 score,
                                 "", 
-                                "自習",
+                                "自習"
+                            ]]
+                            
+                            # 🌟 修正：バルクインサート関数に箱ごと渡す！
+                            success = robust_api_call(
+                                save_quizzes_to_dedicated_sheet,
+                                quiz_row_data,
                                 fallback_value=False
                             )
                             
