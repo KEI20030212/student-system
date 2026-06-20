@@ -4,12 +4,12 @@ from views.board import render_home_page
 from views.attendance_check import render_attendance_seat_page
 from views.message import render_messages_page
 
-def render_combined_input_page():
+def render_combined_home_page():
     st.header("📢 ホーム・連絡掲示板")
 
     record_type = st.radio(
         "確認事項を選択してください", 
-        ["📢 ホーム・連絡掲示板", "🗺️ 本日の教室状況・座席管理", "💌 あなた宛てのメッセージ", "🛠️ 授業記録の修正"], 
+        ["📢 ホーム・連絡掲示板", "🗺️ 本日の教室状況・座席管理", "💌 あなた宛てのメッセージ"], 
         horizontal=True, 
         key="record_type_combined"
     )
