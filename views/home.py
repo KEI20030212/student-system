@@ -2,7 +2,7 @@ import streamlit as st
 
 from views.board import render_home_page
 from views.attendance_check import render_attendance_seat_page
-from views.message import render_messages_page
+from views.messages import render_messages_page
 
 def render_combined_home_page():
     st.header("📢 ホーム・連絡掲示板")
