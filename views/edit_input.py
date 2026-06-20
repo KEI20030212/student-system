@@ -20,8 +20,17 @@ def cached_get_teacher_names():
 def render_edit_input_page():
     st.info("💡 過去の授業記録（個別・集団）を呼び出して、内容を直接修正・上書き保存できます。")
 
-    col1, col2 = st.columns(2)
+    # 🌟 修正: 列を3つに分け、右端にリロードボタンを配置 (比率を 2 : 3 : 1 にして綺麗に配置)
+    col1, col2, col_r = st.columns([2, 3, 1])
     target_date = col1.date_input("📅 修正したい授業の日付", datetime.date.today())
+
+    with col_r:
+        # ボタンの縦位置を他の入力欄と揃えるための余白
+        st.write("") 
+        st.write("") 
+        if st.button("🔄 データを更新", use_container_width=True):
+            st.cache_data.clear() # キャッシュを強制クリアして最新化
+            st.rerun() 
 
     with st.spinner("記録を検索中..."):
         df_logs = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
