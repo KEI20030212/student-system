@@ -469,7 +469,8 @@ def render_multi_input_page():
                                                         
                                                         if not has_valid_range:
                                                             advanced_p_list.append(f"{text_name}: -")
-                                            advanced_p_str = "\n".join(advanced_p_list)
+                                                
+                                                advanced_p_str = "\n".join(advanced_p_list)
                                             else:
                                                 text_name_str = "-"
                                                 advanced_p_str = "-"
