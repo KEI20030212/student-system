@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import time
+import re
 from utils.g_sheets import (
     get_all_logs, 
     update_lesson_record_in_sheet,
@@ -71,7 +72,6 @@ def render_edit_input_page():
         st.write(f"### ✍️ {record.get('名前')} さんの記録を修正")
 
         with st.form("edit_record_form"):
-            # 🌟 追加: 担当講師と授業形態も修正可能にする
             st.write("📋 **基本情報の修正**")
             c_head1, c_head2 = st.columns(2)
             
@@ -83,7 +83,31 @@ def render_edit_input_page():
                 teacher_opts = [current_teacher] if current_teacher else ["未設定"]
                 
             new_teacher = c_head1.selectbox("👨‍🏫 担当講師", teacher_opts, index=teacher_opts.index(current_teacher) if current_teacher in teacher_opts else 0)
-            new_class_type = c_head2.text_input("👥 授業形態 (例: 1:2, 集団(5名) など)", value=str(record.get('授業形態', '')))
+            
+            # ==========================================
+            # 🌟 修正: 授業形態をテキスト入力からプルダウンに変更！
+            # ==========================================
+            curr_type_raw = str(record.get('授業形態', '1:1')).strip()
+            type_options = ["1:1", "1:2", "1:3", "1:1(Q)", "集団"]
+            
+            # 既存データから現在の形態と人数を判定する賢いロジック
+            if "集団" in curr_type_raw:
+                base_idx = 4
+                num_match = re.search(r'\d+', curr_type_raw)
+                def_num = int(num_match.group()) if num_match else 5
+            else:
+                base_idx = type_options.index(curr_type_raw) if curr_type_raw in type_options else 0
+                def_num = 5
+
+            new_base_type = c_head2.selectbox("👥 授業形態", type_options, index=base_idx)
+            
+            # 集団が選ばれた時だけ人数入力欄を出す！
+            if new_base_type == "集団":
+                group_num = c_head2.number_input("👥 集団の人数", min_value=1, max_value=50, value=def_num)
+                final_class_type = f"集団({group_num}名)"
+            else:
+                final_class_type = new_base_type
+            # ==========================================
 
             c1, c2, c3 = st.columns(3)
             
@@ -207,8 +231,8 @@ def render_edit_input_page():
             if submitted:
                 with st.spinner("データを上書き保存中..."):
                     update_data = {
-                        "担当講師": new_teacher,       # 🌟 追加
-                        "授業形態": new_class_type,    # 🌟 追加
+                        "担当講師": new_teacher,
+                        "授業形態": final_class_type,    # 🌟 変更: 自動結合された文字列を保存！
                         "出欠": new_att,
                         "科目": new_sub,
                         "遅刻時間": new_late,
