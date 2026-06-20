@@ -9,19 +9,13 @@ from utils.g_sheets import (
     load_quiz_records,            
     get_quiz_master_dict,         
     update_quiz_record_in_sheet,
-    get_all_teacher_names # 🌟 講師名リスト取得を追加
+    get_all_teacher_names # 🌟 講師名リスト取得
 )
 from utils.api_guard import robust_api_call
-
-# 🌟 講師マスタのキャッシュを追加
-@st.cache_data(ttl=600, show_spinner=False)
-def cached_get_teacher_names():
-    return robust_api_call(get_all_teacher_names, fallback_value=[])
 
 def render_edit_input_page():
     st.info("💡 過去の授業記録（個別・集団）を呼び出して、内容を直接修正・上書き保存できます。")
 
-    # 🌟 修正: 列を3つに分け、右端にリロードボタンを配置 (比率を 2 : 3 : 1 にして綺麗に配置)
     col1, col2, col_r = st.columns([2, 3, 1])
     target_date = col1.date_input("📅 修正したい授業の日付", datetime.date.today())
 
@@ -51,7 +45,6 @@ def render_edit_input_page():
         st.warning(f"{date_str} の授業記録は見つかりませんでした。")
         return
 
-    # 🌟 変更: ドロップダウンに「授業形態（集団か個別か）」と「担当講師」を表示して探しやすく！
     options = []
     for idx, row in df_filtered.iterrows():
         c_type = str(row.get('授業形態', '不明'))
@@ -75,7 +68,9 @@ def render_edit_input_page():
             st.write("📋 **基本情報の修正**")
             c_head1, c_head2 = st.columns(2)
             
-            teacher_opts = cached_get_teacher_names()
+            # 🌟 変更: 二重キャッシュを解消し、原本の関数を直接呼び出す（原本保護のため list() でコピー）
+            teacher_opts = list(get_all_teacher_names())
+            
             current_teacher = str(record.get('担当講師', '')).strip()
             if current_teacher and current_teacher not in teacher_opts:
                 teacher_opts.append(current_teacher)
@@ -84,9 +79,6 @@ def render_edit_input_page():
                 
             new_teacher = c_head1.selectbox("👨‍🏫 担当講師", teacher_opts, index=teacher_opts.index(current_teacher) if current_teacher in teacher_opts else 0)
             
-            # ==========================================
-            # 🌟 修正: 授業形態をテキスト入力からプルダウンに変更！
-            # ==========================================
             curr_type_raw = str(record.get('授業形態', '1:1')).strip()
             type_options = ["1:1", "1:2", "1:3", "1:1(Q)", "集団"]
             
@@ -107,7 +99,6 @@ def render_edit_input_page():
                 final_class_type = f"集団({group_num}名)"
             else:
                 final_class_type = new_base_type
-            # ==========================================
 
             c1, c2, c3 = st.columns(3)
             
@@ -232,7 +223,7 @@ def render_edit_input_page():
                 with st.spinner("データを上書き保存中..."):
                     update_data = {
                         "担当講師": new_teacher,
-                        "授業形態": final_class_type,    # 🌟 変更: 自動結合された文字列を保存！
+                        "授業形態": final_class_type,
                         "出欠": new_att,
                         "科目": new_sub,
                         "遅刻時間": new_late,
