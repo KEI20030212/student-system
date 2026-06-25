@@ -20,7 +20,6 @@ def render_edit_input_page():
     target_date = col1.date_input("📅 修正したい授業の日付", datetime.date.today())
 
     with col_r:
-        # ボタンの縦位置を他の入力欄と揃えるための余白
         st.write("") 
         st.write("") 
         if st.button("🔄 データを更新", use_container_width=True):
@@ -49,7 +48,6 @@ def render_edit_input_page():
     for idx, row in df_filtered.iterrows():
         c_type = str(row.get('授業形態', '不明'))
         teacher = str(row.get('担当講師', '不明'))
-        # 集団クラスの場合は目立つようにアイコンをつける
         icon = "🧑‍🤝‍🧑" if "集団" in c_type else "👤"
         
         opt_label = f"{icon} [{c_type}] {row.get('名前', '不明')} - {row.get('科目', '不明')} ({teacher}先生 / {row.get('授業コマ', '不明')})"
@@ -68,7 +66,6 @@ def render_edit_input_page():
             st.write("📋 **基本情報の修正**")
             c_head1, c_head2 = st.columns(2)
             
-            # 🌟 変更: 二重キャッシュを解消し、原本の関数を直接呼び出す（原本保護のため list() でコピー）
             teacher_opts = list(get_all_teacher_names())
             
             current_teacher = str(record.get('担当講師', '')).strip()
@@ -82,7 +79,6 @@ def render_edit_input_page():
             curr_type_raw = str(record.get('授業形態', '1:1')).strip()
             type_options = ["1:1", "1:2", "1:3", "1:1(Q)", "集団"]
             
-            # 既存データから現在の形態と人数を判定する賢いロジック
             if "集団" in curr_type_raw:
                 base_idx = 4
                 num_match = re.search(r'\d+', curr_type_raw)
@@ -93,7 +89,6 @@ def render_edit_input_page():
 
             new_base_type = c_head2.selectbox("👥 授業形態", type_options, index=base_idx)
             
-            # 集団が選ばれた時だけ人数入力欄を出す！
             if new_base_type == "集団":
                 group_num = c_head2.number_input("👥 集団の人数", min_value=1, max_value=50, value=def_num)
                 final_class_type = f"集団({group_num}名)"
@@ -153,7 +148,7 @@ def render_edit_input_page():
             with c_hw_r2:
                 new_fix_sel = st.selectbox("本日の修正策", fix_opts, index=fix_idx)
                 if new_fix_sel == "その他":
-                    default_fix_other = curr_fix.replace("その他: ", "") if "その他" in curr_fix else curr_fix
+                    default_fix_other = curr_fix.replace("表达:", "") if "その他" in curr_fix else curr_fix
                     new_fix_other = st.text_input("修正策（その他）", value=default_fix_other)
                     final_fix = f"その他: {new_fix_other}" if new_fix_other else "その他"
                 else:
@@ -185,11 +180,13 @@ def render_edit_input_page():
                     st.caption(f"📝 **{q_name}**")
                     col_q1, col_q2 = st.columns(2)
                     with col_q1:
-                        new_unit = st.number_input(f"単元/回", value=int(old_unit) if str(old_unit).isdigit() else 1, key=f"edit_q_unit_{q_idx}")
+                        # 🌟 修正：キーに一意のレコード番号「idx」を含めて混線を完全防止！
+                        new_unit = st.number_input(f"単元/回", value=int(old_unit) if str(old_unit).isdigit() else 1, key=f"edit_q_unit_{idx}_{q_idx}")
                     with col_q2:
                         safe_old_score = int(old_score) if str(old_score).isdigit() else 0
                         safe_max = max(current_max, safe_old_score)
-                        new_score = st.number_input(f"点数 (/{current_max}点満点)", min_value=0, max_value=safe_max, value=safe_old_score, key=f"edit_q_score_{q_idx}")
+                        # 🌟 修正：キーに一意のレコード番号「idx」を含めて混線を完全防止！
+                        new_score = st.number_input(f"点数 (/{current_max}点満点)", min_value=0, max_value=safe_max, value=safe_old_score, key=f"edit_q_score_{idx}_{q_idx}")
                     
                     edited_quizzes.append({
                         "quiz_name": q_name,
