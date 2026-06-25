@@ -27,7 +27,7 @@ def render_home_page():
     # ==========================================
     # 🌟 管理者専用：URL抜け（小テスト未実施）の自動検知アラート
     # ==========================================
-    if user_role in ['admin', 'owner', 'head_teacher']:
+    if user_role in ['admin', 'owner', 'head_teacher', 'am']:
         df_logs = safe_get_all_logs() 
         df_quizzes = safe_load_quiz_records() 
         today = datetime.date.today()
@@ -71,7 +71,7 @@ def render_home_page():
     
     st.info(current_message.replace('\n', '  \n'))
     
-    if user_role in ['admin', 'owner', 'head_teacher']:
+    if user_role in ['admin', 'owner', 'am']:
         with st.expander("✏️ 掲示板を編集"):
             new_msg = st.text_area("内容を入力", value=current_message, height=100)
             if st.button("💾 掲示板を更新"):
