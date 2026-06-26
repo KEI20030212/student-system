@@ -156,7 +156,7 @@ def render_quiz_image_manager_page():
                         try:
                             dt = datetime.datetime.strptime(c_time, "%Y-%m-%dT%H:%M:%S.%fZ")
                             dt_jst = dt + datetime.timedelta(hours=9)
-                             Garner = dt_jst.strftime('%Y/%m/%d %H:%M')
+                            Garner = dt_jst.strftime('%Y/%m/%d %H:%M')
                             st.caption(f"📅 {Garner}")
                         except:
                             st.caption(f"📅 {c_time[:10]}")
