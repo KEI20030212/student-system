@@ -5,7 +5,7 @@ import time
 
 from utils.g_sheets import (
     get_student_master,
-    get_all_logs,          # 🌟 変更: キャッシュ付きの統合ログ取得関数
+    get_all_logs,          
     delete_specific_log    
 )
 from utils.api_guard import robust_api_call
@@ -13,25 +13,19 @@ from utils.api_guard import robust_api_call
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-# 🌟 修正3: 二重キャッシュ防止のため @st.cache_data を完全に削除！
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
 
-
 def render_search_page():
-    # 🌟 変更1: タイトル横に「データを更新」ボタンを配置
     col_h, col_r = st.columns([0.8, 0.2])
     with col_h:
         st.header("🔍 全生徒の過去ログ検索 ＆ 修正")
     with col_r:
         st.write("")
         if st.button("🔄 データを更新", use_container_width=True):
-            st.cache_data.clear() # キャッシュを強制クリアして最新化
+            st.cache_data.clear() 
             st.rerun()
 
-    # ==========================================
-    # 🌟 生徒リストの取得（マスターからID付きで）
-    # ==========================================
     df_students_raw = cached_get_student_master()
     df_students = df_students_raw.copy()
     student_options = []
@@ -57,7 +51,6 @@ def render_search_page():
                     if del_student_option == "-- データなし --":
                         st.error("生徒が選択されていません。")
                     else:
-                        # 🌟 IDと名前を分割
                         del_id = del_student_option.split(" - ")[0]
                         del_name = del_student_option.split(" - ")[1]
                         date_str = del_date.strftime("%Y/%m/%d")
@@ -88,7 +81,6 @@ def render_search_page():
         
     df_all['日時'] = pd.to_datetime(df_all['日時'], format='mixed', errors='coerce')
     
-    # 🌟 名前列の統一処理（表示をキレイにするため）
     if '名前' in df_all.columns:
         if '生徒名' in df_all.columns:
             df_all = df_all.drop(columns=['名前'])
@@ -102,7 +94,6 @@ def render_search_page():
         max_date = df_all['日時'].max().date() if not pd.isnull(df_all['日時'].max()) else datetime.date.today()
         date_range = c1.date_input("📅 日付の範囲", [min_date, max_date])
         
-        # 🌟 変更2: 担当講師から「科目」へ変更
         if '科目' in df_all.columns:
             valid_subjects = [s for s in df_all['科目'].dropna().unique() if s and str(s).strip() not in ["None", "nan", ""]]
             subjects = ["すべて"] + valid_subjects
@@ -111,13 +102,10 @@ def render_search_page():
             
         selected_subject = c2.selectbox("📚 科目", subjects)
         
-        # 生徒リストは「ID - 名前」のプルダウンにする
         students = ["すべて"] + student_options
         selected_student_option = c3.selectbox("👤 生徒名", students)
 
-        # 🌟 【新機能】表示する列のカスタマイズマルチセレクト
         st.write("")
-        # 選択肢として提供するスプレッドシートの全項目定義
         all_columns_list = [
             "日時", "生徒ID", "生徒名", "科目", "テキスト", "終了ページ", 
             "担当講師", "授業形態", "出欠", "授業コマ", "アドバイス", 
@@ -126,10 +114,7 @@ def render_search_page():
             "次回の宿題ページ数", "遅刻時間", "集中力", "ミスへの反応", "次回の持ち物"
         ]
         
-        # 実際に読み込んだデータフレームに存在する列だけを選択肢のベースにする（エラー防止）
         available_cols = [col for col in all_columns_list if col in df_all.columns or col == "日時"]
-        
-        # デフォルトでONにする4種類の列
         default_cols = [col for col in ["日時", "生徒名", "科目", "終了ページ"] if col in available_cols]
         
         selected_display_cols = st.multiselect(
@@ -146,7 +131,6 @@ def render_search_page():
     if len(date_range) == 2: 
         df_filtered = df_filtered[(df_filtered['日時'].dt.date >= date_range[0]) & (df_filtered['日時'].dt.date <= date_range[1])]
         
-    # 🌟 変更2: 科目での絞り込みロジックに変更
     if selected_subject != "すべて": 
         df_filtered = df_filtered[df_filtered['科目'] == selected_subject]
         
@@ -159,19 +143,56 @@ def render_search_page():
         else:
             df_filtered = df_filtered[df_filtered['生徒名'] == search_name]
 
-    st.success(f"該当記録: **{len(df_filtered)} 件**")
-    
-    # 日付をキレイな文字列に変換
     df_filtered['日時'] = df_filtered['日時'].dt.strftime('%Y/%m/%d')
-    
-    # 見た目を整える魔法
     df_display = df_filtered.drop(columns=['ページ数'], errors='ignore')
-    # NaN を空文字に変換
     df_display = df_display.fillna("") 
-    
-    # 🌟 【新機能】カスタマイズされた列だけに絞り込んで表示
-    if selected_display_cols:
-        # 万が一の登録順のズレを防ぐため、選択された順序を維持して抽出
-        st.dataframe(df_display[selected_display_cols], use_container_width=True, hide_index=True)
+
+    # 🌟 【新機能1】 お留守番表示（Empty State）
+    if df_display.empty:
+        st.info("💡 指定された条件の授業記録は見つかりませんでした。\n日付の範囲を広げるか、他の生徒・科目を選択してみてください。")
     else:
-        st.warning("⚠️ 表示項目が何も選択されていません。項目を1つ以上選択してください。")
+        st.success(f"該当記録: **{len(df_filtered)} 件**")
+        
+        if selected_display_cols:
+            st.dataframe(df_display[selected_display_cols], use_container_width=True, hide_index=True)
+            
+            # 🌟 【新機能2】 ポップアップ詳細確認（ダイアログ）
+            st.write("")
+            @st.experimental_dialog("💬 抽出された記録のコメント詳細")
+            def show_comment_details(df_subset):
+                st.write(f"検索結果の **{len(df_subset)}件** のコメントを表示します。")
+                st.divider()
+                
+                # 表示すべきコメント列が存在するかチェック
+                comment_cols = [c for c in ["アドバイス", "保護者への連絡", "次回への引継ぎ"] if c in df_subset.columns]
+                
+                if not comment_cols:
+                    st.warning("詳細を表示できるコメント項目が存在しません。")
+                    return
+                
+                for idx, row in df_subset.iterrows():
+                    date_val = row.get("日時", "日付不明")
+                    student_val = row.get("生徒名", "生徒名不明")
+                    teacher_val = row.get("担当講師", "講師不明")
+                    sub_val = row.get("科目", "科目不明")
+                    
+                    with st.container(border=True):
+                        st.markdown(f"**📅 {date_val} | 👤 {student_val} | 📚 {sub_val} (👨‍🏫 {teacher_val})**")
+                        
+                        has_any_comment = False
+                        for col in comment_cols:
+                            comment_text = str(row[col]).strip()
+                            if comment_text and comment_text not in ["", "-", "nan", "None"]:
+                                st.caption(f"**【{col}】**")
+                                st.write(comment_text.replace('\n', '  \n'))
+                                has_any_comment = True
+                                
+                        if not has_any_comment:
+                            st.caption("※特記すべきコメントはありませんでした。")
+
+            # 検索結果が存在する場合のみボタンを表示
+            if st.button("💬 この検索結果の『コメント詳細』を別枠で読む", icon="👁️", use_container_width=True):
+                show_comment_details(df_display)
+
+        else:
+            st.warning("⚠️ 表示項目が何も選択されていません。項目を1つ以上選択してください。")
