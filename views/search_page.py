@@ -10,23 +10,30 @@ from utils.g_sheets import (
 )
 from utils.api_guard import robust_api_call
 
-# 🌟 全データを一括取得するキャッシュ関数群
-@st.cache_data(ttl=600)
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-@st.cache_data(ttl=60)
+# 🌟 変更3: 二重キャッシュ防止のため @st.cache_data を削除！
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
 
 
 def render_search_page():
-    st.header("🔍 全生徒の過去ログ検索 ＆ 修正")
-    
+    # 🌟 変更1: タイトル横に「データを更新」ボタンを配置
+    col_h, col_r = st.columns([0.8, 0.2])
+    with col_h:
+        st.header("🔍 全生徒の過去ログ検索 ＆ 修正")
+    with col_r:
+        st.write("")
+        if st.button("🔄 データを更新", use_container_width=True):
+            st.cache_data.clear() # キャッシュを強制クリアして最新化
+            st.rerun()
+
     # ==========================================
     # 🌟 生徒リストの取得（マスターからID付きで）
     # ==========================================
-    df_students = cached_get_student_master()
+    df_students_raw = cached_get_student_master()
+    df_students = df_students_raw.copy()
     student_options = []
     if not df_students.empty and '生徒ID' in df_students.columns and '生徒名' in df_students.columns:
         student_options = (df_students['生徒ID'].astype(str) + " - " + df_students['生徒名']).tolist()
@@ -56,11 +63,9 @@ def render_search_page():
                         date_str = del_date.strftime("%Y/%m/%d")
                         
                         with st.spinner("データを削除中..."):
-                            # 🌟 変更：del_subject を del_period に変更して関数に渡す
                             success = robust_api_call(delete_specific_log, del_id, del_name, date_str, del_period, fallback_value=False)
                             
                         if success:
-                            # 🌟 成功時のメッセージも del_period を表示するように変更
                             st.success(f"✅ {date_str} の {del_name} さん ({del_period}) の記録を削除しました！")
                             st.cache_data.clear()
                             time.sleep(1.5)
@@ -75,7 +80,6 @@ def render_search_page():
         return
 
     with st.spinner("データベースから一括読み込み中...（超高速🚀）"):
-        # 🌟 変更: 統合シートのデータを一括で持ってくる
         df_all = cached_get_all_logs()
     
     if df_all.empty or "APIエラー発生" in df_all.columns: 
@@ -97,14 +101,14 @@ def render_search_page():
         max_date = df_all['日時'].max().date() if not pd.isnull(df_all['日時'].max()) else datetime.date.today()
         date_range = c1.date_input("📅 日付の範囲", [min_date, max_date])
         
-        # 担当講師リストの作成（None対策）
-        if '担当講師' in df_all.columns:
-            valid_teachers = [t for t in df_all['担当講師'].dropna().unique() if t and str(t).strip() not in ["None", "nan", ""]]
-            teachers = ["すべて"] + valid_teachers
+        # 🌟 変更2: 担当講師から「科目」へ変更
+        if '科目' in df_all.columns:
+            valid_subjects = [s for s in df_all['科目'].dropna().unique() if s and str(s).strip() not in ["None", "nan", ""]]
+            subjects = ["すべて"] + valid_subjects
         else:
-            teachers = ["すべて"]
+            subjects = ["すべて"]
             
-        selected_teacher = c2.selectbox("👨‍🏫 担当講師", teachers)
+        selected_subject = c2.selectbox("📚 科目", subjects)
         
         # 生徒リストは「ID - 名前」のプルダウンにする
         students = ["すべて"] + student_options
@@ -118,14 +122,14 @@ def render_search_page():
     if len(date_range) == 2: 
         df_filtered = df_filtered[(df_filtered['日時'].dt.date >= date_range[0]) & (df_filtered['日時'].dt.date <= date_range[1])]
         
-    if selected_teacher != "すべて": 
-        df_filtered = df_filtered[df_filtered['担当講師'] == selected_teacher]
+    # 🌟 変更2: 科目での絞り込みロジックに変更
+    if selected_subject != "すべて": 
+        df_filtered = df_filtered[df_filtered['科目'] == selected_subject]
         
     if selected_student_option != "すべて":
         search_id = selected_student_option.split(" - ")[0]
         search_name = selected_student_option.split(" - ")[1]
         
-        # 🌟 生徒ID列があればIDで絞り込み、なければ名前で絞り込む
         if '生徒ID' in df_filtered.columns:
             df_filtered = df_filtered[df_filtered['生徒ID'].astype(str) == search_id]
         else:
