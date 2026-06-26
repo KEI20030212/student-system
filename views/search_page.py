@@ -13,7 +13,7 @@ from utils.api_guard import robust_api_call
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-# 🌟 変更3: 二重キャッシュ防止のため @st.cache_data を削除！
+# 🌟 修正3: 二重キャッシュ防止のため @st.cache_data を完全に削除！
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
 
@@ -96,6 +96,7 @@ def render_search_page():
             df_all = df_all.rename(columns={'名前': '生徒名'})
     
     with st.container(border=True):
+        st.markdown("**🔍 検索条件と表示設定**")
         c1, c2, c3 = st.columns(3)
         min_date = df_all['日時'].min().date() if not pd.isnull(df_all['日時'].min()) else datetime.date.today()
         max_date = df_all['日時'].max().date() if not pd.isnull(df_all['日時'].max()) else datetime.date.today()
@@ -113,6 +114,29 @@ def render_search_page():
         # 生徒リストは「ID - 名前」のプルダウンにする
         students = ["すべて"] + student_options
         selected_student_option = c3.selectbox("👤 生徒名", students)
+
+        # 🌟 【新機能】表示する列のカスタマイズマルチセレクト
+        st.write("")
+        # 選択肢として提供するスプレッドシートの全項目定義
+        all_columns_list = [
+            "日時", "生徒ID", "生徒名", "科目", "テキスト", "終了ページ", 
+            "担当講師", "授業形態", "出欠", "授業コマ", "アドバイス", 
+            "保護者への連絡", "次回への引継ぎ", "出した宿題P", "やった宿題P", 
+            "やる気ランク", "未達成の理由", "本日の修正策", "次回の宿題テキスト", 
+            "次回の宿題ページ数", "遅刻時間", "集中力", "ミスへの反応", "次回の持ち物"
+        ]
+        
+        # 実際に読み込んだデータフレームに存在する列だけを選択肢のベースにする（エラー防止）
+        available_cols = [col for col in all_columns_list if col in df_all.columns or col == "日時"]
+        
+        # デフォルトでONにする4種類の列
+        default_cols = [col for col in ["日時", "生徒名", "科目", "終了ページ"] if col in available_cols]
+        
+        selected_display_cols = st.multiselect(
+            "📋 表に表示する項目（クリックでON/OFFを切り替え）",
+            options=available_cols,
+            default=default_cols
+        )
 
     # ==========================================
     # 🌟 絞り込み処理
@@ -145,4 +169,9 @@ def render_search_page():
     # NaN を空文字に変換
     df_display = df_display.fillna("") 
     
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    # 🌟 【新機能】カスタマイズされた列だけに絞り込んで表示
+    if selected_display_cols:
+        # 万が一の登録順のズレを防ぐため、選択された順序を維持して抽出
+        st.dataframe(df_display[selected_display_cols], use_container_width=True, hide_index=True)
+    else:
+        st.warning("⚠️ 表示項目が何も選択されていません。項目を1つ以上選択してください。")
