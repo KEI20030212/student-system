@@ -147,7 +147,7 @@ def render_search_page():
     df_display = df_filtered.drop(columns=['ページ数'], errors='ignore')
     df_display = df_display.fillna("") 
 
-    # 🌟 【新機能1】 お留守番表示（Empty State）
+    # 🌟 お留守番表示（Empty State）
     if df_display.empty:
         st.info("💡 指定された条件の授業記録は見つかりませんでした。\n日付の範囲を広げるか、他の生徒・科目を選択してみてください。")
     else:
@@ -156,14 +156,13 @@ def render_search_page():
         if selected_display_cols:
             st.dataframe(df_display[selected_display_cols], use_container_width=True, hide_index=True)
             
-            # 🌟 【新機能2】 ポップアップ詳細確認（ダイアログ）
+            # 🌟 ポップアップ詳細確認（最新のAPIに対応！）
             st.write("")
-            @st.experimental_dialog("💬 抽出された記録のコメント詳細")
+            @st.dialog("💬 抽出された記録のコメント詳細")
             def show_comment_details(df_subset):
                 st.write(f"検索結果の **{len(df_subset)}件** のコメントを表示します。")
                 st.divider()
                 
-                # 表示すべきコメント列が存在するかチェック
                 comment_cols = [c for c in ["アドバイス", "保護者への連絡", "次回への引継ぎ"] if c in df_subset.columns]
                 
                 if not comment_cols:
@@ -190,7 +189,6 @@ def render_search_page():
                         if not has_any_comment:
                             st.caption("※特記すべきコメントはありませんでした。")
 
-            # 検索結果が存在する場合のみボタンを表示
             if st.button("💬 この検索結果の『コメント詳細』を別枠で読む", icon="👁️", use_container_width=True):
                 show_comment_details(df_display)
 
