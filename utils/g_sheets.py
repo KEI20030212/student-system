@@ -1582,14 +1582,14 @@ def save_learning_plan(student_id, student_name, plan_type, plan_details):
         return False
 
 #my_salary.py
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner=False)
 def load_published_salary():
     """先生用のページで公開済みの給与データを読み込む"""
     try:
         gc = get_gc_client()
         # 👇 読み込み処理をすべて try の中に入れるのが最大のポイント！
         sh = gc.open_by_key(SPREADSHEET_ID) 
-        ws = sh.worksheet("給与公開用データ")
+        ws = sh.worksheet("給与公開")
         return pd.DataFrame(ws.get_all_records())
         
     except Exception as e:
