@@ -132,7 +132,8 @@ def render_search_page():
             
             with st.container(border=True):
                 st.markdown("**🔍 授業記録の検索条件と表示設定**")
-                c1, c2, c3 = st.columns(3)
+                # 🌟 講師名を追加するため、列数を3から4に変更
+                c1, c2, c3, c4 = st.columns(4)
                 min_date = df_all['日時'].min().date() if not pd.isnull(df_all['日時'].min()) else datetime.date.today()
                 max_date = df_all['日時'].max().date() if not pd.isnull(df_all['日時'].max()) else datetime.date.today()
                 date_range = c1.date_input("📅 日付の範囲", [min_date, max_date], key="lesson_date_range")
@@ -147,6 +148,14 @@ def render_search_page():
                 
                 students = ["すべて"] + student_options
                 selected_student_option = c3.selectbox("👤 生徒名", students, key="lesson_student")
+
+                # 🌟 講師名の選択肢をデータから動的に取得して設置
+                if '担当講師' in df_all.columns:
+                    valid_teachers = [t for t in df_all['担当講師'].dropna().unique() if t and str(t).strip() not in ["None", "nan", ""]]
+                    teachers = ["すべて"] + valid_teachers
+                else:
+                    teachers = ["すべて"]
+                selected_teacher = c4.selectbox("👨‍🏫 担当講師", teachers, key="lesson_teacher")
 
                 st.write("")
                 all_columns_list = [
@@ -180,6 +189,10 @@ def render_search_page():
                     df_filtered = df_filtered[df_filtered['生徒ID'].astype(str) == search_id]
                 else:
                     df_filtered = df_filtered[df_filtered['生徒名'] == search_name]
+            
+            # 🌟 講師名での絞り込み条件を追加
+            if selected_teacher != "すべて":
+                df_filtered = df_filtered[df_filtered['担当講師'] == selected_teacher]
 
             df_filtered['日時'] = df_filtered['日時'].dt.strftime('%Y/%m/%d')
             df_display = df_filtered.drop(columns=['ページ数'], errors='ignore')
@@ -187,7 +200,7 @@ def render_search_page():
 
             # お留守番表示
             if df_display.empty:
-                st.info("💡 指定された条件の授業記録は見つかりませんでした。\n日付の範囲を広げるか、他の生徒・科目を選択してみてください。")
+                st.info("💡 指定された条件の授業記録は見つかりませんでした。\n日付の範囲を広げるか、他の生徒・科目・講師を選択してみてください。")
             else:
                 st.success(f"該当記録: **{len(df_filtered)} 件**")
                 if selected_display_cols:
