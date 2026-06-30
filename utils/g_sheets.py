@@ -722,6 +722,7 @@ def add_new_textbook(new_name):
         st.error(f"🚨 新規テキストの裏側でエラー発生: {e}")
         return False
 
+@st.cache_data(ttl=600, show_spinner=False)
 def get_textbook_master():
     """テキストと章、および単元名を取得する"""
     import streamlit as st
@@ -1055,6 +1056,7 @@ def update_quiz_record_in_sheet(date_str, student_name, quiz_name, old_unit, new
         return False
 
 #dashboard.py
+@st.cache_data(ttl=60, show_spinner=False)
 def load_quiz_records():
     """
     全員共通の「小テスト記録」シートから全データを読み込む
