@@ -157,20 +157,17 @@ def render_edit_input_page():
             st.divider()
             st.write("💯 **実施した小テストの修正**")
             
-            # 🌟 先生が迷わないように注意書きを追加
-            st.caption("※データ構造上、同日の別コマのテストも合流して表示されます。**修正したいテストのみチェックを入れて**展開してください。（チェックを入れないテストは無視され、安全に保護されます）")
-            
             df_quizzes = robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
             quiz_details = robust_api_call(get_quiz_master_dict, fallback_value={})
             
             day_quizzes = []
             if not df_quizzes.empty and '名前' in df_quizzes.columns and '日時' in df_quizzes.columns:
-                # 🌟 修正：現在修正中の授業レコードから「1コマ目」の文字列を抽出
+                # 🌟 現在修正中の授業レコードから「1コマ目」などの文字列を抽出
                 current_slot = str(record.get('授業コマ', '')).split(" ")[0]
                 # 小テスト側の列名を特定（古いデータにも対応するため）
                 slot_col = 'タイミング' if 'タイミング' in df_quizzes.columns else '実施形態' if '実施形態' in df_quizzes.columns else df_quizzes.columns[-1]
                 
-                # 🌟 修正：抽出条件に「コマ数（または"授業内"）の一致」を追加！
+                # 🌟 抽出条件：この授業コマ（または昔の"授業内"データ）に完全一致するものだけを狙い撃ち！
                 mask = (
                     (df_quizzes['名前'] == record.get('名前')) & 
                     (df_quizzes['日時'].astype(str).str.startswith(date_str)) &
@@ -185,30 +182,28 @@ def render_edit_input_page():
                     old_unit = q.get('単元', 1)
                     old_score = q.get('点数', 100)
                     
-                    edit_toggle = st.checkbox(f"✏️ 【{q_name}】(第{old_unit}回: {old_score}点) を修正する", value=False, key=f"edit_toggle_{idx}_{q_idx}")
-                    
-                    if edit_toggle:
-                        current_max = 100
-                        matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{q_name}_")]
-                        if matched_marks:
-                            current_max = int(pd.Series(matched_marks).mode()[0])
-                            
-                        with st.container(border=True):
-                            col_q1, col_q2 = st.columns(2)
-                            with col_q1:
-                                new_unit = st.number_input(f"単元/回", value=int(old_unit) if str(old_unit).isdigit() else 1, key=f"edit_q_unit_{idx}_{q_idx}")
-                            with col_q2:
-                                safe_old_score = int(old_score) if str(old_score).isdigit() else 0
-                                safe_max = max(current_max, safe_old_score)
-                                new_score = st.number_input(f"点数 (/{current_max}点満点)", min_value=0, max_value=safe_max, value=safe_old_score, key=f"edit_q_score_{idx}_{q_idx}")
+                    current_max = 100
+                    matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{q_name}_")]
+                    if matched_marks:
+                        current_max = int(pd.Series(matched_marks).mode()[0])
                         
-                        edited_quizzes.append({
-                            "quiz_name": q_name,
-                            "old_unit": old_unit,
-                            "new_unit": new_unit,
-                            "old_score": old_score,
-                            "new_score": new_score
-                        })
+                    with st.container(border=True):
+                        st.write(f"✏️ **【{q_name}】**")
+                        col_q1, col_q2 = st.columns(2)
+                        with col_q1:
+                            new_unit = st.number_input(f"単元/回", value=int(old_unit) if str(old_unit).isdigit() else 1, key=f"edit_q_unit_{idx}_{q_idx}")
+                        with col_q2:
+                            safe_old_score = int(old_score) if str(old_score).isdigit() else 0
+                            safe_max = max(current_max, safe_old_score)
+                            new_score = st.number_input(f"点数 (/{current_max}点満点)", min_value=0, max_value=safe_max, value=safe_old_score, key=f"edit_q_score_{idx}_{q_idx}")
+                    
+                    edited_quizzes.append({
+                        "quiz_name": q_name,
+                        "old_unit": old_unit,
+                        "new_unit": new_unit,
+                        "old_score": old_score,
+                        "new_score": new_score
+                    })
             else:
                 st.info("この授業コマで記録された小テストはありません。")
 
