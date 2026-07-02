@@ -411,8 +411,8 @@ def render_matching_page():
                                         target_subject = valid_subject
                                         
                                         past_fixed_teacher = None
-                                        if sn_c in history_map and current_weekday in history_map[sn_c] and s in history_map[sn_c][current_weekday] and target_subject in history_map[sn_c][current_weekday][s]:
-                                            teacher_counts = history_map[sn_c][current_weekday][s][target_subject]
+                                        if s_name_clean in history_map and current_weekday in history_map[s_name_clean] and s in history_map[s_name_clean][current_weekday] and target_subject in history_map[s_name_clean][current_weekday][s]:
+                                            teacher_counts = history_map[s_name_clean][current_weekday][s][target_subject]
                                             if teacher_counts: past_fixed_teacher = max(teacher_counts, key=teacher_counts.get)
                                         
                                         available_teachers = schedule[d][s]
