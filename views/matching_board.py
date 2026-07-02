@@ -115,7 +115,8 @@ def generate_weekly_matrix_html(df_source, dates_for_week, days_of_week_map, tea
                 df_cell = df_date[df_date["コマ名"] == s] if not df_date.empty else pd.DataFrame()
                 if not df_cell.empty:
                     for _, row in df_cell.iterrows():
-                        disp_name = get_display_name(row["生徒名"])
+                        clean_name = str(row["生徒名"]).replace("\n", " ").strip()
+                        disp_name = get_display_name(clean_name)
                         subj = row["科目"]
                         style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
                         # 三点リーダーで溢れを防止しつつ、title属性でホバー時にフルネーム表示
@@ -162,11 +163,30 @@ def render_matching_page():
         .date-text { font-size: 11px; font-weight: normal; }
         .slot-header { background-color: #f8fafc; font-size: 11px; font-weight: bold; color: #64748b; border-bottom: 2px solid #cbd5e1 !important; }
         
-        .name-col { font-weight: bold; background-color: #f8fafc; font-size: 12px; text-align: left; padding-left: 8px; border-bottom: 1px solid #e2e8f0; }
+        /* 講師名セルの高さを強制固定 */
+        .name-col { 
+            font-weight: bold; 
+            background-color: #f8fafc; 
+            font-size: 12px; 
+            text-align: left; 
+            padding-left: 8px; 
+            border-bottom: 1px solid #e2e8f0;
+            height: 40px !important; /* 高さを指定 */
+            max-height: 40px !important;
+            overflow: hidden; /* はみ出たテキストを隠す */
+            white-space: nowrap; /* 複数行になるのを防ぐ */
+        }
         .branch-badge { font-size: 9px; color: #64748b; font-weight: normal; background-color:#e2e8f0; padding: 1px 4px; border-radius: 4px; display: inline-block; margin-top: 2px; }
         
         /* データの格子セルの高さと配置を固定 */
-        .data-cell { vertical-align: top; height: 52px; background-color: #ffffff; padding: 3px !important; }
+        .data-cell { 
+            vertical-align: top; 
+            background-color: #ffffff; 
+            padding: 3px !important; 
+            height: 40px !important; /* 講師名セルと同じ高さに指定 */
+            max-height: 40px !important;
+            overflow: hidden; 
+        }
         
         /* 生徒バッジの見た目統一＆文字溢れ対策(三点リーダー) */
         .student-badge { 
