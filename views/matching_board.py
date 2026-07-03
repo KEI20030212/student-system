@@ -535,9 +535,9 @@ def render_matching_page():
                     draft_lessons = st.session_state[f"new_lessons_{is_summer}"]
                     
                     component_data = {
-                        "dates": dates_in_scope[:7], # 画面に収めるため最初の1週間分を渡す例
+                        "dates": dates_in_scope[:7], 
                         "slots": get_slots_for_date(dates_in_scope[0], is_summer),
-                        "teachers": all_target_teachers, # 画面上部で作成した講師リスト
+                        "teachers": teacher_list, # 👈 ここを `teacher_list` に変更！ ✅
                         "lessons": draft_lessons
                     }
 
