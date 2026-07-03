@@ -534,33 +534,59 @@ def render_matching_page():
                 if f"new_lessons_{is_summer}" in st.session_state:
                     st.write("---")
                     st.markdown("### 🖱️ 【最強】ドラッグ＆ドロップ手動調整パネル")
-                    st.caption("生徒のパネルをマウスで掴んで、別の先生の枠へ直接移動できます！")
+                    st.caption("生徒のパネルをマウスで掴んで移動できます。（※グレーのパネルは既に確定済みの授業で、動かせません）")
                     
-                    # コンポーネントに渡すためのデータを準備
-                    draft_lessons = st.session_state[f"new_lessons_{is_summer}"]
-                    
+                    # 🌟 1. 「確定済みの授業」と「下書きの授業」を合体させてJSに渡す
+                    df_existing = df_lessons[df_lessons["日付"].isin(dates_in_scope)].fillna("") if not df_lessons.empty else pd.DataFrame()
+                    existing_list = df_existing.to_dict(orient="records") if not df_existing.empty else []
+                    for i, l in enumerate(existing_list):
+                        l["is_new"] = False
+                        l["授業ID"] = f"OLD-{i}"
+
+                    draft_list = st.session_state[f"new_lessons_{is_summer}"]
+                    for l in draft_list:
+                        l["is_new"] = True
+
+                    all_lessons_for_js = existing_list + draft_list
+
                     component_data = {
-                        "dates": dates_in_scope[:7], 
+                        "dates": dates_in_scope, # 期間をすべて渡す！
                         "slots": get_slots_for_date(dates_in_scope[0], is_summer),
-                        "teachers": teacher_list, # 👈 ここを `teacher_list` に変更！ ✅
-                        "lessons": draft_lessons
+                        "teachers": teacher_list, 
+                        "lessons": all_lessons_for_js
                     }
 
                     # ✨ カスタムコンポーネントの呼び出し
-                    updated_lessons = draggable_board_component(
+                    component_result = draggable_board_component(
                         data=component_data, 
                         key=f"drag_drop_{is_summer}"
                     )
 
-                    # JS側でドロップが発生し、新しいデータが返ってきた時だけ処理する
-                    if updated_lessons is not None:
-                        # 🚨 無限ループ防止：セッションのデータと内容が「違う」場合のみ更新＆再起動
-                        if updated_lessons != st.session_state[f"new_lessons_{is_summer}"]:
-                            st.session_state[f"new_lessons_{is_summer}"] = updated_lessons
-                            st.rerun()
+                    # 🌟 2. JS側の「保存ボタン」が押された時だけデータが返ってきて、ここで保存処理が走る！
+                    if component_result is not None and component_result.get("action") == "save":
+                        with st.spinner("スプレッドシートへ授業データを保存中..."):
+                            df_to_save = pd.DataFrame(component_result["lessons"])
+                            if "is_new" in df_to_save.columns:
+                                df_to_save = df_to_save.drop(columns=["is_new"]) # GSheetsには不要なフラグを削除
 
-                    # 📋 リアルタイムプレビュー
-                    st.markdown("#### 📊 修正連動型・時間割表プレビュー")
+                            if not df_to_save.empty:
+                                success = robust_api_call(lambda: save_lesson_schedule(df_to_save), fallback_value=False)
+                                if success:
+                                    st.success("✅ 授業予定表をすべて確定保存しました！")
+                                    st.cache_data.clear() 
+                                    del st.session_state[f"new_lessons_{is_summer}"]
+                                    time.sleep(1.5)
+                                    st.rerun()
+                                else: 
+                                    st.error("❌ 保存に失敗しました。")
+
+                    # ===============================================
+                    # Python側の保存ボタンはJS側に移動したため削除しました
+                    # ===============================================
+                    
+                    # 📋 リアルタイムプレビュー (PDF出力用)
+                    st.markdown("#### 📊 PDF出力用プレビュー")
+                    # ※注意：手動でドラッグした結果は、保存ボタンを押すまではこちらのプレビューには反映されません。
                     df_latest_draft = pd.DataFrame(st.session_state[f"new_lessons_{is_summer}"])
                     
                     weeks = [dates_in_scope[i:i+7] for i in range(0, len(dates_in_scope), 7)]
