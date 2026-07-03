@@ -18,8 +18,8 @@ from utils.g_sheets import (
     load_compatibility_ng_master   
 )
 
-# 作成したHTMLフォルダへのパスを指定してコンポーネントを宣言
-_COMPONENT_PATH = os.path.join(os.path.dirname(__file__), "..", "components", "drag_drop_board")
+# 絶対パス（os.path.abspath）で迷子を防ぐ！
+_COMPONENT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "components", "drag_drop_board"))
 draggable_board_component = components.declare_component(
     "draggable_board",
     path=_COMPONENT_PATH
