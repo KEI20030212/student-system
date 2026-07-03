@@ -18,31 +18,29 @@ from utils.g_sheets import (
     load_compatibility_ng_master   
 )
 
+# 🌟 JSコンポーネントの読み込み
 _COMPONENT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "components", "drag_drop_board"))
-
 draggable_board_component = components.declare_component(
     "draggable_board",
     path=_COMPONENT_PATH
 )
 
 def get_slots_for_date(date_str, is_summer_mode):
-    """
-    🌟【時間割最適化ロジック】
-    期間モードと曜日を判定し、その日に必要なコマの枠組みだけを動的に返す関数
-    """
+    """期間モードと曜日を判定し、必要なコマ枠を返す"""
     if is_summer_mode:
         return ["Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
     else:
         dt_obj = datetime.datetime.strptime(date_str, "%Y/%m/%d")
-        if dt_obj.weekday() < 5:  # 月〜金 (0=月, 4=金)
+        if dt_obj.weekday() < 5:  # 月〜金
             return ["2コマ", "3コマ", "4コマ"]
-        else:  # 土曜日・日曜日
+        else:  # 土日
             return ["0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
 
 def generate_weekly_matrix_html(df_source, dates_for_week, days_of_week_map, teacher_branch_map=None, all_branch_teachers=None, is_summer_mode=False, is_print_mode=False):
     """
-    1週間分のデータを『縦軸：講師名』『横軸：日付 × コマ名』のマトリクスHTMLとして生成。
-    🌟 CSSを徹底強化し、格子のサイズを完全固定＆美化しました。
+    確定済み予定表のHTML生成ロジック。
+    🌟 PDF印刷時(is_print_mode=True)は、横幅がはみ出さないように「数日単位」で表を分割（チャンク化）し、
+    縦幅が必ず1ページに収まるように改ページ制御を行います。
     """
     if teacher_branch_map is None: teacher_branch_map = {}
     if all_branch_teachers is None: all_branch_teachers = []
@@ -77,94 +75,88 @@ def generate_weekly_matrix_html(df_source, dates_for_week, days_of_week_map, tea
         "社会": "background-color: #FFF9C4; color: #F57F17;"
     }
     
-    container_class = "print-container" if is_print_mode else "scroll-container"
+    # 🌟 印刷時は横に長くなりすぎないよう、夏期は2日ごと、通常は3日ごとに表をぶつ切りにする
+    if is_print_mode:
+        chunk_size = 2 if is_summer_mode else 3
+        date_chunks = [dates_for_week[i:i + chunk_size] for i in range(0, len(dates_for_week), chunk_size)]
+    else:
+        date_chunks = [dates_for_week]
     
     h = []
-    h.append(f"<div class='{container_class}'><table class='print-optimized-table'>")
     
-    # コマ幅を均等に計算するためのcolgroup設定 (幅のブレを完全に固定化)
-    h.append("<colgroup>")
-    h.append("<col class='col-teacher-name'>") # 講師名列の固定
-    for d in dates_for_week:
-        day_slots = get_slots_for_date(d, is_summer_mode)
-        for _ in day_slots:
-            h.append("<col class='col-slot-width'>") # 各コマ幅の固定
-    h.append("</colgroup>")
-
-    # ヘッダー1行目
-    h.append("<tr>")
-    h.append("<th rowspan='2' class='sticky-col header-col'>講師名</th>")
-    for d in dates_for_week:
-        dt_obj = datetime.datetime.strptime(d, "%Y/%m/%d")
-        day_str = days_of_week_map[dt_obj.weekday()]
-        day_color = "#1565C0" if day_str == "土" else "#C62828" if day_str == "日" else "#333333"
-        date_short = d.split('/', 1)[1]
-        day_slots = get_slots_for_date(d, is_summer_mode)
-        h.append(f"<th colspan='{len(day_slots)}' class='date-header' style='color: {day_color};'><span class='date-text'>{date_short}</span> ({day_str})</th>")
-    h.append("</tr><tr>")
-    
-    # ヘッダー2行目
-    for d in dates_for_week:
-        day_slots = get_slots_for_date(d, is_summer_mode)
-        for s in day_slots:
-            h.append(f"<th class='slot-header'>{s.replace('コマ', '')}</th>")
-    h.append("</tr>")
-    
-    # データ行
-    for t in all_target_teachers:
-        t_branch = teacher_branch_map.get(t, "")
-        branch_html = f"<br><span class='branch-badge'>{t_branch}</span>" if t_branch else ""
-        h.append(f"<tr><td class='sticky-col name-col'>{t}{branch_html}</td>")
+    for chunk_idx, chunk_dates in enumerate(date_chunks):
+        container_class = "print-container print-page" if is_print_mode else "scroll-container"
+        # 印刷時は表ごとに改ページを入れる
+        page_break_style = "page-break-after: always;" if is_print_mode else ""
         
-        for d in dates_for_week:
-            df_date = df_source[(df_source["講師名"] == t) & (df_source["日付"] == d)] if not df_source.empty else pd.DataFrame()
+        h.append(f"<div class='{container_class}' style='{page_break_style}'><table class='print-optimized-table'>")
+        
+        # コマ幅の完全固定
+        h.append("<colgroup><col class='col-teacher-name'>")
+        for d in chunk_dates:
+            for _ in get_slots_for_date(d, is_summer_mode):
+                h.append("<col class='col-slot-width'>")
+        h.append("</colgroup>")
+
+        # ヘッダー1行目（日付）
+        h.append("<tr><th rowspan='2' class='sticky-col header-col'>講師名</th>")
+        for d in chunk_dates:
+            dt_obj = datetime.datetime.strptime(d, "%Y/%m/%d")
+            day_str = days_of_week_map[dt_obj.weekday()]
+            day_color = "#1565C0" if day_str == "土" else "#C62828" if day_str == "日" else "#333333"
+            date_short = d.split('/', 1)[1]
             day_slots = get_slots_for_date(d, is_summer_mode)
-            for s in day_slots:
-                h.append("<td class='data-cell'>")
-                df_cell = df_date[df_date["コマ名"] == s] if not df_date.empty else pd.DataFrame()
-                if not df_cell.empty:
-                    for _, row in df_cell.iterrows():
-                        clean_name = str(row["生徒名"]).replace("\n", " ").strip()
-                        disp_name = get_display_name(clean_name)
-                        subj = row["科目"]
-                        style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
-                        # 三点リーダーで溢れを防止しつつ、title属性でホバー時にフルネーム表示
-                        h.append(f"<div class='student-badge' style='{style}' title='{row['生徒名']} ({subj})'>{disp_name}</div>")
-                h.append("</td>")
+            h.append(f"<th colspan='{len(day_slots)}' class='date-header' style='color: {day_color};'><span class='date-text'>{date_short}</span> ({day_str})</th>")
+        h.append("</tr><tr>")
+        
+        # ヘッダー2行目（コマ名）
+        for d in chunk_dates:
+            for s in get_slots_for_date(d, is_summer_mode):
+                h.append(f"<th class='slot-header'>{s.replace('コマ', '')}</th>")
         h.append("</tr>")
-    
-    h.append("</table></div>")
+        
+        # データ行
+        for t in all_target_teachers:
+            t_branch = teacher_branch_map.get(t, "")
+            branch_html = f"<br><span class='branch-badge'>{t_branch}</span>" if t_branch else ""
+            h.append(f"<tr><td class='sticky-col name-col'>{t}{branch_html}</td>")
+            
+            for d in chunk_dates:
+                df_date = df_source[(df_source["講師名"] == t) & (df_source["日付"] == d)] if not df_source.empty else pd.DataFrame()
+                for s in get_slots_for_date(d, is_summer_mode):
+                    h.append("<td class='data-cell'>")
+                    df_cell = df_date[df_date["コマ名"] == s] if not df_date.empty else pd.DataFrame()
+                    if not df_cell.empty:
+                        for _, row in df_cell.iterrows():
+                            clean_name = str(row["生徒名"]).replace("\n", " ").strip()
+                            disp_name = get_display_name(clean_name)
+                            subj = row["科目"]
+                            style = color_map.get(subj, "background-color: #e0e0e0; color: #333;")
+                            h.append(f"<div class='student-badge' style='{style}' title='{row['生徒名']} ({subj})'>{disp_name}</div>")
+                    h.append("</td>")
+            h.append("</tr>")
+        
+        h.append("</table></div>")
+        
     return "".join(h)
 
+
 def render_matching_page():
-    # 🎨 グローバルCSSの定義（格子のサイズ固定化・美化用）
+    # 🎨 画面描画用CSS
     st.markdown("""
     <style>
         .scroll-container { overflow-x: auto; max-width: 100%; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         .print-container { display: none; } 
         
-        /* 🚨 格子サイズ固定化のコアロジック */
         .print-optimized-table { 
-            table-layout: fixed; /* これで各列の幅を強制固定 */
-            width: auto; 
-            border-collapse: separate; 
-            border-spacing: 0;
-            background-color: #ffffff; 
-            color: #333333; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            font-size: 12px; 
+            table-layout: fixed; width: auto; border-collapse: separate; border-spacing: 0;
+            background-color: #ffffff; color: #333333; font-family: sans-serif; font-size: 12px; 
         }
-        
-        /* カラム幅の厳密な定義 */
         .col-teacher-name { width: 110px; }
         .col-slot-width { width: 75px; }
         
         .print-optimized-table th, .print-optimized-table td { 
-            border-right: 1px solid #e2e8f0; 
-            border-bottom: 1px solid #e2e8f0; 
-            padding: 6px 4px; 
-            text-align: center; 
-            box-sizing: border-box;
+            border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 6px 4px; text-align: center; box-sizing: border-box;
         }
         
         .header-col { background-color: #f8fafc; font-weight: bold; border-bottom: 2px solid #cbd5e1 !important; }
@@ -172,49 +164,19 @@ def render_matching_page():
         .date-text { font-size: 11px; font-weight: normal; }
         .slot-header { background-color: #f8fafc; font-size: 11px; font-weight: bold; color: #64748b; border-bottom: 2px solid #cbd5e1 !important; }
         
-        /* 講師名セルの高さを強制固定 */
         .name-col { 
-            font-weight: bold; 
-            background-color: #f8fafc; 
-            font-size: 12px; 
-            text-align: left; 
-            padding-left: 8px; 
-            border-bottom: 1px solid #e2e8f0;
-            height: 40px !important; /* 高さを指定 */
-            max-height: 40px !important;
-            overflow: hidden; /* はみ出たテキストを隠す */
-            white-space: nowrap; /* 複数行になるのを防ぐ */
+            font-weight: bold; background-color: #f8fafc; font-size: 12px; text-align: left; padding-left: 8px; 
+            border-bottom: 1px solid #e2e8f0; height: 40px !important; max-height: 40px !important;
+            overflow: hidden; white-space: nowrap; 
         }
-        .branch-badge { font-size: 9px; color: #64748b; font-weight: normal; background-color:#e2e8f0; padding: 1px 4px; border-radius: 4px; display: inline-block; margin-top: 2px; }
+        .branch-badge { font-size: 9px; color: #64748b; background-color:#e2e8f0; padding: 1px 4px; border-radius: 4px; display: inline-block; margin-top: 2px; }
         
-        /* データの格子セルの高さと配置を固定 */
-        .data-cell { 
-            vertical-align: top; 
-            background-color: #ffffff; 
-            padding: 3px !important; 
-            height: 40px !important; /* 講師名セルと同じ高さに指定 */
-            max-height: 40px !important;
-            overflow: hidden; 
-        }
+        .data-cell { vertical-align: top; background-color: #ffffff; padding: 3px !important; height: 40px !important; max-height: 40px !important; overflow: hidden; }
         
-        /* 生徒バッジの見た目統一＆文字溢れ対策(三点リーダー) */
         .student-badge { 
-            padding: 3px 4px; 
-            border-radius: 4px; 
-            margin-bottom: 2px; 
-            display: block; 
-            font-size: 11px; 
-            font-weight: bold; 
-            width: 100%; 
-            box-sizing: border-box;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis; /* 文字が溢れたら自動で「...」にする */
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-            cursor: help;
+            padding: 3px 4px; border-radius: 4px; margin-bottom: 2px; display: block; font-size: 11px; font-weight: bold; 
+            width: 100%; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help;
         }
-        
-        /* 固定スクロール用 */
         .scroll-container .sticky-col { position: sticky; left: 0; z-index: 2; border-right: 2px solid #cbd5e1 !important; }
         .scroll-container .header-col { z-index: 3; }
         .scroll-container .name-col { z-index: 1; box-shadow: 2px 0 5px rgba(0,0,0,0.04); }
@@ -223,7 +185,7 @@ def render_matching_page():
 
     period_tabs = st.tabs(["🏫 通常期間の予定表管理", "☀️ 夏期講習期間の予定表管理"])
     
-    with st.spinner("スプレッドシートから最新データを同期中..."):
+    with st.spinner("データを同期中..."):
         df_student_master = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
         df_contracts = robust_api_call(load_contract_master, fallback_value=pd.DataFrame())
         df_lessons = robust_api_call(load_lesson_schedule, fallback_value=pd.DataFrame())
@@ -234,10 +196,10 @@ def render_matching_page():
         df_ng = robust_api_call(load_compatibility_ng_master, fallback_value=pd.DataFrame())
 
     if df_contracts.empty:
-        st.warning("⚠️ 講習契約マスタにデータが登録されていません。先に契約を登録してください。")
+        st.warning("⚠️ 契約マスタが登録されていません。")
         st.stop()
 
-    # 校舎マッピング・NG・指名講師などの前処理
+    # マッピング等の前処理
     student_branch_map = {}
     teacher_branch_map = {}
     if not df_student_master.empty and "生徒名" in df_student_master.columns:
@@ -275,7 +237,7 @@ def render_matching_page():
     higashijujo_teachers = [t for t, b in teacher_branch_map.items() if b in ["東十条", "両校"]]
 
     nomination_map = {}
-    if not df_nominate.empty and "指名生徒名" in df_nominate.columns:
+    if not df_nominate.empty:
         for _, row in df_nominate.iterrows():
             sn = str(row["指名生徒名"]).replace(" ", "").strip()
             tn = str(row["講師名"]).replace(" ", "").strip()
@@ -283,7 +245,7 @@ def render_matching_page():
             nomination_map[sn].add(tn)
 
     ng_map = {}
-    if not df_ng.empty and "NG生徒名" in df_ng.columns:
+    if not df_ng.empty:
         for _, row in df_ng.iterrows():
             sn = str(row["NG生徒名"]).replace(" ", "").strip()
             tn = str(row["講師名"]).replace(" ", "").strip()
@@ -312,7 +274,7 @@ def render_matching_page():
             tab_create, tab_view = st.tabs(["✨ 新しい予定表を作成する", "📋 確定済みの予定表を確認する"])
 
             # -------------------------------------------------------------
-            # ✨ 新しい予定表を作成する（手動微調整 UI 搭載版）
+            # ✨ 新しい予定表を作成する（ドラッグ＆ドロップ完全統合版）
             # -------------------------------------------------------------
             with tab_create:
                 btn_label = f"✨ 自動生成ロジックを実行する ({'夏期講習時間割' if is_summer else '通常時間割'})"
@@ -326,7 +288,6 @@ def render_matching_page():
                             c_name = str(row.get("講習名", ""))
                             is_summer_contract = "夏" in c_name
                             if is_summer != is_summer_contract: continue
-                            
                             s_name = row["生徒名"]
                             subj = row["科目"]
                             count = int(row["契約コマ数"])
@@ -355,8 +316,7 @@ def render_matching_page():
                                 d = row["日付"]
                                 t_name = row.get("講師名")
                                 if not t_name or d not in schedule: continue
-                                day_slots = get_slots_for_date(d, is_summer)
-                                for s in day_slots:
+                                for s in get_slots_for_date(d, is_summer):
                                     val = row.get(s)
                                     if val in ["◎", "〇", "△"]:
                                         schedule[d][s][t_name] = []
@@ -374,7 +334,6 @@ def render_matching_page():
                                     if t_name not in schedule[d][s]: schedule[d][s][t_name] = []
                                     schedule[d][s][t_name].append(f"{s_name}({subj[0] if subj else '済'})")
                                     busy_students[d][s].add(s_name)
-                                    
                                     s_name_clean = str(s_name).replace(" ", "").strip()
                                     existing_s_branch = student_branch_map.get(s_name_clean)
                                     if existing_s_branch in ["田端", "東十条"]:
@@ -521,17 +480,15 @@ def render_matching_page():
 
                         if new_lessons:
                             st.session_state[f"new_lessons_{is_summer}"] = new_lessons
-                            st.success("🎉 自動コマ組みが完了しました！下の手動修正パネルおよびプレビューで確認してください。")
+                            st.success("🎉 自動コマ組みが完了しました！下の手動修正パネルで確認・確定してください。")
                         else:
                             st.warning("⚠️ 新しく割り当てられる契約コマが見つかりませんでした。")
 
-                # 🛠️ 最強のドラッグ＆ドロップ調整UI セクション
                 if f"new_lessons_{is_summer}" in st.session_state:
                     st.write("---")
                     st.markdown("### 🖱️ 【最強】ドラッグ＆ドロップ手動調整パネル")
-                    st.caption("生徒のパネルをマウスで掴んで移動できます。（※グレーのパネルは既に確定済みの授業で、動かせません）")
+                    st.caption("生徒のパネルをマウスで掴んで移動できます。（※半透明のパネルは既に確定済みの授業で、動かせません）")
                     
-                    # 🌟 1. 「確定済みの授業」と「下書きの授業」を合体させてJSに渡す
                     df_existing = df_lessons[df_lessons["日付"].isin(dates_in_scope)].fillna("") if not df_lessons.empty else pd.DataFrame()
                     existing_list = df_existing.to_dict(orient="records") if not df_existing.empty else []
                     for i, l in enumerate(existing_list):
@@ -551,18 +508,16 @@ def render_matching_page():
                         "lessons": all_lessons_for_js
                     }
 
-                    # ✨ カスタムコンポーネントの呼び出し（JSと通信開始）
                     component_result = draggable_board_component(
                         data=component_data, 
                         key=f"drag_drop_{is_summer}"
                     )
 
-                    # 🌟 2. JS側の「保存ボタン」が押された時だけデータが返ってきて、ここで保存処理が走る！
                     if isinstance(component_result, dict) and component_result.get("action") == "save":
                         with st.spinner("スプレッドシートへ授業データを保存中..."):
                             df_to_save = pd.DataFrame(component_result["lessons"])
                             if "is_new" in df_to_save.columns:
-                                df_to_save = df_to_save.drop(columns=["is_new"]) # GSheetsには不要なフラグを削除
+                                df_to_save = df_to_save.drop(columns=["is_new"]) 
 
                             if not df_to_save.empty:
                                 success = robust_api_call(lambda: save_lesson_schedule(df_to_save), fallback_value=False)
@@ -576,7 +531,7 @@ def render_matching_page():
                                     st.error("❌ 保存に失敗しました。")
 
             # -------------------------------------------------------------
-            # 📋 確定済みの予定表を確認する（PDF出力機能付き）
+            # 📋 確定済みの予定表を確認する（PDF出力機能付き・極限レイアウト）
             # -------------------------------------------------------------
             with tab_view:
                 c_title, c_print = st.columns([0.8, 0.2])
@@ -602,18 +557,24 @@ def render_matching_page():
                                 }}
                                 const wrapper = document.createElement('div');
                                 const style = document.createElement('style');
+                                // 🌟 PDF印刷用の極限圧縮CSS（縦幅を1枚に収めるため余白とフォントを最小化）
                                 style.innerHTML = `
-                                    .print-optimized-table {{ table-layout: fixed; width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 11px; }}
-                                    .print-optimized-table th, .print-optimized-table td {{ border: 1px solid #000; padding: 4px; text-align: center; }}
-                                    .col-teacher-name {{ width: 90px; }}
-                                    .col-slot-width {{ width: 60px; }}
-                                    .header-col {{ background-color: #f7f9fa; font-weight: bold; }}
-                                    .date-header {{ background-color: #f7f9fa; font-weight: bold; font-size: 13px; }}
-                                    .slot-header {{ background-color: #fcfcfc; font-size: 11px; font-weight: bold; color: #555; }}
-                                    .name-col {{ font-weight: bold; background-color: #fafafa; font-size: 12px; text-align: left; padding-left: 5px; }}
-                                    .branch-badge {{ font-size: 9px; color: #777; background-color:#eee; padding:1px 2px; border-radius:2px; }}
-                                    .student-badge {{ font-size: 10px; font-weight: bold; padding: 3px; margin: 1px 0; border-radius: 2px; border: 1px solid rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-                                    .print-container-{is_summer} {{ margin-bottom: 20px; page-break-after: always; display: block !important; }}
+                                    .print-page {{ 
+                                        width: 100%; 
+                                        page-break-after: always; /* 塊ごとに強制改ページ */
+                                        box-sizing: border-box;
+                                        padding-top: 5px;
+                                    }}
+                                    .print-optimized-table {{ table-layout: fixed; width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 8px; line-height: 1.1; }}
+                                    .print-optimized-table th, .print-optimized-table td {{ border: 1px solid #000; padding: 1px; text-align: center; height: auto !important; max-height: none !important; }}
+                                    .col-teacher-name {{ width: 55px; }}
+                                    .col-slot-width {{ width: 45px; }}
+                                    .header-col {{ background-color: #f7f9fa; font-weight: bold; font-size: 9px; }}
+                                    .date-header {{ background-color: #f7f9fa; font-weight: bold; font-size: 11px; }}
+                                    .slot-header {{ background-color: #fcfcfc; font-size: 9px; font-weight: bold; color: #555; }}
+                                    .name-col {{ font-weight: bold; background-color: #fafafa; font-size: 10px; text-align: left; padding-left: 2px; }}
+                                    .branch-badge {{ font-size: 7px; color: #777; background-color:#eee; padding:0 2px; border-radius:2px; }}
+                                    .student-badge {{ font-size: 8px; font-weight: bold; padding: 1px; margin: 0; border: 1px solid rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
                                 `;
                                 wrapper.appendChild(style);
                                 elements.forEach(el => {{
@@ -622,7 +583,7 @@ def render_matching_page():
                                     wrapper.appendChild(clone);
                                 }});
                                 const opt = {{
-                                    margin:       0.2,
+                                    margin:       0.1, /* マージンを最小限にして縦幅を稼ぐ */
                                     filename:     '{"夏期講習_" if is_summer else "通常_"}授業予定表.pdf',
                                     image:        {{ type: 'jpeg', quality: 0.98 }},
                                     html2canvas:  {{ scale: 2, useCORS: true }},
@@ -667,7 +628,9 @@ def render_matching_page():
                                         df_higashijujo = pd.DataFrame()
                                         
                                     st.markdown("### 🏫 田端校舎")
+                                    # 画面表示用（横長スクロール）
                                     html_scroll = generate_weekly_matrix_html(df_tabata, w_dates, days_of_week_map, teacher_branch_map, all_branch_teachers=tabata_teachers, is_summer_mode=is_summer, is_print_mode=False)
+                                    # PDF出力用（はみ出さないように数日ごとに分割されたHTML）
                                     html_print = generate_weekly_matrix_html(df_tabata, w_dates, days_of_week_map, teacher_branch_map, all_branch_teachers=tabata_teachers, is_summer_mode=is_summer, is_print_mode=True)
                                     html_print = html_print.replace("print-container", f"print-container-{is_summer}")
                                     st.markdown(html_scroll + html_print, unsafe_allow_html=True)
