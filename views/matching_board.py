@@ -563,7 +563,7 @@ def render_matching_page():
                     )
 
                     # 🌟 2. JS側の「保存ボタン」が押された時だけデータが返ってきて、ここで保存処理が走る！
-                    if component_result is not None and component_result.get("action") == "save":
+                    if isinstance(component_result, dict) and component_result.get("action") == "save":
                         with st.spinner("スプレッドシートへ授業データを保存中..."):
                             df_to_save = pd.DataFrame(component_result["lessons"])
                             if "is_new" in df_to_save.columns:
