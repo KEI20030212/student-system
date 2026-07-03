@@ -5,55 +5,27 @@
     <style>
         body { font-family: sans-serif; margin: 0; padding: 0; background-color: white; }
         
-        /* 🌟 横スクロールを許可するコンテナ */
-        #board-container { 
-            overflow-x: auto; 
-            max-width: 100%; 
-            padding-bottom: 10px; 
+        /* 🌟 JS版の保存ボタンのデザイン */
+        .btn-save {
+            display: block; width: 100%; padding: 12px; margin-bottom: 15px;
+            background-color: #3b82f6; color: white; border: none; border-radius: 6px;
+            font-size: 15px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            transition: background-color 0.2s;
         }
-        
-        /* 🌟 表の幅を「コンテンツのサイズに合わせる」＆ ボーダー設定 */
-        table { 
-            border-collapse: separate; 
-            border-spacing: 0; 
-            width: max-content; 
-            font-size: 11px; 
-            border-top: 1px solid #e2e8f0;
-            border-left: 1px solid #e2e8f0;
-        }
-        
-        th, td { 
-            border-right: 1px solid #e2e8f0; 
-            border-bottom: 1px solid #e2e8f0; 
-            padding: 4px; 
-            text-align: center; 
-            box-sizing: border-box; 
-        }
-        th { background-color: #f8fafc; font-weight: bold; }
-        
-        /* 🌟 コマの横幅を固定 */
-        .col-slot { width: 75px; min-width: 75px; }
+        .btn-save:hover { background-color: #2563eb; }
+        .btn-save:active { transform: translateY(1px); }
 
-        /* 🌟 講師名列の幅を固定＆左端にスクロール追従（Sticky） */
-        .col-teacher { 
-            width: 100px; 
-            min-width: 100px; 
-            text-align: left; 
-            padding-left: 8px; 
-            font-size: 12px; 
-            position: sticky; 
-            left: 0; 
-            background-color: #f8fafc; 
-            z-index: 2; 
-            border-right: 2px solid #cbd5e1;
-        }
+        #board-container { overflow-x: auto; max-width: 100%; padding-bottom: 10px; }
+        table { border-collapse: separate; border-spacing: 0; width: max-content; font-size: 11px; border-top: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; }
+        th, td { border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 4px; text-align: center; box-sizing: border-box; }
+        th { background-color: #f8fafc; font-weight: bold; }
+        .col-slot { width: 75px; min-width: 75px; }
+        .col-teacher { width: 100px; min-width: 100px; text-align: left; padding-left: 8px; font-size: 12px; position: sticky; left: 0; background-color: #f8fafc; z-index: 2; border-right: 2px solid #cbd5e1; }
         th.col-teacher { z-index: 3; }
-        
-        /* ドロップ先のセル */
         .drop-zone { height: 45px; vertical-align: top; background-color: #ffffff; padding: 3px; transition: background-color 0.2s; }
         .drop-zone.drag-over { background-color: #e2e8f0; border: 2px dashed #3b82f6; }
         
-        /* ドラッグできる生徒バッジ */
+        /* 動かせる授業（新しく組んだもの） */
         .student-badge {
             background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;
             padding: 3px 4px; margin-bottom: 2px; border-radius: 4px;
@@ -62,9 +34,17 @@
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
         .student-badge:active { cursor: grabbing; opacity: 0.8; }
+
+        /* 🌟 動かせない授業（確定済み） */
+        .student-badge.locked {
+            background-color: #f1f5f9; color: #64748b; border-color: #cbd5e1; cursor: not-allowed; opacity: 0.9;
+        }
     </style>
 </head>
 <body>
+    <!-- 🌟 HTML内に保存ボタンを追加 -->
+    <button id="js-save-btn" class="btn-save">💾 この状態でスプレッドシートに確定保存する</button>
+    
     <div id="board-container"></div>
 
     <script>
@@ -78,9 +58,7 @@
             sendMessageToStreamlit("streamlit:setFrameHeight", {height: document.body.scrollHeight});
         }
         window.addEventListener("message", function(event) {
-            if (event.data.type === "streamlit:render") {
-                renderBoard(event.data.args.data);
-            }
+            if (event.data.type === "streamlit:render") { renderBoard(event.data.args.data); }
         });
         window.addEventListener("load", function() {
             sendMessageToStreamlit("streamlit:componentReady", {apiVersion: 1});
@@ -93,16 +71,9 @@
             const container = document.getElementById("board-container");
             let html = `<table><tr><th rowspan="2" class="col-teacher">講師名</th>`;
             
-            data.dates.forEach(d => {
-                html += `<th colspan="${data.slots.length}">${d}</th>`;
-            });
+            data.dates.forEach(d => { html += `<th colspan="${data.slots.length}">${d}</th>`; });
             html += `</tr><tr>`;
-            data.dates.forEach(() => {
-                data.slots.forEach(s => { 
-                    /* 🌟 コマの幅用クラスを追加 */
-                    html += `<th class="col-slot">${s.replace("コマ", "")}</th>`; 
-                });
-            });
+            data.dates.forEach(() => { data.slots.forEach(s => { html += `<th class="col-slot">${s.replace("コマ", "")}</th>`; }); });
             html += `</tr>`;
 
             data.teachers.forEach(teacher => {
@@ -112,9 +83,16 @@
                         html += `<td class="drop-zone col-slot" data-teacher="${teacher}" data-date="${date}" data-slot="${slot}">`;
                         const matchingLessons = lessonsData.filter(l => l.講師名 === teacher && l.日付 === date && l.コマ名 === slot);
                         matchingLessons.forEach(lesson => {
-                            html += `<div class="student-badge" draggable="true" data-id="${lesson.授業ID}">
-                                        ${lesson.生徒名} (${lesson.科目})
-                                     </div>`;
+                            // 🌟 is_newフラグを見て、動かせるか固定かを判断
+                            if (lesson.is_new) {
+                                html += `<div class="student-badge" draggable="true" data-id="${lesson.授業ID}">
+                                            ${lesson.生徒名} (${lesson.科目})
+                                         </div>`;
+                            } else {
+                                html += `<div class="student-badge locked" draggable="false">
+                                            ${lesson.生徒名} (${lesson.科目})
+                                         </div>`;
+                            }
                         });
                         html += `</td>`;
                     });
@@ -129,7 +107,7 @@
         }
 
         function attachDragAndDropEvents() {
-            const badges = document.querySelectorAll('.student-badge');
+            const badges = document.querySelectorAll('.student-badge:not(.locked)');
             const dropZones = document.querySelectorAll('.drop-zone');
 
             badges.forEach(badge => {
@@ -137,38 +115,49 @@
                     e.dataTransfer.setData('text/plain', badge.dataset.id);
                     setTimeout(() => badge.style.opacity = '0.5', 0);
                 });
-                badge.addEventListener('dragend', (e) => {
-                    badge.style.opacity = '1';
-                });
+                badge.addEventListener('dragend', (e) => { badge.style.opacity = '1'; });
             });
 
             dropZones.forEach(zone => {
-                zone.addEventListener('dragover', (e) => {
-                    e.preventDefault(); 
-                    zone.classList.add('drag-over');
-                });
-                zone.addEventListener('dragleave', () => {
-                    zone.classList.remove('drag-over');
-                });
+                zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+                zone.addEventListener('dragleave', () => { zone.classList.remove('drag-over'); });
                 zone.addEventListener('drop', (e) => {
                     e.preventDefault();
                     zone.classList.remove('drag-over');
                     
                     const lessonId = e.dataTransfer.getData('text/plain');
+                    if(!lessonId) return; // 動かせないバッジを弾く
+
                     const newTeacher = zone.dataset.teacher;
                     const newDate = zone.dataset.date;
                     const newSlot = zone.dataset.slot;
 
                     const targetLesson = lessonsData.find(l => l.授業ID === lessonId);
-                    if (targetLesson && (targetLesson.講師名 !== newTeacher || targetLesson.日付 !== newDate || targetLesson.コマ名 !== newSlot)) {
+                    if (targetLesson && targetLesson.is_new) {
+                        // 🌟 見た目のデータだけ書き換える（Pythonへはまだ送らない＝リロードされない！）
                         targetLesson.講師名 = newTeacher;
                         targetLesson.日付 = newDate;
                         targetLesson.コマ名 = newSlot;
-                        setComponentValue(lessonsData);
+                        
+                        // DOM要素を直接移動させてサクサク動かす
+                        const draggedElement = document.querySelector(`[data-id="${lessonId}"]`);
+                        if (draggedElement) zone.appendChild(draggedElement);
                     }
                 });
             });
         }
+
+        // 🌟 保存ボタンが押された時だけ、Pythonへデータを送る！
+        document.getElementById("js-save-btn").addEventListener("click", () => {
+            const btn = document.getElementById("js-save-btn");
+            btn.innerText = "⏳ 保存処理中...お待ちください";
+            btn.disabled = true;
+            btn.style.backgroundColor = "#94a3b8";
+
+            // 新しく作成された授業（is_new === true）だけを抽出してPythonへ送る
+            const newLessonsToSave = lessonsData.filter(l => l.is_new === true);
+            setComponentValue({ action: "save", lessons: newLessonsToSave });
+        });
     </script>
 </body>
 </html>
