@@ -556,13 +556,13 @@ def render_matching_page():
                         "lessons": all_lessons_for_js
                     }
 
-                    # ✨ カスタムコンポーネントの呼び出し
+                    # ✨ カスタムコンポーネントの呼び出し（JSと通信開始）
                     component_result = draggable_board_component(
                         data=component_data, 
                         key=f"drag_drop_{is_summer}"
                     )
 
-                    # 🌟 2. JS側の「保存ボタン」が押された時だけデータが返ってきて、ここで保存処理が走る！
+                    # 🌟 JS側の「保存ボタン」が押された時だけデータが返ってきて、ここで保存処理が走る！
                     if isinstance(component_result, dict) and component_result.get("action") == "save":
                         with st.spinner("スプレッドシートへ授業データを保存中..."):
                             df_to_save = pd.DataFrame(component_result["lessons"])
@@ -579,144 +579,7 @@ def render_matching_page():
                                     st.rerun()
                                 else: 
                                     st.error("❌ 保存に失敗しました。")
-
-                    # ===============================================
-                    # Python側の保存ボタンはJS側に移動したため削除しました
-                    # ===============================================
-                    
-                    # 📋 リアルタイムプレビュー (PDF出力用)
-                    st.markdown("#### 📊 PDF出力用プレビュー")
-                    # ※注意：手動でドラッグした結果は、保存ボタンを押すまではこちらのプレビューには反映されません。
-                    df_latest_draft = pd.DataFrame(st.session_state[f"new_lessons_{is_summer}"])
-                    
-                    weeks = [dates_in_scope[i:i+7] for i in range(0, len(dates_in_scope), 7)]
-                    tab_labels = [f"📅 {w[0].split('/', 1)[1]} 〜 ({idx+1}週目)" for idx, w in enumerate(weeks[:4])]
-                    
-                    if tab_labels:
-                        preview_tabs = st.tabs(tab_labels)
-                        df_combined = pd.concat([df_lessons, df_latest_draft], ignore_index=True) if not df_lessons.empty else df_latest_draft
-                        for idx, w_dates in enumerate(weeks[:4]):
-                            with preview_tabs[idx]:
-                                html_code = generate_weekly_matrix_html(df_combined[df_combined["日付"].isin(w_dates)], w_dates, days_of_week_map, teacher_branch_map, all_branch_teachers=list(teacher_branch_map.keys()), is_summer_mode=is_summer, is_print_mode=False)
-                                st.markdown(html_code, unsafe_allow_html=True)
-
-                    st.write("")
-                    if st.button("💾 この予定表をすべて確定してスプレッドシートに保存", type="primary", key=f"save_btn_{is_summer}", use_container_width=True):
-                        with st.spinner("スプレッドシートへ授業データを保存中..."):
-                            df_to_save = pd.DataFrame(st.session_state[f"new_lessons_{is_summer}"])
-                            if not df_to_save.empty:
-                                success = robust_api_call(lambda: save_lesson_schedule(df_to_save), fallback_value=False)
-                                if success:
-                                    st.success("✅ 授業予定表をすべて確定保存しました！")
-                                    st.cache_data.clear() 
-                                    del st.session_state[f"new_lessons_{is_summer}"]
-                                    time.sleep(1.5)
-                                    st.rerun()
-                                else: st.error("❌ 保存に失敗しました。")
-
-            # -------------------------------------------------------------
-            # 📋 確定済みの予定表を確認する
-            # -------------------------------------------------------------
-            with tab_view:
-                c_title, c_print = st.columns([0.8, 0.2])
-                c_title.subheader("📋 確定済みの授業予定表")
-                
-                with c_print:
-                    components.html(f"""
-                        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-                        <button onclick="downloadPDF()" id="pdfBtn" style="padding: 8px 15px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; font-family: sans-serif; font-size: 14px; box-sizing: border-box;">
-                            📄 PDFをダウンロード
-                        </button>
-                        <script>
-                        function downloadPDF() {{
-                            const btn = document.getElementById('pdfBtn');
-                            btn.innerText = '⏳ PDF変換中...';
-                            setTimeout(() => {{
-                                const parentDoc = window.parent.document;
-                                const elements = parentDoc.querySelectorAll('.print-container-{is_summer}');
-                                if(elements.length === 0) {{
-                                    alert('予定表が見つかりません。');
-                                    btn.innerText = '📄 PDFをダウンロード';
-                                    return;
-                                }}
-                                const wrapper = document.createElement('div');
-                                const style = document.createElement('style');
-                                style.innerHTML = `
-                                    .print-optimized-table {{ table-layout: fixed; width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 11px; }}
-                                    .print-optimized-table th, .print-optimized-table td {{ border: 1px solid #000; padding: 4px; text-align: center; }}
-                                    .col-teacher-name {{ width: 90px; }}
-                                    .col-slot-width {{ width: 60px; }}
-                                    .header-col {{ background-color: #f7f9fa; font-weight: bold; }}
-                                    .date-header {{ background-color: #f7f9fa; font-weight: bold; font-size: 13px; }}
-                                    .slot-header {{ background-color: #fcfcfc; font-size: 11px; font-weight: bold; color: #555; }}
-                                    .name-col {{ font-weight: bold; background-color: #fafafa; font-size: 12px; text-align: left; padding-left: 5px; }}
-                                    .branch-badge {{ font-size: 9px; color: #777; background-color:#eee; padding:1px 2px; border-radius:2px; }}
-                                    .student-badge {{ font-size: 10px; font-weight: bold; padding: 3px; margin: 1px 0; border-radius: 2px; border: 1px solid rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-                                    .print-container-{is_summer} {{ margin-bottom: 20px; page-break-after: always; display: block !important; }}
-                                `;
-                                wrapper.appendChild(style);
-                                elements.forEach(el => {{
-                                    const clone = el.cloneNode(true);
-                                    clone.style.display = 'block';
-                                    wrapper.appendChild(clone);
-                                }});
-                                const opt = {{
-                                    margin:       0.2,
-                                    filename:     '{"夏期講習_" if is_summer else "通常_"}授業予定表.pdf',
-                                    image:        {{ type: 'jpeg', quality: 0.98 }},
-                                    html2canvas:  {{ scale: 2, useCORS: true }},
-                                    jsPDF:        {{ unit: 'in', format: 'a4', orientation: 'landscape' }}
-                                }};
-                                html2pdf().set(opt).from(wrapper).save().then(() => {{
-                                    btn.innerText = '📄 PDFをダウンロード';
-                                }}).catch(() => {{
-                                    btn.innerText = '📄 PDFをダウンロード';
-                                }});
-                            }}, 100);
-                        }}
-                        </script>
-                    """, height=60)
-                
-                st.caption(f"登録されている **{start_date.strftime('%Y/%m/%d')} 〜 {end_date.strftime('%m/%d')}** のスケジュールです。")
-                
-                if not df_lessons.empty:
-                    date_col = "日付" if "日付" in df_lessons.columns else "日時" if "日時" in df_lessons.columns else None
-                    if date_col:
-                        df_lessons_ready = df_lessons.rename(columns={date_col: "日付"})
-                        df_scope_lessons = df_lessons_ready[df_lessons_ready["日付"].isin(dates_in_scope)]
-                        
-                        view_weeks = [dates_in_scope[i:i+7] for i in range(0, len(dates_in_scope), 7)]
-                        view_tab_labels = [f"📅 {w[0].split('/', 1)[1]} 〜 ({idx+1}週目)" for idx, w in enumerate(view_weeks[:4])]
-                        
-                        if view_tab_labels:
-                            view_tabs = st.tabs(view_tab_labels)
-                            for idx, w_dates in enumerate(view_weeks[:4]):
-                                with view_tabs[idx]:
-                                    df_view_week_data = df_scope_lessons[df_scope_lessons["日付"].isin(w_dates)] if not df_scope_lessons.empty else pd.DataFrame()
                                     
-                                    if not df_view_week_data.empty:
-                                        df_view_week_data = df_view_week_data.copy()
-                                        df_view_week_data["校舎"] = df_view_week_data["生徒名"].apply(
-                                            lambda x: student_branch_map.get(str(x).replace(" ", "").strip(), "不明")
-                                        )
-                                        df_tabata = df_view_week_data[df_view_week_data["校舎"] == "田端"]
-                                        df_higashijujo = df_view_week_data[df_view_week_data["校舎"] == "東十条"]
-                                    else:
-                                        df_tabata = pd.DataFrame()
-                                        df_higashijujo = pd.DataFrame()
-                                        
-                                    st.markdown("### 🏫 田端校舎")
-                                    html_scroll = generate_weekly_matrix_html(df_tabata, w_dates, days_of_week_map, teacher_branch_map, all_branch_teachers=tabata_teachers, is_summer_mode=is_summer, is_print_mode=False)
-                                    html_print = generate_weekly_matrix_html(df_tabata, w_dates, days_of_week_map, teacher_branch_map, all_branch_teachers=tabata_teachers, is_summer_mode=is_summer, is_print_mode=True)
-                                    html_print = html_print.replace("print-container", f"print-container-{is_summer}")
-                                    st.markdown(html_scroll + html_print, unsafe_allow_html=True)
-                                        
-                                    st.write("") 
-                                    
-                                    st.markdown("### 🏫 東十条校舎")
-                                    html_scroll2 = generate_weekly_matrix_html(df_higashijujo, w_dates, days_of_week_map, teacher_branch_map, all_branch_teachers=higashijujo_teachers, is_summer_mode=is_summer, is_print_mode=False)
-                                    html_print2 = generate_weekly_matrix_html(df_higashijujo, w_dates, days_of_week_map, teacher_branch_map, all_branch_teachers=higashijujo_teachers, is_summer_mode=is_summer, is_print_mode=True)
-                                    html_print2 = html_print2.replace("print-container", f"print-container-{is_summer}")
-                                    st.markdown(html_scroll2 + html_print2, unsafe_allow_html=True)
-                        else:
-                            st.info("ℹ️ 指定された期間内に確定登録された授業はまだありません。")
+                    # ===============================================
+                    # 🗑️ 【削除完了】Python側で出力していたプレビュー表は不要になったため削除しました
+                    # ===============================================
