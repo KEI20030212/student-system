@@ -17,7 +17,7 @@
 
         #board-container { overflow-x: auto; max-width: 100%; padding-bottom: 10px; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         
-        /* 🌟 Python側と同じ「完全固定」のテーブルレイアウト */
+        /* 🌟 完全固定のテーブルレイアウト */
         table { 
             table-layout: fixed; 
             border-collapse: separate; 
@@ -55,7 +55,7 @@
         .date-header { background-color: #f1f5f9; font-weight: bold; font-size: 12px; border-bottom: 1px solid #cbd5e1; }
         .slot-header { background-color: #f8fafc; font-size: 11px; font-weight: bold; color: #64748b; border-bottom: 2px solid #cbd5e1 !important; }
         
-        /* 🌟 ドロップ先セルもPython側と同じ高さに強制固定 */
+        /* ドロップ先セル */
         .drop-zone { 
             height: 40px !important; 
             max-height: 40px !important; 
@@ -67,17 +67,23 @@
         }
         .drop-zone.drag-over { background-color: #e2e8f0; border: 2px dashed #3b82f6; }
         
-        /* 🌟 生徒バッジの見た目統一＆文字溢れ対策（三点リーダー） */
+        /* 🌟 生徒バッジ（配色はJSから動的に付与） */
         .student-badge {
-            background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;
             padding: 3px 4px; margin-bottom: 2px; border-radius: 4px;
             font-weight: bold; cursor: grab; display: block;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
             font-size: 11px;
+            border: 1px solid rgba(0,0,0,0.05);
         }
         .student-badge:active { cursor: grabbing; opacity: 0.8; }
-        .student-badge.locked { background-color: #f1f5f9; color: #64748b; border-color: #cbd5e1; cursor: not-allowed; opacity: 0.9; }
+        
+        /* 🌟 動かせない授業（確定済み）: 色は維持しつつ半透明＆点線ボーダーでロック感を出す */
+        .student-badge.locked { 
+            cursor: not-allowed; 
+            opacity: 0.55; 
+            border: 1px dashed #64748b !important; 
+        }
 
     </style>
 </head>
@@ -104,11 +110,19 @@
 
         let lessonsData = []; 
 
+        // 🌟 JS版：科目ごとのカラーマップ定義
+        const colorMap = {
+            "国語": "background-color: #C5A059; color: white;",
+            "数学": "background-color: #B3E5FC; color: #1A237E;",
+            "英語": "background-color: #F8BBD0; color: #880E4F;",
+            "理科": "background-color: #C8E6C9; color: #1B5E20;",
+            "社会": "background-color: #FFF9C4; color: #F57F17;"
+        };
+
         function renderBoard(data) {
             lessonsData = data.lessons;
             const container = document.getElementById("board-container");
             
-            // 🌟 colgroupで列幅を完全に固定化
             let html = `<table><colgroup><col class="col-teacher">`;
             data.dates.forEach(() => {
                 data.slots.forEach(() => { html += `<col class="col-slot">`; });
@@ -129,18 +143,22 @@
                     data.slots.forEach(slot => {
                         html += `<td class="drop-zone" data-teacher="${teacher}" data-date="${date}" data-slot="${slot}">`;
                         const matchingLessons = lessonsData.filter(l => l.講師名 === teacher && l.日付 === date && l.コマ名 === slot);
+                        
                         matchingLessons.forEach(lesson => {
-                            // 表示名を生成（Python側と同様）
+                            // 表示名を生成
                             let dispName = lesson.生徒名;
                             const parts = lesson.生徒名.trim().split(/\s+/);
                             if(parts.length > 1) dispName = `${parts[0]}(${parts[1][0]})`;
 
+                            // 🌟 科目に応じて色を割り当て（未定義科目はグレー）
+                            let badgeStyle = colorMap[lesson.科目] || "background-color: #e0e0e0; color: #333;";
+
                             if (lesson.is_new) {
-                                html += `<div class="student-badge" draggable="true" data-id="${lesson.授業ID}" title="${lesson.生徒名} (${lesson.科目})">
+                                html += `<div class="student-badge" style="${badgeStyle}" draggable="true" data-id="${lesson.授業ID}" title="${lesson.生徒名} (${lesson.科目})">
                                             ${dispName}
                                          </div>`;
                             } else {
-                                html += `<div class="student-badge locked" draggable="false" title="[確定済] ${lesson.生徒名} (${lesson.科目})">
+                                html += `<div class="student-badge locked" style="${badgeStyle}" draggable="false" title="[確定済] ${lesson.生徒名} (${lesson.科目})">
                                             ${dispName}
                                          </div>`;
                             }
