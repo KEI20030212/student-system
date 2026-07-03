@@ -546,16 +546,18 @@ def render_matching_page():
                         "lessons": draft_lessons
                     }
 
-                    # ✨ カスタムコンポーネントの呼び出し（JSと通信開始）
+                    # ✨ カスタムコンポーネントの呼び出し
                     updated_lessons = draggable_board_component(
                         data=component_data, 
                         key=f"drag_drop_{is_summer}"
                     )
 
-                    # JS側でドロップが発生し、新しいデータが返ってきたらセッションを上書きして再描画
+                    # JS側でドロップが発生し、新しいデータが返ってきた時だけ処理する
                     if updated_lessons is not None:
-                        st.session_state[f"new_lessons_{is_summer}"] = updated_lessons
-                        st.rerun()
+                        # 🚨 無限ループ防止：セッションのデータと内容が「違う」場合のみ更新＆再起動
+                        if updated_lessons != st.session_state[f"new_lessons_{is_summer}"]:
+                            st.session_state[f"new_lessons_{is_summer}"] = updated_lessons
+                            st.rerun()
 
                     # 📋 リアルタイムプレビュー
                     st.markdown("#### 📊 修正連動型・時間割表プレビュー")
