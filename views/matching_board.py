@@ -3,6 +3,8 @@ import streamlit.components.v1 as components
 import pandas as pd
 import datetime
 import time
+import os # 👈 追加
+import json # 👈 追加
 
 from utils.api_guard import robust_api_call
 from utils.g_sheets import (
@@ -14,6 +16,13 @@ from utils.g_sheets import (
     load_teacher_master,
     load_nominated_teacher_master,
     load_compatibility_ng_master   
+)
+
+# 作成したHTMLフォルダへのパスを指定してコンポーネントを宣言
+_COMPONENT_PATH = os.path.join(os.path.dirname(__file__), "..", "components", "drag_drop_board")
+draggable_board_component = components.declare_component(
+    "draggable_board",
+    path=_COMPONENT_PATH
 )
 
 def get_slots_for_date(date_str, is_summer_mode):
@@ -516,46 +525,31 @@ def render_matching_page():
                         else:
                             st.warning("⚠️ 新しく割り当てられる契約コマが見つかりませんでした。")
 
-                # 🛠️ 最強の手動修正UI セクション
+                # 🛠️ 最強のドラッグ＆ドロップ調整UI セクション
                 if f"new_lessons_{is_summer}" in st.session_state:
                     st.write("---")
-                    st.markdown("### 🛠️ 【最強】アサイン手動微調整パネル")
-                    st.caption("自動生成された下書きデータです。講師名や科目をプルダウンで直接変更可能！変更は下の時間割表へリアルタイムに連動します。")
+                    st.markdown("### 🖱️ 【最強】ドラッグ＆ドロップ手動調整パネル")
+                    st.caption("生徒のパネルをマウスで掴んで、別の先生の枠へ直接移動できます！")
                     
-                    df_current_draft = pd.DataFrame(st.session_state[f"new_lessons_{is_summer}"])
+                    # コンポーネントに渡すためのデータを準備
+                    draft_lessons = st.session_state[f"new_lessons_{is_summer}"]
                     
-                    # データエディタの強力な設定
-                    edited_df = st.data_editor(
-                        df_current_draft,
-                        column_config={
-                            "授業ID": None, # IDは非表示
-                            "日付": st.column_config.TextColumn("📅 日付", disabled=True),
-                            "コマ名": st.column_config.TextColumn("⏰ コマ名", disabled=True),
-                            "生徒名": st.column_config.TextColumn("👤 生徒名", disabled=True),
-                            "講師名": st.column_config.SelectboxColumn("👨‍🏫 担当講師", options=teacher_list, required=True),
-                            "科目": st.column_config.SelectboxColumn("💯 科目", options=["英語", "数学", "国語", "理科", "社会"], required=True),
-                            "指導形態": st.column_config.TextColumn("🏫 形態", disabled=True)
-                        },
-                        use_container_width=True,
-                        hide_index=True,
-                        key=f"editor_{is_summer}"
+                    component_data = {
+                        "dates": dates_in_scope[:7], # 画面に収めるため最初の1週間分を渡す例
+                        "slots": get_slots_for_date(dates_in_scope[0], is_summer),
+                        "teachers": all_target_teachers, # 画面上部で作成した講師リスト
+                        "lessons": draft_lessons
+                    }
+
+                    # ✨ カスタムコンポーネントの呼び出し（JSと通信開始）
+                    updated_lessons = draggable_board_component(
+                        data=component_data, 
+                        key=f"drag_drop_{is_summer}"
                     )
-                    
-                    # エディタで変更があった場合、指導形態(1:N)を再計算してセッション状態をリアルタイム更新
-                    if not edited_df.equals(df_current_draft):
-                        # 各コマ・講師ごとの生徒数を集計し直す
-                        recalc_map = {}
-                        for _, row in edited_df.iterrows():
-                            k = (row["日付"], row["コマ名"], row["講師名"])
-                            recalc_map[k] = recalc_map.get(k, 0) + 1
-                        
-                        updated_list = []
-                        for _, row in edited_df.iterrows():
-                            k = (row["日付"], row["コマ名"], row["講師名"])
-                            row["指導形態"] = f"1:{recalc_map[k]}"
-                            updated_list.append(row.to_dict())
-                            
-                        st.session_state[f"new_lessons_{is_summer}"] = updated_list
+
+                    # JS側でドロップが発生し、新しいデータが返ってきたらセッションを上書きして再描画
+                    if updated_lessons is not None:
+                        st.session_state[f"new_lessons_{is_summer}"] = updated_lessons
                         st.rerun()
 
                     # 📋 リアルタイムプレビュー
