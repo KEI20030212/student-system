@@ -18,8 +18,13 @@ from utils.g_sheets import (
     load_compatibility_ng_master   
 )
 
-# 絶対パス（os.path.abspath）で迷子を防ぐ！
 _COMPONENT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "components", "drag_drop_board"))
+
+# 🚨 デバッグ用：Streamlit Cloud上でファイルがどう見えているか強制出力
+st.warning(f"🔍 探しているフォルダのパス: {_COMPONENT_PATH}")
+st.warning(f"📂 フォルダは存在するか？: {os.path.exists(_COMPONENT_PATH)}")
+st.warning(f"📄 index.html は存在するか？: {os.path.exists(os.path.join(_COMPONENT_PATH, 'index.html'))}")
+
 draggable_board_component = components.declare_component(
     "draggable_board",
     path=_COMPONENT_PATH
