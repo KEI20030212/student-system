@@ -2,8 +2,6 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <!-- Streamlitとの通信用ライブラリ -->
-    <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 0; background-color: white; }
         table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 11px; }
@@ -30,9 +28,43 @@
     <div id="board-container"></div>
 
     <script>
-        let lessonsData = []; // Pythonから受け取る授業データ
+        // =========================================================
+        // 1. Streamlitと直接通信するおまじない（CDN不要の完全ネイティブ方式）
+        // =========================================================
+        function sendMessageToStreamlit(type, data) {
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: type,
+                ...data
+            }, "*");
+        }
 
-        // 🎨 1. 時間割表をHTMLとして描画する関数
+        function setComponentValue(value) {
+            sendMessageToStreamlit("streamlit:setComponentValue", {value: value});
+        }
+
+        function setFrameHeight() {
+            sendMessageToStreamlit("streamlit:setFrameHeight", {height: document.body.scrollHeight});
+        }
+
+        // Python(Streamlit)からデータを受け取る
+        window.addEventListener("message", function(event) {
+            if (event.data.type === "streamlit:render") {
+                const data = event.data.args.data;
+                renderBoard(data);
+            }
+        });
+
+        // 「準備完了！」の合図をPython(Streamlit)に送る
+        window.addEventListener("load", function() {
+            sendMessageToStreamlit("streamlit:componentReady", {apiVersion: 1});
+        });
+
+        // =========================================================
+        // 2. 時間割の描画とドラッグ＆ドロップ処理
+        // =========================================================
+        let lessonsData = []; 
+
         function renderBoard(data) {
             lessonsData = data.lessons;
             const container = document.getElementById("board-container");
@@ -53,13 +85,10 @@
                 html += `<tr><td class="col-teacher">${teacher}</td>`;
                 data.dates.forEach(date => {
                     data.slots.forEach(slot => {
-                        // 🎯 ここがドロップゾーン（受け皿）
                         html += `<td class="drop-zone" data-teacher="${teacher}" data-date="${date}" data-slot="${slot}">`;
                         
-                        // この枠に該当する授業を探してバッジを配置
                         const matchingLessons = lessonsData.filter(l => l.講師名 === teacher && l.日付 === date && l.コマ名 === slot);
                         matchingLessons.forEach(lesson => {
-                            // 👤 ここがドラッグできる要素
                             html += `<div class="student-badge" draggable="true" data-id="${lesson.授業ID}">
                                         ${lesson.生徒名} (${lesson.科目})
                                      </div>`;
@@ -71,10 +100,11 @@
             });
             html += `</table>`;
             container.innerHTML = html;
+            
             attachDragAndDropEvents();
+            setFrameHeight(); // 描画後に高さを再計算して見切れを防ぐ
         }
 
-        // 🚀 2. ドラッグ＆ドロップの動きを制御する関数
         function attachDragAndDropEvents() {
             const badges = document.querySelectorAll('.student-badge');
             const dropZones = document.querySelectorAll('.drop-zone');
@@ -91,7 +121,7 @@
 
             dropZones.forEach(zone => {
                 zone.addEventListener('dragover', (e) => {
-                    e.preventDefault(); // ドロップを許可
+                    e.preventDefault(); 
                     zone.classList.add('drag-over');
                 });
                 zone.addEventListener('dragleave', () => {
@@ -113,22 +143,12 @@
                         targetLesson.日付 = newDate;
                         targetLesson.コマ名 = newSlot;
                         
-                        // ✨ Python (Streamlit) 側に変更された最新データを送り返す！
-                        Streamlit.setComponentValue(lessonsData);
+                        // ✨ 変更された最新データをPythonへ送り返す！
+                        setComponentValue(lessonsData);
                     }
                 });
             });
         }
-
-        // 🔗 3. Streamlitからデータを受け取った時の処理
-        function onRender(event) {
-            const data = event.detail.args.data; // Pythonから渡されたデータ
-            renderBoard(data);
-            Streamlit.setFrameHeight(document.documentElement.scrollHeight);
-        }
-
-        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
-        Streamlit.setComponentReady();
     </script>
 </body>
 </html>
