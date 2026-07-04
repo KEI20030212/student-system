@@ -239,6 +239,21 @@ def mark_messages_as_read(receiver_id):
     except Exception as e:
         print(f"既読処理に失敗しました: {e}")
 
+@st.cache_data(ttl=600, show_spinner=False)
+def load_transfer_requests():
+    """Googleフォームからの振替申請データ（別スプレッドシート）を取得する"""
+    try:
+        import gspread
+        gc = get_gc_client()
+        TRANSFER_SHEET_ID = "1j93KTSKjywAQoslEPt-osRMzOMSiheb8GrT77gLgPko"
+        sh = gc.open_by_key(TRANSFER_SHEET_ID)
+        ws = sh.worksheet("フォームの回答 1")
+        records = ws.get_all_records()
+        return pd.DataFrame(records)
+    except Exception as e:
+        print(f"振替申請データ取得エラー: {e}")
+        return pd.DataFrame()
+
 #attendance_seat.py
 @st.cache_data(ttl=60)
 def load_seating_data():
