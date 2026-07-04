@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import datetime
-import re # 🌟 追加：文字の抽出に使うため追加
+import re 
 
 from utils.g_sheets import (
     load_board_message,
@@ -32,37 +32,40 @@ def render_home_page():
     user_role = st.session_state.get('role', '')
 
     # ==========================================
-    # 🌟 管理者専用：自動検知アラートエリア
+    # 🌟 1. オーナー・管理者専用：振替申請アラート
     # ==========================================
-    if user_role in ['admin', 'owner', 'head_teacher', 'am']:
+    if user_role in ['admin', 'owner']:
         
-        # 🛎️ 1. 新機能：振替申請アラート
+        # 🌟 最新取得と通信節約を両立する専用ボタン
+        col_t1, col_t2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
+        with col_t1:
+            st.subheader("🛎️ 振替申請アラート")
+        with col_t2:
+            if st.button("🔄 最新を確認", key="btn_update_transfers", use_container_width=True):
+                # 🌟 振替申請のキャッシュだけをピンポイントで破壊し、1回だけ最新を取りに行く
+                load_transfer_requests.clear()
+                st.rerun()
+
         df_transfers = safe_load_transfer_requests()
         if not df_transfers.empty:
-            # 🌟 【重要な修正1】Googleフォーム特有の「見えない空白」や「改行」を除去
             df_transfers.columns = df_transfers.columns.str.strip().str.replace('\n', '')
-            
-            # 🌟 【重要な修正2】'nan' という文字が表示されないように、空のセルを空文字に置き換え
             df_transfers = df_transfers.fillna("")
             
             if 'タイムスタンプ' in df_transfers.columns:
-                # タイムスタンプ列は日付計算のために一度日付型に直す（別列として扱う）
                 df_transfers['タイムスタンプ_dt'] = pd.to_datetime(df_transfers['タイムスタンプ'], format='mixed', errors='coerce')
                 
                 seven_days_ago = pd.Timestamp.now() - pd.Timedelta(days=7)
                 recent_transfers = df_transfers[df_transfers['タイムスタンプ_dt'] >= seven_days_ago].sort_values('タイムスタンプ_dt', ascending=False)
                 
                 if not recent_transfers.empty:
-                    st.warning(f"🔔 **【新着のお振替申請】** 直近7日以内に **{len(recent_transfers)}件** の申請が届いています！")
+                    st.warning(f"🔔 直近7日以内に **{len(recent_transfers)}件** の申請が届いています！")
                     
                     for _, row in recent_transfers.iterrows():
-                        # 日付フォーマット
                         dt_val = row['タイムスタンプ_dt']
                         ts = dt_val.strftime('%m/%d %H:%M') if pd.notna(dt_val) else "不明"
                         
                         student = str(row.get('生徒氏名', '不明')).strip()
                         
-                        # 欠席予定日（綺麗に掃除してあるので一発で取得可能！）
                         absent_date_raw = str(row.get('欠席予定の授業日', '不明')).strip()
                         absent_date = absent_date_raw.split(' ')[0] if absent_date_raw else "不明"
                         absent_time = str(row.get('欠席予定の授業時間', '')).strip()
@@ -71,13 +74,11 @@ def render_home_page():
                             st.markdown(f"**■ 欠席予定:** {absent_date} {absent_time}")
                             st.markdown(f"**■ 理由:** {row.get('お振替の理由', '')}")
                             
-                            # 🌟 【重要な修正3】「[月曜日]」などの曜日が含まれる列を自動検知して抽出
                             hope_days = []
                             for col in df_transfers.columns:
                                 if "曜日" in col and "[" in col and "]" in col:
                                     val = str(row.get(col, '')).strip()
-                                    if val: # 空欄でなければ追加
-                                        # "お振替希望日 [月曜日]" -> "月曜日" だけを綺麗に取り出す
+                                    if val: 
                                         day_match = re.search(r'\[(.*?)\]', col)
                                         day_name = day_match.group(1) if day_match else col
                                         hope_days.append(f"{day_name}: {val}")
@@ -88,8 +89,13 @@ def render_home_page():
                             st.markdown(f"**■ 希望時間:** {row.get('お振替希望授業時間', '')}")
                             st.markdown(f"**■ 備考:** {row.get('備考欄', '')}")
                             st.markdown(f"[🔗 スプレッドシートで全回答を確認する](https://docs.google.com/spreadsheets/d/1j93KTSKjywAQoslEPt-osRMzOMSiheb8GrT77gLgPko/edit)")
+                else:
+                    st.info("💡 直近7日以内の新しい振替申請はありません。")
 
-        # 🛎️ 2. 既存：URL抜け（小テスト未実施）の自動検知アラート
+    # ==========================================
+    # 🌟 2. 社員・管理者向け：小テストURL抜け検知アラート
+    # ==========================================
+    if user_role in ['admin', 'owner', 'head_teacher', 'am']:
         df_logs = safe_get_all_logs() 
         df_quizzes = safe_load_quiz_records() 
         today = datetime.date.today()
@@ -120,7 +126,7 @@ def render_home_page():
     st.divider()
     
     # ==========================================
-    # 🌟 掲示板エリア
+    # 🌟 3. 全講師向け：掲示板エリア
     # ==========================================
     st.subheader("📌 講師向け 連絡事項")
     
