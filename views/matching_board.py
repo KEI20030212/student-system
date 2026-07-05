@@ -531,7 +531,7 @@ def render_matching_page():
                                     st.error("❌ 保存に失敗しました。")
 
             # -------------------------------------------------------------
-            # 📋 確定済みの予定表を確認する（美しいPDF出力レイアウト）
+            # 📋 確定済みの予定表を確認する（PDF出力機能付き・極限レイアウト）
             # -------------------------------------------------------------
             with tab_view:
                 c_title, c_print = st.columns([0.8, 0.2])
@@ -557,28 +557,24 @@ def render_matching_page():
                                 }}
                                 const wrapper = document.createElement('div');
                                 const style = document.createElement('style');
-                                // 🌟 PDF印刷用の美しいレイアウトを復元
+                                // 🌟 PDF印刷用の極限圧縮CSS（縦幅を1枚に収めるため余白とフォントを最小化）
                                 style.innerHTML = `
                                     .print-page {{ 
                                         width: 100%; 
-                                        page-break-after: always;
-                                        padding-top: 10px;
+                                        page-break-after: always; /* 塊ごとに強制改ページ */
+                                        box-sizing: border-box;
+                                        padding-top: 5px;
                                     }}
-                                    .print-optimized-table {{ table-layout: fixed; width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 10px; }}
-                                    .print-optimized-table th, .print-optimized-table td {{ border: 1px solid #444; padding: 3px; text-align: center; }}
-                                    .col-teacher-name {{ width: 85px; }}
-                                    .col-slot-width {{ width: auto; }} 
-                                    .header-col {{ background-color: #f7f9fa; font-weight: bold; font-size: 11px; }}
-                                    .date-header {{ background-color: #f1f5f9; font-weight: bold; font-size: 12px; border-bottom: 1px solid #ccc; }}
-                                    .slot-header {{ background-color: #f8fafc; font-size: 10px; font-weight: bold; color: #555; }}
-                                    .name-col {{ font-weight: bold; background-color: #fafafa; font-size: 11px; text-align: left; padding-left: 6px; vertical-align: top; }}
-                                    .branch-badge {{ font-size: 8px; color: #64748b; background-color:#e2e8f0; padding: 2px 4px; border-radius: 4px; display: inline-block; margin-top: 3px; font-weight: normal; }}
-                                    .data-cell {{ vertical-align: top; background-color: #ffffff; padding: 3px !important; }}
-                                    .student-badge {{ 
-                                        padding: 3px; border-radius: 4px; margin-bottom: 2px; display: block; font-size: 10px; font-weight: bold; 
-                                        width: 100%; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
-                                        border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-                                    }}
+                                    .print-optimized-table {{ table-layout: fixed; width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 8px; line-height: 1.1; }}
+                                    .print-optimized-table th, .print-optimized-table td {{ border: 1px solid #000; padding: 1px; text-align: center; height: auto !important; max-height: none !important; }}
+                                    .col-teacher-name {{ width: 55px; }}
+                                    .col-slot-width {{ width: 45px; }}
+                                    .header-col {{ background-color: #f7f9fa; font-weight: bold; font-size: 9px; }}
+                                    .date-header {{ background-color: #f7f9fa; font-weight: bold; font-size: 11px; }}
+                                    .slot-header {{ background-color: #fcfcfc; font-size: 9px; font-weight: bold; color: #555; }}
+                                    .name-col {{ font-weight: bold; background-color: #fafafa; font-size: 10px; text-align: left; padding-left: 2px; }}
+                                    .branch-badge {{ font-size: 7px; color: #777; background-color:#eee; padding:0 2px; border-radius:2px; }}
+                                    .student-badge {{ font-size: 8px; font-weight: bold; padding: 1px; margin: 0; border: 1px solid rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
                                 `;
                                 wrapper.appendChild(style);
                                 elements.forEach(el => {{
@@ -587,7 +583,7 @@ def render_matching_page():
                                     wrapper.appendChild(clone);
                                 }});
                                 const opt = {{
-                                    margin:       0.2, 
+                                    margin:       0.1, /* マージンを最小限にして縦幅を稼ぐ */
                                     filename:     '{"夏期講習_" if is_summer else "通常_"}授業予定表.pdf',
                                     image:        {{ type: 'jpeg', quality: 0.98 }},
                                     html2canvas:  {{ scale: 2, useCORS: true }},
