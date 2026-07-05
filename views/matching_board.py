@@ -279,210 +279,28 @@ def render_matching_page():
             with tab_create:
                 btn_label = f"✨ 自動生成ロジックを実行する ({'夏期講習時間割' if is_summer else '通常時間割'})"
                 if st.button(btn_label, type="primary", key=f"gen_btn_{is_summer}", use_container_width=True):
-                    with st.spinner("アルゴリズムを実行中..."):
-                        t_shifts = df_teacher_shifts[df_teacher_shifts["日付"].isin(dates_in_scope)] if not df_teacher_shifts.empty else pd.DataFrame()
-                        s_shifts = df_student_shifts[df_student_shifts["日付"].isin(dates_in_scope)] if not df_student_shifts.empty else pd.DataFrame()
+                    with st.spinner("AI最適化アルゴリズムを実行中...（最大数十秒かかります）"):
                         
-                        contract_remains = {} 
-                        for _, row in df_contracts.iterrows():
-                            c_name = str(row.get("講習名", ""))
-                            is_summer_contract = "夏" in c_name
-                            if is_summer != is_summer_contract: continue
-                            s_name = row["生徒名"]
-                            subj = row["科目"]
-                            count = int(row["契約コマ数"])
-                            scheduled = len(df_lessons[(df_lessons["生徒名"] == s_name) & (df_lessons["科目"] == subj)]) if not df_lessons.empty and "生徒名" in df_lessons.columns else 0
-                            remains = count - scheduled
-                            if remains > 0:
-                                if s_name not in contract_remains: contract_remains[s_name] = {}
-                                contract_remains[s_name][subj] = remains
-
-                        teacher_skills = {}
-                        if not df_teacher_master.empty:
-                            for _, row in df_teacher_master.iterrows():
-                                t_name = row["講師名"]
-                                priority = int(row["優先度"]) if pd.notna(row.get("優先度")) else 5
-                                can_teach = [subj for subj in ["英語", "数学", "国語", "理科", "社会"] if str(row.get(subj, False)).upper() == "TRUE" or row.get(subj, False) is True]
-                                teacher_skills[t_name] = {"priority": priority, "subjects": can_teach}
-                        
-                        schedule = {d: {s: {} for s in get_slots_for_date(d, is_summer)} for d in dates_in_scope}
-                        busy_students = {d: {s: set() for s in get_slots_for_date(d, is_summer)} for d in dates_in_scope}
-                        teacher_slot_branches = {d: {} for d in dates_in_scope}
-                        student_daily_subjects = {d: {} for d in dates_in_scope} 
-                        teacher_slot_symbols = {d: {s: {} for s in get_slots_for_date(d, is_summer)} for d in dates_in_scope}
-                        
-                        if not t_shifts.empty:
-                            for _, row in t_shifts.iterrows():
-                                d = row["日付"]
-                                t_name = row.get("講師名")
-                                if not t_name or d not in schedule: continue
-                                for s in get_slots_for_date(d, is_summer):
-                                    val = row.get(s)
-                                    if val in ["◎", "〇", "△"]:
-                                        schedule[d][s][t_name] = []
-                                        teacher_slot_symbols[d][s][t_name] = val 
-                                        
-                        if not df_lessons.empty and "日付" in df_lessons.columns:
-                            for _, row in df_lessons.iterrows():
-                                d = row.get("日付")
-                                s = row.get("コマ名")
-                                t_name = row.get("講師名")
-                                s_name = row.get("生徒名")
-                                subj = row.get("科目", "")
-                                
-                                if d in dates_in_scope and d in schedule and s in schedule[d]:
-                                    if t_name not in schedule[d][s]: schedule[d][s][t_name] = []
-                                    schedule[d][s][t_name].append(f"{s_name}({subj[0] if subj else '済'})")
-                                    busy_students[d][s].add(s_name)
-                                    s_name_clean = str(s_name).replace(" ", "").strip()
-                                    existing_s_branch = student_branch_map.get(s_name_clean)
-                                    if existing_s_branch in ["田端", "東十条"]:
-                                        if t_name not in teacher_slot_branches[d]: teacher_slot_branches[d][t_name] = {}
-                                        teacher_slot_branches[d][t_name][s] = existing_s_branch
-                                    if subj:
-                                        if s_name not in student_daily_subjects[d]: student_daily_subjects[d][s_name] = {}
-                                        student_daily_subjects[d][s_name][s] = subj
-
-                        history_map = {}
-                        if not df_lessons.empty and "日付" in df_lessons.columns:
-                            df_lessons['DateObj'] = pd.to_datetime(df_lessons['日付'], errors='coerce')
-                            df_past = df_lessons[df_lessons['DateObj'].dt.date < start_date]
-                            for _, row in df_past.iterrows():
-                                d_obj = row['DateObj']
-                                if pd.isna(d_obj): continue
-                                weekday = d_obj.weekday()
-                                sn_c = str(row.get("生徒名", "")).replace(" ", "").strip()
-                                tn_c = str(row.get("講師名", "")).replace(" ", "").strip()
-                                slot = str(row.get("コマ名", ""))
-                                subj = str(row.get("科目", ""))
-                                if sn_c and tn_c and slot and subj:
-                                    if sn_c not in history_map: history_map[sn_c] = {}
-                                    if weekday not in history_map[sn_c]: history_map[sn_c][weekday] = {}
-                                    if slot not in history_map[sn_c][weekday]: history_map[sn_c][weekday][slot] = {}
-                                    if subj not in history_map[sn_c][weekday][slot]: history_map[sn_c][weekday][slot][subj] = {}
-                                    history_map[sn_c][weekday][slot][subj][tn_c] = history_map[sn_c][weekday][slot][subj].get(tn_c, 0) + 1
-
-                        new_lessons = []
-                        for d in dates_in_scope:
-                            current_weekday = datetime.datetime.strptime(d, "%Y/%m/%d").weekday() 
-                            day_slots = get_slots_for_date(d, is_summer)
-                            
-                            for s in day_slots:
-                                available_students = []
-                                if not s_shifts.empty:
-                                    day_s_shifts = s_shifts[s_shifts["日付"] == d]
-                                    for _, row in day_s_shifts.iterrows():
-                                        s_name = row["生徒名"]
-                                        if row.get(s) == "〇" and s_name in contract_remains and s_name not in busy_students[d][s]:
-                                            available_students.append(s_name)
-                                            
-                                unassigned_students = available_students.copy()
-                                for max_students in [2, 3]:
-                                    for s_name in unassigned_students[:]:
-                                        if s_name not in contract_remains: continue
-                                        s_name_clean = str(s_name).replace(" ", "").strip()
-                                        
-                                        valid_subject = None
-                                        s_idx = day_slots.index(s)
-                                        available_subjects = list(contract_remains[s_name].keys())
-                                        available_subjects.sort(key=lambda x: contract_remains[s_name][x], reverse=True)
-                                        
-                                        for subj in available_subjects:
-                                            if s_idx >= 2:
-                                                prev1, prev2 = day_slots[s_idx - 1], day_slots[s_idx - 2]
-                                                s_record = student_daily_subjects[d].get(s_name, {})
-                                                if s_record.get(prev1) == subj and s_record.get(prev2) == subj: continue 
-                                            valid_subject = subj
-                                            break
-                                        
-                                        if not valid_subject: continue 
-                                        target_subject = valid_subject
-                                        
-                                        past_fixed_teacher = None
-                                        if s_name_clean in history_map and current_weekday in history_map[s_name_clean] and s in history_map[s_name_clean][current_weekday] and target_subject in history_map[s_name_clean][current_weekday][s]:
-                                            teacher_counts = history_map[s_name_clean][current_weekday][s][target_subject]
-                                            if teacher_counts: past_fixed_teacher = max(teacher_counts, key=teacher_counts.get)
-                                        
-                                        available_teachers = schedule[d][s]
-                                        s_branch = student_branch_map.get(s_name_clean, "不明")
-                                        best_teacher, best_score = None, 9999
-                                        
-                                        for t_name, assigned_students in available_teachers.items():
-                                            if len(assigned_students) >= max_students: continue
-                                            t_name_clean = str(t_name).replace(" ", "").strip()
-                                            if t_name_clean in ng_map.get(s_name_clean, set()): continue
-                                                
-                                            t_branch = teacher_branch_map.get(t_name, "両校")
-                                            if s_branch in ["田端", "東十条"] and t_branch in ["田端", "東十条"] and t_branch != s_branch: continue 
-
-                                            branch_conflict = False
-                                            for assigned_s in assigned_students:
-                                                a_name = assigned_s.split('(')[0].replace(" ", "").strip()
-                                                a_branch = student_branch_map.get(a_name, "不明")
-                                                if s_branch in ["田端", "東十条"] and a_branch in ["田端", "東十条"] and s_branch != a_branch:
-                                                    branch_conflict = True
-                                                    break
-                                            if branch_conflict: continue 
-
-                                            if s_branch in ["田端", "東十条"]:
-                                                t_slots_dict = teacher_slot_branches[d].get(t_name, {})
-                                                am_slots, pm_slots = ["Aコマ", "Bコマ"], ["0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
-                                                conflict_rule = False
-                                                if s in am_slots:
-                                                    if any(t_slots_dict.get(am_s) and t_slots_dict.get(am_s) != s_branch for am_s in am_slots): conflict_rule = True
-                                                    if s == "Bコマ" and t_slots_dict.get("0コマ") and t_slots_dict.get("0コマ") != s_branch: conflict_rule = True
-                                                elif s in pm_slots:
-                                                    if any(t_slots_dict.get(pm_s) and t_slots_dict.get(pm_s) != s_branch for pm_s in pm_slots): conflict_rule = True
-                                                    if s == "0コマ" and t_slots_dict.get("Bコマ") and t_slots_dict.get("Bコマ") != s_branch: conflict_rule = True
-                                                if conflict_rule: continue 
-
-                                            skills = teacher_skills.get(t_name, {"priority": 5, "subjects": []})
-                                            if target_subject in skills["subjects"] if skills["subjects"] else True:
-                                                score = skills["priority"] * 10
-                                                slot_symbol = teacher_slot_symbols[d][s].get(t_name, "〇")
-                                                
-                                                if slot_symbol == "◎": score -= 200  
-                                                elif slot_symbol == "△": score += 500  
-                                                if t_name_clean in nomination_map.get(s_name_clean, set()): score -= 400  
-                                                if t_name_clean == past_fixed_teacher: score -= 300
-                                                
-                                                same_subj_count = sum(1 for a in assigned_students if f"({target_subject[0]})" in a)
-                                                mixed_subj_count = len(assigned_students) - same_subj_count
-                                                if mixed_subj_count > 0: score += 100 
-                                                if same_subj_count > 0: score -= 50  
-                                                score += len(assigned_students) * 5 
-                                                
-                                                if score < best_score: best_score, best_teacher = score, t_name
-                                                
-                                        if best_teacher:
-                                            schedule[d][s][best_teacher].append(f"{s_name}({target_subject[0]})")
-                                            busy_students[d][s].add(s_name)
-                                            if s_branch in ["田端", "東十条"]:
-                                                if best_teacher not in teacher_slot_branches[d]: teacher_slot_branches[d][best_teacher] = {}
-                                                teacher_slot_branches[d][best_teacher][s] = s_branch
-                                            if s_name not in student_daily_subjects[d]: student_daily_subjects[d][s_name] = {}
-                                            student_daily_subjects[d][s_name][s] = target_subject
-                                                
-                                            contract_remains[s_name][target_subject] -= 1
-                                            if contract_remains[s_name][target_subject] <= 0: del contract_remains[s_name][target_subject]
-                                            if not contract_remains[s_name]: del contract_remains[s_name]
-                                                
-                                            new_lessons.append({
-                                                "授業ID": f"SCH-{d.replace('/', '')}-{s}-{s_name}",
-                                                "日付": d, "コマ名": s, "講師名": best_teacher,
-                                                "生徒名": s_name, "科目": target_subject, "指導形態": ""
-                                            })
-                                            unassigned_students.remove(s_name)
-
-                        for lesson in new_lessons:
-                            d_val, s_val, t_val = lesson["日付"], lesson["コマ名"], lesson["講師名"]
-                            lesson["指導形態"] = f"1:{len(schedule[d_val][s_val][t_val])}"
+                        # 🌟 分離した最適化エンジンを呼び出す
+                        new_lessons = run_optimization_engine(
+                            dates_in_scope=dates_in_scope,
+                            is_summer=is_summer,
+                            df_contracts=df_contracts,
+                            df_teacher_shifts=df_teacher_shifts,
+                            df_student_shifts=df_student_shifts,
+                            df_lessons=df_lessons,
+                            df_teacher_master=df_teacher_master,
+                            student_branch_map=student_branch_map,
+                            teacher_branch_map=teacher_branch_map,
+                            nomination_map=nomination_map,
+                            ng_map=ng_map
+                        )
 
                         if new_lessons:
                             st.session_state[f"new_lessons_{is_summer}"] = new_lessons
                             st.success("🎉 自動コマ組みが完了しました！下の手動修正パネルで確認・確定してください。")
                         else:
-                            st.warning("⚠️ 新しく割り当てられる契約コマが見つかりませんでした。")
+                            st.warning("⚠️ 新しく割り当てられる契約コマが見つかりませんでした、または制約を満たす解が存在しません。")
 
                 if f"new_lessons_{is_summer}" in st.session_state:
                     st.write("---")
