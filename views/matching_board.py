@@ -69,11 +69,11 @@ def generate_weekly_matrix_html(df_source, dates_for_week, days_of_week_map, tea
         return last_name
 
     color_map = {
-        "国語": "background-color: #C5A059; color: white;",
-        "数学": "background-color: #B3E5FC; color: #1A237E;",
-        "英語": "background-color: #F8BBD0; color: #880E4F;",
-        "理科": "background-color: #C8E6C9; color: #1B5E20;",
-        "社会": "background-color: #FFF9C4; color: #F57F17;"
+        "国語": "background-color: #FDE68A; color: #92400E;", # 優しいイエロー
+        "数学": "background-color: #BAE6FD; color: #075985;", # 爽やかなブルー
+        "英語": "background-color: #FECDD3; color: #9F1239;", # 柔らかいピンク
+        "理科": "background-color: #BBF7D0; color: #166534;", # 落ち着いたグリーン
+        "社会": "background-color: #FED7AA; color: #9A3412;"  # 温かみのあるオレンジ
     }
     
     # 🌟 印刷時は横に長くなりすぎないよう、夏期は2日ごと、通常は3日ごとに表をぶつ切りにする
@@ -143,44 +143,64 @@ def generate_weekly_matrix_html(df_source, dates_for_week, days_of_week_map, tea
 
 
 def render_matching_page():
-    # 🎨 画面描画用CSS
+    # 🎨 画面描画用CSS (モダンSaaS風にアップデート)
     st.markdown("""
     <style>
-        .scroll-container { overflow-x: auto; max-width: 100%; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        /* コンテナ全体 */
+        .scroll-container { 
+            overflow-x: auto; max-width: 100%; 
+            border: 1px solid #e2e8f0; border-radius: 12px; 
+            margin-bottom: 24px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); 
+            background-color: #ffffff;
+        }
         .print-container { display: none; } 
         
+        /* テーブル基本設定 */
         .print-optimized-table { 
             table-layout: fixed; width: auto; border-collapse: separate; border-spacing: 0;
-            background-color: #ffffff; color: #333333; font-family: sans-serif; font-size: 12px; 
+            color: #334155; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; 
         }
-        .col-teacher-name { width: 110px; }
-        .col-slot-width { width: 75px; }
+        .col-teacher-name { width: 120px; }
+        .col-slot-width { width: 85px; }
         
+        /* セルの境界線とパディング */
         .print-optimized-table th, .print-optimized-table td { 
-            border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 6px 4px; text-align: center; box-sizing: border-box;
+            border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; 
+            padding: 8px 6px; text-align: center; box-sizing: border-box;
         }
         
-        .header-col { background-color: #f8fafc; font-weight: bold; border-bottom: 2px solid #cbd5e1 !important; }
-        .date-header { background-color: #f1f5f9; font-weight: bold; font-size: 12px; border-bottom: 1px solid #cbd5e1; }
-        .date-text { font-size: 11px; font-weight: normal; }
-        .slot-header { background-color: #f8fafc; font-size: 11px; font-weight: bold; color: #64748b; border-bottom: 2px solid #cbd5e1 !important; }
+        /* ヘッダー周り */
+        .header-col { background-color: #ffffff; font-weight: 600; border-bottom: 2px solid #e2e8f0 !important; color: #475569;}
+        .date-header { background-color: #f8fafc; font-weight: 600; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
+        .date-text { font-size: 12px; font-weight: 500; }
+        .slot-header { background-color: #f8fafc; font-size: 12px; font-weight: 600; color: #64748b; border-bottom: 2px solid #e2e8f0 !important; }
         
+        /* 講師名カラム (Sticky) */
         .name-col { 
-            font-weight: bold; background-color: #f8fafc; font-size: 12px; text-align: left; padding-left: 8px; 
-            border-bottom: 1px solid #e2e8f0; height: 40px !important; max-height: 40px !important;
-            overflow: hidden; white-space: nowrap; 
+            font-weight: 600; background-color: #ffffff; font-size: 13px; text-align: left; padding-left: 12px; 
+            border-bottom: 1px solid #f1f5f9; height: 48px !important; max-height: 48px !important;
+            overflow: hidden; white-space: nowrap; color: #334155;
         }
-        .branch-badge { font-size: 9px; color: #64748b; background-color:#e2e8f0; padding: 1px 4px; border-radius: 4px; display: inline-block; margin-top: 2px; }
+        .branch-badge { 
+            font-size: 10px; color: #64748b; background-color:#f1f5f9; 
+            padding: 2px 6px; border-radius: 6px; display: inline-block; margin-top: 4px; font-weight: normal;
+        }
         
-        .data-cell { vertical-align: top; background-color: #ffffff; padding: 3px !important; height: 40px !important; max-height: 40px !important; overflow: hidden; }
+        /* データセルとバッジ */
+        .data-cell { vertical-align: top; background-color: #ffffff; padding: 4px !important; height: 48px !important; max-height: 48px !important; }
         
         .student-badge { 
-            padding: 3px 4px; border-radius: 4px; margin-bottom: 2px; display: block; font-size: 11px; font-weight: bold; 
-            width: 100%; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help;
+            padding: 4px 6px; border-radius: 6px; margin-bottom: 4px; display: block; 
+            font-size: 12px; font-weight: 600; text-align: center;
+            width: 100%; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+            cursor: help; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid rgba(255,255,255,0.3);
         }
-        .scroll-container .sticky-col { position: sticky; left: 0; z-index: 2; border-right: 2px solid #cbd5e1 !important; }
+        
+        /* スクロール時の追従（Sticky）設定 */
+        .scroll-container .sticky-col { position: sticky; left: 0; z-index: 2; border-right: 2px solid #e2e8f0 !important; }
         .scroll-container .header-col { z-index: 3; }
-        .scroll-container .name-col { z-index: 1; box-shadow: 2px 0 5px rgba(0,0,0,0.04); }
+        .scroll-container .name-col { z-index: 1; box-shadow: 3px 0 6px rgba(0,0,0,0.02); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -376,24 +396,24 @@ def render_matching_page():
                                 }}
                                 const wrapper = document.createElement('div');
                                 const style = document.createElement('style');
-                                // 🌟 PDF印刷用の極限圧縮CSS（縦幅を1枚に収めるため余白とフォントを最小化）
+                                // 🌟 PDF印刷用の洗練されたCSS
                                 style.innerHTML = `
-                                    .print-page {{ 
+                                    .print-page { 
                                         width: 100%; 
-                                        page-break-after: always; /* 塊ごとに強制改ページ */
+                                        page-break-after: always; 
                                         box-sizing: border-box;
-                                        padding-top: 5px;
-                                    }}
-                                    .print-optimized-table {{ table-layout: fixed; width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 8px; line-height: 1.1; }}
-                                    .print-optimized-table th, .print-optimized-table td {{ border: 1px solid #000; padding: 1px; text-align: center; height: auto !important; max-height: none !important; }}
-                                    .col-teacher-name {{ width: 55px; }}
-                                    .col-slot-width {{ width: 45px; }}
-                                    .header-col {{ background-color: #f7f9fa; font-weight: bold; font-size: 9px; }}
-                                    .date-header {{ background-color: #f7f9fa; font-weight: bold; font-size: 11px; }}
-                                    .slot-header {{ background-color: #fcfcfc; font-size: 9px; font-weight: bold; color: #555; }}
-                                    .name-col {{ font-weight: bold; background-color: #fafafa; font-size: 10px; text-align: left; padding-left: 2px; }}
-                                    .branch-badge {{ font-size: 7px; color: #777; background-color:#eee; padding:0 2px; border-radius:2px; }}
-                                    .student-badge {{ font-size: 8px; font-weight: bold; padding: 1px; margin: 0; border: 1px solid rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+                                        padding: 10px 0;
+                                    }
+                                    .print-optimized-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10px; line-height: 1.2; color: #333; }
+                                    .print-optimized-table th, .print-optimized-table td { border: 1px solid #cbd5e1; padding: 4px 2px; text-align: center; height: auto !important; max-height: none !important; }
+                                    .col-teacher-name { width: 70px; }
+                                    .col-slot-width { width: 55px; }
+                                    .header-col { background-color: #f8fafc; font-weight: bold; font-size: 11px; }
+                                    .date-header { background-color: #f8fafc; font-weight: bold; font-size: 11px; border-bottom: 2px solid #cbd5e1 !important; }
+                                    .slot-header { background-color: #ffffff; font-size: 10px; font-weight: normal; color: #475569; }
+                                    .name-col { font-weight: bold; background-color: #f8fafc; font-size: 11px; text-align: left; padding-left: 4px; }
+                                    .branch-badge { font-size: 8px; color: #64748b; background-color:#e2e8f0; padding:1px 4px; border-radius:4px; display: block; margin-top: 2px; text-align: center; width: max-content; }
+                                    .student-badge { font-size: 10px; font-weight: bold; padding: 2px; margin: 1px 0; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                                 `;
                                 wrapper.appendChild(style);
                                 elements.forEach(el => {{
