@@ -132,8 +132,10 @@ def render_search_page():
             
             with st.container(border=True):
                 st.markdown("**🔍 授業記録の検索条件と表示設定**")
-                # 🌟 講師名を追加するため、列数を3から4に変更
+                
+                # 🌟 変更点1：講師名を追加するため、列数を3から4に変更
                 c1, c2, c3, c4 = st.columns(4)
+                
                 min_date = df_all['日時'].min().date() if not pd.isnull(df_all['日時'].min()) else datetime.date.today()
                 max_date = df_all['日時'].max().date() if not pd.isnull(df_all['日時'].max()) else datetime.date.today()
                 date_range = c1.date_input("📅 日付の範囲", [min_date, max_date], key="lesson_date_range")
@@ -149,10 +151,10 @@ def render_search_page():
                 students = ["すべて"] + student_options
                 selected_student_option = c3.selectbox("👤 生徒名", students, key="lesson_student")
 
-                # 🌟 講師名の選択肢をデータから動的に取得して設置
+                # 🌟 変更点2：講師名の選択肢をデータから動的に取得して設置
                 if '担当講師' in df_all.columns:
                     valid_teachers = [t for t in df_all['担当講師'].dropna().unique() if t and str(t).strip() not in ["None", "nan", ""]]
-                    teachers = ["すべて"] + valid_teachers
+                    teachers = ["すべて"] + sorted(valid_teachers)
                 else:
                     teachers = ["すべて"]
                 selected_teacher = c4.selectbox("👨‍🏫 担当講師", teachers, key="lesson_teacher")
@@ -180,8 +182,10 @@ def render_search_page():
             df_filtered = df_all.copy()
             if len(date_range) == 2: 
                 df_filtered = df_filtered[(df_filtered['日時'].dt.date >= date_range[0]) & (df_filtered['日時'].dt.date <= date_range[1])]
+            
             if selected_subject != "すべて": 
                 df_filtered = df_filtered[df_filtered['科目'] == selected_subject]
+            
             if selected_student_option != "すべて":
                 search_id = selected_student_option.split(" - ")[0]
                 search_name = selected_student_option.split(" - ")[1]
@@ -190,7 +194,7 @@ def render_search_page():
                 else:
                     df_filtered = df_filtered[df_filtered['生徒名'] == search_name]
             
-            # 🌟 講師名での絞り込み条件を追加
+            # 🌟 変更点3：講師名での絞り込み条件を追加
             if selected_teacher != "すべて":
                 df_filtered = df_filtered[df_filtered['担当講師'] == selected_teacher]
 
