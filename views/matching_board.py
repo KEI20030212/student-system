@@ -17,6 +17,7 @@ from utils.g_sheets import (
     load_nominated_teacher_master,
     load_compatibility_ng_master   
 )
+from utils.optimizer import run_optimization_engine
 
 # 🌟 JSコンポーネントの読み込み
 _COMPONENT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "components", "drag_drop_board"))
