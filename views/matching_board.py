@@ -396,24 +396,24 @@ def render_matching_page():
                                 }}
                                 const wrapper = document.createElement('div');
                                 const style = document.createElement('style');
-                                // 🌟 PDF印刷用の洗練されたCSS
+                                // 🌟 PDF印刷用の洗練されたCSS（波括弧を二重に修正）
                                 style.innerHTML = `
-                                    .print-page { 
+                                    .print-page {{ 
                                         width: 100%; 
                                         page-break-after: always; 
                                         box-sizing: border-box;
                                         padding: 10px 0;
-                                    }
-                                    .print-optimized-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10px; line-height: 1.2; color: #333; }
-                                    .print-optimized-table th, .print-optimized-table td { border: 1px solid #cbd5e1; padding: 4px 2px; text-align: center; height: auto !important; max-height: none !important; }
-                                    .col-teacher-name { width: 70px; }
-                                    .col-slot-width { width: 55px; }
-                                    .header-col { background-color: #f8fafc; font-weight: bold; font-size: 11px; }
-                                    .date-header { background-color: #f8fafc; font-weight: bold; font-size: 11px; border-bottom: 2px solid #cbd5e1 !important; }
-                                    .slot-header { background-color: #ffffff; font-size: 10px; font-weight: normal; color: #475569; }
-                                    .name-col { font-weight: bold; background-color: #f8fafc; font-size: 11px; text-align: left; padding-left: 4px; }
-                                    .branch-badge { font-size: 8px; color: #64748b; background-color:#e2e8f0; padding:1px 4px; border-radius:4px; display: block; margin-top: 2px; text-align: center; width: max-content; }
-                                    .student-badge { font-size: 10px; font-weight: bold; padding: 2px; margin: 1px 0; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                                    }}
+                                    .print-optimized-table {{ table-layout: fixed; width: 100%; border-collapse: collapse; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10px; line-height: 1.2; color: #333; }}
+                                    .print-optimized-table th, .print-optimized-table td {{ border: 1px solid #cbd5e1; padding: 4px 2px; text-align: center; height: auto !important; max-height: none !important; }}
+                                    .col-teacher-name {{ width: 70px; }}
+                                    .col-slot-width {{ width: 55px; }}
+                                    .header-col {{ background-color: #f8fafc; font-weight: bold; font-size: 11px; }}
+                                    .date-header {{ background-color: #f8fafc; font-weight: bold; font-size: 11px; border-bottom: 2px solid #cbd5e1 !important; }}
+                                    .slot-header {{ background-color: #ffffff; font-size: 10px; font-weight: normal; color: #475569; }}
+                                    .name-col {{ font-weight: bold; background-color: #f8fafc; font-size: 11px; text-align: left; padding-left: 4px; }}
+                                    .branch-badge {{ font-size: 8px; color: #64748b; background-color:#e2e8f0; padding:1px 4px; border-radius:4px; display: block; margin-top: 2px; text-align: center; width: max-content; }}
+                                    .student-badge {{ font-size: 10px; font-weight: bold; padding: 2px; margin: 1px 0; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
                                 `;
                                 wrapper.appendChild(style);
                                 elements.forEach(el => {{
