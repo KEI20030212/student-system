@@ -38,7 +38,7 @@ def render_home_page():
         
         # 🌟 ここで2校舎分のスプレッドシートIDを設定！
         TABATA_SHEET_ID = "1j93KTSKjywAQoslEPt-osRMzOMSiheb8GrT77gLgPko" 
-        HIGASHI_JUJO_SHEET_ID = "1lY7t4gmeFClaWuVOC1DUb-18d3rK81OU5P_F5DabJeQ" # 🚨忘れずに書き換えてください！
+        HIGASHI_JUJO_SHEET_ID = "1lY7t4gmeFClaWuVOC1DUb-18d3rK81OU5P_F5DabJeQ"
         
         col_t1, col_t2 = st.columns([0.8, 0.2], vertical_alignment="bottom")
         with col_t1:
@@ -99,20 +99,17 @@ def render_home_page():
             else:
                 st.info(f"💡 【{branch_name}】まだデータがありません。（またはシートが見つかりません）")
 
-        # 🌟 タブを作って、それぞれの校舎のデータを呼び出して表示
-        tab_tabata, tab_higashi = st.tabs(["🏫 田端新町校", "🏫 東十条駅前校"])
-        
-        with tab_tabata:
+        # 🌟 タブを廃止し、縦に並べて表示するように変更
+        with st.container(border=True):
+            st.markdown("#### 🏫 田端新町校")
             df_tabata = safe_load_transfer_requests(TABATA_SHEET_ID)
             render_transfer_alerts(df_tabata, "田端新町校", TABATA_SHEET_ID)
             
-        with tab_higashi:
-            # 東十条校のIDが書き換えられるまではエラーを防ぐための安全装置
-            if HIGASHI_JUJO_SHEET_ID != "ここに東十条校のスプレッドシートのIDを貼ってください":
-                df_higashi = safe_load_transfer_requests(HIGASHI_JUJO_SHEET_ID)
-                render_transfer_alerts(df_higashi, "東十条駅前校", HIGASHI_JUJO_SHEET_ID)
-            else:
-                st.warning("⚠️ コード内の `HIGASHI_JUJO_SHEET_ID` を正しいIDに書き換えてください。")
+            st.write("") # 少し余白をあける
+            
+            st.markdown("#### 🏫 東十条駅前校")
+            df_higashi = safe_load_transfer_requests(HIGASHI_JUJO_SHEET_ID)
+            render_transfer_alerts(df_higashi, "東十条駅前校", HIGASHI_JUJO_SHEET_ID)
 
     # ==========================================
     # 🌟 2. 社員・管理者向け：小テストURL抜け検知アラート
