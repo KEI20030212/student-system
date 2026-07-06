@@ -63,12 +63,16 @@ def run_optimization_engine(
     students = list(contract_remains.keys())
     teachers = df_teacher_master["講師名"].dropna().unique().tolist() if not df_teacher_master.empty else []
 
-    # ======== 🚨 【画面表示用デバッグ】ここを追加 ========
-    st.error("💡 デバッグ情報：AIは以下のデータを受け取っています！")
-    st.write(f"**① カレンダーで選択された日数:** {len(dates_in_scope)}日")
-    st.write(f"**② 認識した生徒:** {students}")
-    st.write(f"**③ 契約の残りコマ数:** {contract_remains}")
-    st.write(f"**④ 担当できる講師:** {teachers}")
+    # ======== 🚨 【画面表示用デバッグ（修正版）】ここを追加 ========
+    debug_msg = (
+        f"💡 【デバッグ情報】AIは以下のデータを受け取っています！\n\n"
+        f"① カレンダーで選択された日数: {len(dates_in_scope)}日\n"
+        f"② 認識した生徒: {students}\n"
+        f"③ 契約の残りコマ数: {contract_remains}\n"
+        f"④ 担当できる講師: {teachers}"
+    )
+    # 意図的にエラーを起こして、上のメッセージを画面に強制表示させます！
+    raise ValueError(debug_msg)
     # ====================================================
     # 🚨 【デバッグ用強制ストップ②】絞り込んだ結果、組むべきデータが残っているか？
     if len(students) == 0:
