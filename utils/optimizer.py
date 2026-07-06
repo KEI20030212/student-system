@@ -116,18 +116,18 @@ def run_optimization_engine(
                         for subj in contract_remains[st].keys():
                             model.Add(assign[(d, s, t, st, subj)] == 0)
 
-    # 🌟 ⑤ 【新規追加】週ごとの授業回数の平準化制約
+    # 🌟 ⑤ 【修正版】週ごとの授業回数の平準化（ソフト制約化）
     # 週が複数ある場合のみ適用
     if num_weeks > 1:
         for st in students:
             # 生徒の全科目の合計契約残数
             total_remains = sum(contract_remains[st].values())
             
-            # 週あたりの目標回数（下限と上限）
+            # 週あたりの理想的な回数（下限と上限）
             min_per_week = total_remains // num_weeks
             max_per_week = math.ceil(total_remains / num_weeks)
             
-            for week_dates in weeks:
+            for week_idx, week_dates in enumerate(weeks):
                 # この週のこの生徒の全授業数
                 lessons_in_week = sum(
                     assign[(d, s, t, st, subj)]
@@ -136,9 +136,24 @@ def run_optimization_engine(
                     for t in teachers
                     for subj in contract_remains[st].keys()
                 )
-                # 週に割り当てられる授業数を平準化（はみ出しを許さない）
-                model.Add(lessons_in_week >= min_per_week)
-                model.Add(lessons_in_week <= max_per_week)
+                
+                # --- ここからがソフト制約のロジック ---
+                # 理想の回数から「はみ出した数」を格納する変数を作成（最低0）
+                diff_max = model.NewIntVar(0, total_remains, f"diff_max_{st}_{week_idx}")
+                diff_min = model.NewIntVar(0, total_remains, f"diff_min_{st}_{week_idx}")
+                
+                # 上限を超えた分を diff_max に入れる
+                model.Add(diff_max >= lessons_in_week - max_per_week)
+                
+                # 下限を下回った分を diff_min に入れる
+                model.Add(diff_min >= min_per_week - lessons_in_week)
+                
+                # 目的関数（スコア）でペナルティを与える（1コマ偏るごとに減点）
+                # ※指名講師の加点(+40)とのバランスを見てペナルティの大きさを調整します
+                PENALTY_WEIGHT = -20 
+                
+                objective_terms.append(diff_max * PENALTY_WEIGHT)
+                objective_terms.append(diff_min * PENALTY_WEIGHT)
 
     # ※ここにシフト提出可否（〇、×）による変数制限も追加します。
     # （例: df_teacher_shiftsで '×' またはシフト未提出なら assign == 0 にする処理）
