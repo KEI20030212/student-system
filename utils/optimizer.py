@@ -79,6 +79,9 @@ def run_optimization_engine(
                     for subj in contract_remains[st].keys():
                         assign[(d, s, t, st, subj)] = model.NewBoolVar(f"x_{d}_{s}_{t}_{st}_{subj}")
 
+    # 🌟 修正ポイント：スコアを入れるリストを、制約を追加する「前」に作成する
+    objective_terms = []
+
     # -------------------------------------------------------------
     # 3. ハード制約の追加 (絶対に守るルール)
     # -------------------------------------------------------------
@@ -161,7 +164,8 @@ def run_optimization_engine(
     # -------------------------------------------------------------
     # 4. 目的関数の設定 (ソフト制約：スコアを最大化する)
     # -------------------------------------------------------------
-    objective_terms = []
+    # 🌟 ここにあった `objective_terms = []` は上に移動したため削除済みです
+    
     for d in dates_in_scope:
         for s in get_slots_for_date(d, is_summer):
             for t in teachers:
