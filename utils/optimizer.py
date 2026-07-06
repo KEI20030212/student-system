@@ -54,6 +54,14 @@ def run_optimization_engine(
     students = list(contract_remains.keys())
     teachers = df_teacher_master["講師名"].dropna().unique().tolist() if not df_teacher_master.empty else []
     
+    # ======== 🚨 デバッグ用コード（ここから） ========
+    print("========== 【デバッグ情報】 ==========")
+    print(f"① 抽出された生徒数: {len(students)}人")
+    print(f"② 契約残数の中身: {contract_remains}")
+    print(f"③ 抽出された講師数: {len(teachers)}人")
+    print("======================================")
+    # ======== 🚨 デバッグ用コード（ここまで） ========
+    
     # 🌟 日付を「週ごと」にグルーピング（平準化制約用）
     # datetimeのisocalendar().weekを利用して同じ週の日付をまとめる
     week_groups = {}
