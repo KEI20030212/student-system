@@ -27,22 +27,30 @@ def run_optimization_engine(
     nomination_map, 
     ng_map
 ):
+    # 🚨 【デバッグ用強制ストップ①】そもそも大元のデータが来ているか？
+    if df_contracts.empty:
+        raise ValueError("【原因判明！】契約データが1件も読み込まれていません！ファイルが空か、読み込みに失敗しています。")
+    if not dates_in_scope:
+        raise ValueError("【原因判明！】カレンダーの日付が指定されていません！")
+    if df_teacher_master.empty:
+        raise ValueError("【原因判明！】講師マスターデータが空です！")
+
     model = cp_model.CpModel()
     
     # -------------------------------------------------------------
     # 1. 必要なリスト・辞書の準備
     # -------------------------------------------------------------
-    # 契約残数の算出 (メイン側のロジックを踏襲)
     contract_remains = {}
     for _, row in df_contracts.iterrows():
         c_name = str(row.get("講習名", ""))
+        
+        # ⚠️ ここが怪しいポイント！is_summerと「夏」の判定
         if is_summer != ("夏" in c_name): continue
         
         s_name = str(row["生徒名"]).strip()
         subj = str(row["科目"]).strip()
         count = int(row["契約コマ数"])
         
-        # 既にdf_lessonsに入っている分の差し引きはここで行う想定
         scheduled = len(df_lessons[(df_lessons["生徒名"] == s_name) & (df_lessons["科目"] == subj)]) if not df_lessons.empty else 0
         remains = count - scheduled
         
@@ -53,15 +61,12 @@ def run_optimization_engine(
 
     students = list(contract_remains.keys())
     teachers = df_teacher_master["講師名"].dropna().unique().tolist() if not df_teacher_master.empty else []
-    
-    # ======== 🚨 デバッグ用コード（ここから） ========
-    print("========== 【デバッグ情報】 ==========")
-    print(f"① 抽出された生徒数: {len(students)}人")
-    print(f"② 契約残数の中身: {contract_remains}")
-    print(f"③ 抽出された講師数: {len(teachers)}人")
-    print("======================================")
-    # ======== 🚨 デバッグ用コード（ここまで） ========
-    
+
+    # 🚨 【デバッグ用強制ストップ②】絞り込んだ結果、組むべきデータが残っているか？
+    if len(students) == 0:
+        raise ValueError("【原因判明！】組むべき生徒のデータが0件です！\n考えられる原因:\n・講習名に『夏』が含まれていない（サマー講習など）\n・すでに全コマ組まれていて残数が0になっている")
+    if len(teachers) == 0:
+        raise ValueError("【原因判明！】対応できる講師が0人です！")
     # 🌟 日付を「週ごと」にグルーピング（平準化制約用）
     # datetimeのisocalendar().weekを利用して同じ週の日付をまとめる
     week_groups = {}
