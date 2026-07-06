@@ -1,7 +1,6 @@
 import pandas as pd
 import datetime
 import math
-import streamlit as st_ui  # 🌟 名前被りを避けるため st_ui に変更しました！
 from ortools.sat.python import cp_model
 
 def get_slots_for_date(date_str, is_summer_mode):
@@ -54,7 +53,7 @@ def run_optimization_engine(
     teachers = df_teacher_master["講師名"].dropna().unique().tolist() if not df_teacher_master.empty else []
 
     # -------------------------------------------------------------
-    # 2. 変数の定義（※ st を st_name に修正）
+    # 2. 変数の定義
     # -------------------------------------------------------------
     assign = {}
     for d in dates_in_scope:
@@ -76,7 +75,7 @@ def run_optimization_engine(
                     for d in dates_in_scope for s in get_slots_for_date(d, is_summer) for t in teachers) == count
             )
 
-    # ② 生徒の重複禁止（同じコマに2つの授業を受けられない）
+    # ② 生徒の重複禁止
     for d in dates_in_scope:
         slots = get_slots_for_date(d, is_summer)
         for s in slots:
@@ -102,50 +101,65 @@ def run_optimization_engine(
                             model.Add(assign[(d, s, t, st_name, subj)] == 0)
 
     # -------------------------------------------------------------
-    # 4. ソルバーの実行（制限時間を30秒に延長）
+    # 4. ソルバーの実行（制限時間を15秒に設定）
     # -------------------------------------------------------------
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 30.0 
-    
-    # 🌟 実行前に画面でお知らせ (st_ui に修正)
-    st_ui.info("🤖 AIがスケジュール計算を開始しました...最大30秒かかります。")
+    solver.parameters.max_time_in_seconds = 15.0 
     
     status = solver.Solve(model)
 
     # -------------------------------------------------------------
-    # 5. 結果のパースと画面への結果表示
+    # 5. 結果の判定と【強制エラーによる画面出力】
     # -------------------------------------------------------------
-    new_lessons = []
+    status_dict = {
+        cp_model.OPTIMAL: "OPTIMAL（最適な組み合わせが完成しました！）",
+        cp_model.FEASIBLE: "FEASIBLE（条件を満たす組み合わせが完成しました！）",
+        cp_model.INFEASIBLE: "INFEASIBLE（物理的に不可能な矛盾した条件があります！）",
+        cp_model.UNKNOWN: "UNKNOWN（組み合わせが複雑すぎて時間切れ、または解がありません）"
+    }
     
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        st_ui.success("✨ スケジュールの作成に成功しました！（AIが条件を満たす組み合わせを発見しました）")
+    status_text = status_dict.get(status, f"未知のステータス ({status})")
+    
+    # 計算された総コマ数をカウント
+    total_scheduled_units = 0
+    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
         for d in dates_in_scope:
-            slots = get_slots_for_date(d, is_summer)
-            for s in slots:
+            for s in get_slots_for_date(d, is_summer):
                 for t in teachers:
-                    assigned_students = []
                     for st_name in students:
                         for subj in contract_remains[st_name].keys():
                             if solver.Value(assign[(d, s, t, st_name, subj)]) == 1:
-                                assigned_students.append((st_name, subj))
-                    
-                    if assigned_students:
-                        guidance_mode = f"1:{len(assigned_students)}"
-                        for (st_name, subj) in assigned_students:
-                            new_lessons.append({
-                                "授業ID": f"SCH-{d.replace('/', '')}-{s}-{st_name}",
-                                "日付": d,
-                                "コマ名": s,
-                                "講師名": t,
-                                "生徒名": st_name,
-                                "科目": subj,
-                                "指導形態": guidance_mode
-                            })
-    elif status == cp_model.INFEASIBLE:
-        st_ui.error("🚨 【INFEASIBLE】物理的に不可能な条件が含まれています（例: 講師の枠より契約コマ数が多い等）")
-    elif status == cp_model.UNKNOWN:
-        st_ui.warning("⚠️ 【UNKNOWN】組み合わせが多すぎて、30秒以内に計算が終わりませんでした（タイムアウト）")
-    else:
-        st_ui.error(f"❌ 予期せぬエラーステータス: {status}")
+                                total_scheduled_units += 1
 
-    return new_lessons
+    # 総契約コマ数と最大キャパの計算
+    total_contracts = sum(sum(contract_remains[st_name].values()) for st_name in students)
+    total_slots_count = sum(len(get_slots_for_date(d, is_summer)) for d in dates_in_scope)
+    max_capacity = total_slots_count * len(teachers) * 3
+
+    # 画面に強制表示するためのエラー文
+    debug_result = (
+        f"📊 【AI計算結果のデバッグ情報】\n\n"
+        f"▼ AIの計算ステータス:\n"
+        f"  ⇒ {status_text}\n\n"
+        f"▼ 現在のデータ状況:\n"
+        f"  ・選択された総コマ枠数: {total_slots_count}枠 (35日分)\n"
+        f"  ・登録された講師の人数: {len(teachers)}人\n"
+        f"  ・生徒全員の総契約コマ数: {total_contracts}コマ\n"
+        f"  ・この講師数で配置できる最大キャパ (1:3計算): {max_capacity}コマ分\n\n"
+        f"▼ 原因の解説:\n"
+    )
+    
+    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+        debug_result += f"  🎉 AIはスケジュールを正常に組み立てられました！（合計 {total_scheduled_units} コマ）\n  アルゴリズムは正常です。このデバッグコードを外せば画面に結果が反映されます。"
+    elif status == cp_model.INFEASIBLE:
+        debug_result += (
+            f"  🚨 条件のどこかに「絶対に不可能な要求」が混ざっています。\n"
+            f"  【チェックポイント】\n"
+            f"  1. 1人の生徒の契約コマ数（例: 英語10コマ＋数学15コマ＋国語10コマ＝計35コマ）が、選択した日数（35日）と同じ、あるいはそれ以上になっていませんか？\n"
+            f"     （生徒は1日1コマしか受けられない制約があるため、35日で35コマ以上を消化しようとすると、他の予定や講師の都合で1日でもズレた瞬間に破綻します）\n"
+            f"  2. 特定の教科を教えられる講師が、NG講師リスト等によって0人になっていませんか？"
+        )
+    elif status == cp_model.UNKNOWN:
+        debug_result += f"  ⏳ 15秒の制限時間内に解が見つかりませんでした。制約が複雑すぎるか、解が存在しない可能性があります。"
+        
+    raise ValueError(debug_result)
