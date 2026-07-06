@@ -86,12 +86,12 @@ def run_optimization_engine(
     # 3. ハード制約の追加 (絶対に守るルール)
     # -------------------------------------------------------------
     
-    # ① 契約残数をぴったり満たす
+    # ① 契約残数を上限とする（※ == count から <= count に変更して緩和！）
     for st in students:
         for subj, count in contract_remains[st].items():
             model.Add(
                 sum(assign[(d, s, t, st, subj)] 
-                    for d in dates_in_scope for s in get_slots_for_date(d, is_summer) for t in teachers) == count
+                    for d in dates_in_scope for s in get_slots_for_date(d, is_summer) for t in teachers) <= count
             )
 
     # ② 生徒の重複禁止（同じコマに2つの授業を受けられない）
@@ -164,20 +164,19 @@ def run_optimization_engine(
     # -------------------------------------------------------------
     # 4. 目的関数の設定 (ソフト制約：スコアを最大化する)
     # -------------------------------------------------------------
-    # 🌟 ここにあった `objective_terms = []` は上に移動したため削除済みです
-    
     for d in dates_in_scope:
         for s in get_slots_for_date(d, is_summer):
             for t in teachers:
                 for st in students:
                     for subj in contract_remains[st].keys():
-                        score = 0
-                        # スコアの例:
-                        # - 指名講師なら +40
+                        # 🌟 授業を1つ組むこと自体に「高い基本スコア」を与える（ペナルティに負けないため）
+                        score = 1000 
+                        
+                        # - 指名講師ならさらに加点
                         if t in nomination_map.get(st, set()):
-                            score += 40
+                            score += 400
                             
-                        # - 講師の優先度やシフト「◎」の加点（データフレームから取得する）等
+                        # - 講師の優先度やシフト「◎」の加点などもここに追加
                         
                         if score > 0:
                             objective_terms.append(assign[(d, s, t, st, subj)] * score)
