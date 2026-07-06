@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import datetime
 import math
@@ -62,6 +63,13 @@ def run_optimization_engine(
     students = list(contract_remains.keys())
     teachers = df_teacher_master["講師名"].dropna().unique().tolist() if not df_teacher_master.empty else []
 
+    # ======== 🚨 【画面表示用デバッグ】ここを追加 ========
+    st.error("💡 デバッグ情報：AIは以下のデータを受け取っています！")
+    st.write(f"**① カレンダーで選択された日数:** {len(dates_in_scope)}日")
+    st.write(f"**② 認識した生徒:** {students}")
+    st.write(f"**③ 契約の残りコマ数:** {contract_remains}")
+    st.write(f"**④ 担当できる講師:** {teachers}")
+    # ====================================================
     # 🚨 【デバッグ用強制ストップ②】絞り込んだ結果、組むべきデータが残っているか？
     if len(students) == 0:
         raise ValueError("【原因判明！】組むべき生徒のデータが0件です！\n考えられる原因:\n・講習名に『夏』が含まれていない（サマー講習など）\n・すでに全コマ組まれていて残数が0になっている")
