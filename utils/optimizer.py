@@ -1,7 +1,7 @@
 import pandas as pd
 import datetime
 import math
-import streamlit as st  # 🌟 これが必須です！
+import streamlit as st_ui  # 🌟 名前被りを避けるため st_ui に変更しました！
 from ortools.sat.python import cp_model
 
 def get_slots_for_date(date_str, is_summer_mode):
@@ -54,25 +54,25 @@ def run_optimization_engine(
     teachers = df_teacher_master["講師名"].dropna().unique().tolist() if not df_teacher_master.empty else []
 
     # -------------------------------------------------------------
-    # 2. 変数の定義
+    # 2. 変数の定義（※ st を st_name に修正）
     # -------------------------------------------------------------
     assign = {}
     for d in dates_in_scope:
         slots = get_slots_for_date(d, is_summer)
         for s in slots:
             for t in teachers:
-                for st in students:
-                    for subj in contract_remains[st].keys():
-                        assign[(d, s, t, st, subj)] = model.NewBoolVar(f"x_{d}_{s}_{t}_{st}_{subj}")
+                for st_name in students:
+                    for subj in contract_remains[st_name].keys():
+                        assign[(d, s, t, st_name, subj)] = model.NewBoolVar(f"x_{d}_{s}_{t}_{st_name}_{subj}")
 
     # -------------------------------------------------------------
     # 3. ハード制約の追加 (絶対に守るルール)
     # -------------------------------------------------------------
     # ① 契約残数をぴったり満たす
-    for st in students:
-        for subj, count in contract_remains[st].items():
+    for st_name in students:
+        for subj, count in contract_remains[st_name].items():
             model.Add(
-                sum(assign[(d, s, t, st, subj)] 
+                sum(assign[(d, s, t, st_name, subj)] 
                     for d in dates_in_scope for s in get_slots_for_date(d, is_summer) for t in teachers) == count
             )
 
@@ -80,8 +80,8 @@ def run_optimization_engine(
     for d in dates_in_scope:
         slots = get_slots_for_date(d, is_summer)
         for s in slots:
-            for st in students:
-                model.Add(sum(assign[(d, s, t, st, subj)] for t in teachers for subj in contract_remains[st].keys()) <= 1)
+            for st_name in students:
+                model.Add(sum(assign[(d, s, t, st_name, subj)] for t in teachers for subj in contract_remains[st_name].keys()) <= 1)
 
     # ③ 講師の定員（1:3の制限）
     MAX_STUDENTS_PER_TEACHER = 3
@@ -89,20 +89,17 @@ def run_optimization_engine(
         slots = get_slots_for_date(d, is_summer)
         for s in slots:
             for t in teachers:
-                model.Add(sum(assign[(d, s, t, st, subj)] for st in students for subj in contract_remains[st].keys()) <= MAX_STUDENTS_PER_TEACHER)
+                model.Add(sum(assign[(d, s, t, st_name, subj)] for st_name in students for subj in contract_remains[st_name].keys()) <= MAX_STUDENTS_PER_TEACHER)
 
     # ④ NG講師の回避
-    for st in students:
-        ng_teachers = ng_map.get(st, set())
+    for st_name in students:
+        ng_teachers = ng_map.get(st_name, set())
         for t in ng_teachers:
             if t in teachers:
                 for d in dates_in_scope:
                     for s in get_slots_for_date(d, is_summer):
-                        for subj in contract_remains[st].keys():
-                            model.Add(assign[(d, s, t, st, subj)] == 0)
-
-    # ※テスト中は平準化やスコア加点（目的関数）を無効化して「ただ組むだけ」に集中させます！
-    # model.Maximize(...) はあえて書きません。
+                        for subj in contract_remains[st_name].keys():
+                            model.Add(assign[(d, s, t, st_name, subj)] == 0)
 
     # -------------------------------------------------------------
     # 4. ソルバーの実行（制限時間を30秒に延長）
@@ -110,8 +107,8 @@ def run_optimization_engine(
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 30.0 
     
-    # 実行前に画面でお知らせ
-    st.info("🤖 AIがスケジュール計算を開始しました...最大30秒かかります。")
+    # 🌟 実行前に画面でお知らせ (st_ui に修正)
+    st_ui.info("🤖 AIがスケジュール計算を開始しました...最大30秒かかります。")
     
     status = solver.Solve(model)
 
@@ -121,7 +118,7 @@ def run_optimization_engine(
     new_lessons = []
     
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        st.success("✨ スケジュールの作成に成功しました！（AIが条件を満たす組み合わせを発見しました）")
+        st_ui.success("✨ スケジュールの作成に成功しました！（AIが条件を満たす組み合わせを発見しました）")
         for d in dates_in_scope:
             slots = get_slots_for_date(d, is_summer)
             for s in slots:
@@ -145,10 +142,10 @@ def run_optimization_engine(
                                 "指導形態": guidance_mode
                             })
     elif status == cp_model.INFEASIBLE:
-        st.error("🚨 【INFEASIBLE】物理的に不可能な条件が含まれています（例: 講師の枠より契約コマ数が多い等）")
+        st_ui.error("🚨 【INFEASIBLE】物理的に不可能な条件が含まれています（例: 講師の枠より契約コマ数が多い等）")
     elif status == cp_model.UNKNOWN:
-        st.warning("⚠️ 【UNKNOWN】組み合わせが多すぎて、30秒以内に計算が終わりませんでした（タイムアウト）")
+        st_ui.warning("⚠️ 【UNKNOWN】組み合わせが多すぎて、30秒以内に計算が終わりませんでした（タイムアウト）")
     else:
-        st.error(f"❌ 予期せぬエラーステータス: {status}")
+        st_ui.error(f"❌ 予期せぬエラーステータス: {status}")
 
     return new_lessons
