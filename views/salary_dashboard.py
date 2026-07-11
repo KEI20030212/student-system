@@ -23,8 +23,7 @@ def cached_get_all_logs():
 def fetch_instructor_master_cached():
     df = robust_api_call(load_instructor_master, fallback_value=pd.DataFrame())
     if df.empty or "講師名" not in df.columns:
-        # 🌟 1:1(Q)単価の列を初期定義に追加
-        return pd.DataFrame(columns=["講師名", "1:1単価", "1:1(Q)単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
+        return pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
     return df
 
 def render_salary_dashboard_page():
@@ -94,29 +93,24 @@ def render_salary_dashboard_page():
 
                 t_row_df = df_instructors[df_instructors["講師名"] == teacher]
                 if t_row_df.empty:
-                    p11, p11q, p12, p13, trans, allowance = 1500, 1500, 1800, 2000, 0, 0
+                    p11, p12, p13, trans, allowance = 1500, 1800, 2000, 0, 0
                 else:
                     t_row = t_row_df.iloc[0]
                     def safe_int(val, d=0):
                         try: return int(float(val)) if not pd.isna(val) and val != "" else d
                         except: return d
-                    
                     p11 = safe_int(t_row.get('1:1単価', 1500), 1500)
-                    # 🌟 1:1(Q)単価が未設定なら、自動的に通常の1:1単価を適用してタダ働きを防止！
-                    p11q = safe_int(t_row.get('1:1(Q)単価', p11), p11) 
                     p12 = safe_int(t_row.get('1:2単価', 1800), 1800)
                     p13 = safe_int(t_row.get('1:3単価', 2000), 2000)
                     trans = safe_int(t_row.get('交通費', 0), 0)
                     allowance = safe_int(t_row.get('役職手当', 0), 0)
 
-                # 🌟 クオリティコースも漏れなく集計！
                 koma_11 = len(df_teacher[df_teacher['授業形態'] == '1:1'])
-                koma_11q = len(df_teacher[df_teacher['授業形態'] == '1:1(Q)'])
                 koma_12 = len(df_teacher[df_teacher['授業形態'] == '1:2'])
                 koma_13 = len(df_teacher[df_teacher['授業形態'] == '1:3'])
 
-                total_koma = koma_11 + koma_11q + koma_12 + koma_13
-                koma_salary = (koma_11 * p11) + (koma_11q * p11q) + (koma_12 * p12) + (koma_13 * p13)
+                total_koma = koma_11 + koma_12 + koma_13
+                koma_salary = (koma_11 * p11) + (koma_12 * p12) + (koma_13 * p13)
                 working_days = df_teacher['日付'].nunique()
                 transport_total = working_days * trans
                 final_salary = koma_salary + transport_total + allowance
@@ -164,19 +158,16 @@ def render_salary_dashboard_page():
             with st.form("individual_edit_form"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    new_11 = st.number_input("1:1 単価", value=int(current_vals.get('1:1単価', 1500)), step=100)
-                    # 🌟 クオリティコース専用の単価設定欄！
-                    new_11q = st.number_input("1:1(Q) 単価", value=int(current_vals.get('1:1(Q)単価', current_vals.get('1:1単価', 1500))), step=100)
-                    new_12 = st.number_input("1:2 単価", value=int(current_vals.get('1:2単価', 1800)), step=100)
-                    new_13 = st.number_input("1:3 単価", value=int(current_vals.get('1:3単価', 2000)), step=100)
+                    new_11 = st.number_input("1:1 単価", value=int(current_vals['1:1単価']), step=100)
+                    new_12 = st.number_input("1:2 単価", value=int(current_vals['1:2単価']), step=100)
+                    new_13 = st.number_input("1:3 単価", value=int(current_vals['1:3単価']), step=100)
                 with col2:
-                    new_trans = st.number_input("1日あたりの交通費", value=int(current_vals.get('交通費', 0)), step=10)
-                    new_allowance = st.number_input("役職手当", value=int(current_vals.get('役職手当', 0)), step=1000)
+                    new_trans = st.number_input("1日あたりの交通費", value=int(current_vals['交通費']), step=10)
+                    new_allowance = st.number_input("役職手当", value=int(current_vals['役職手当']), step=1000)
                 
                 if st.form_submit_button("✅ この内容で保存する", type="primary"):
                     idx = df_instructors.index[df_instructors["講師名"] == target_teacher][0]
                     df_instructors.at[idx, '1:1単価'] = new_11
-                    df_instructors.at[idx, '1:1(Q)単価'] = new_11q # 🌟 スプレッドシートにも保存
                     df_instructors.at[idx, '1:2単価'] = new_12
                     df_instructors.at[idx, '1:3単価'] = new_13
                     df_instructors.at[idx, '交通費'] = new_trans
@@ -193,5 +184,6 @@ def render_salary_dashboard_page():
         st.markdown("##### 📋 講師設定一覧（確認用）")
         st.dataframe(df_instructors, hide_index=True, use_container_width=True)
         
+        # 🌟 変更：手動追加による名前ズレ事故を根本から防止するための親切なアナウンス欄に変更
         with st.expander("➕ 新しい講師を登録する（アカウント連動）"):
             st.info("💡 **一元管理へのアップデート**\n\n「名前の入力ミス」や「データの二重管理」を完璧に防ぐため、新しい講師の登録は左メニューの **「⚙️ アカウント・システム設定」** から行ってください。\n\nそちらでアカウントを作成すると、自動的にこの講師マスタにも連動して、初期給与設定の枠が自動生成されます！")
