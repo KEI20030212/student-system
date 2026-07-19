@@ -399,12 +399,11 @@ def render_student_details_page(selected_student_option):
                             m_mus = mc10.number_input("音 満点", 0, 100, 50)
 
                     sc1, sc2, sc3, sc4, sc5 = st.columns(5)
-                    eng = sc1.number_input(f"英語 (/{m_eng})", 0, m_eng, value=None)
-                    math_score = sc2.number_input(f"数学 (/{m_math})", 0, m_math, value=None)
-                    jpn = sc3.number_input(f"国語 (/{m_jpn})", 0, m_jpn, value=None)
-                    sci = sc4.number_input(f"理科 (/{m_sci})", 0, m_sci, value=None)
-                    soc = sc5.number_input(f"社会 (/{m_soc})", 0, m_soc, value=None)
-
+                    eng = sc1.number_input(f"英語 (/{m_eng})", min_value=0, max_value=int(m_eng), value=None, step=1)
+                    math_score = sc2.number_input(f"数学 (/{m_math})", min_value=0, max_value=int(m_math), value=None, step=1)
+                    jpn = sc3.number_input(f"国語 (/{m_jpn})", min_value=0, max_value=int(m_jpn), value=None, step=1)
+                    sci = sc4.number_input(f"理科 (/{m_sci})", min_value=0, max_value=int(m_sci), value=None, step=1)
+                    soc = sc5.number_input(f"社会 (/{m_soc})", min_value=0, max_value=int(m_soc), value=None, step=1)
                     dev_eng, dev_math, dev_jpn, dev_sci, dev_soc = None, None, None, None, None
                     if test_type == "外部模試":
                         st.divider()
