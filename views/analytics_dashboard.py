@@ -250,8 +250,9 @@ def render_analytics_dashboard_page():
         with col_r2:
             df_t_react_only = df_t[df_t['保護者リアクション'] != "🔵 既読スルー（自動カウント）"]
             if not df_t_react_only.empty:
-                df_t_pivot = pd.crosstab(df_t_react_only['担当講師'], df_t_react_only['保護者リアクション'])
-                st.bar_chart(df_t_pivot, stack=True)
+                # 1. groupbyで「先生名・リアクション・件数」の「縦長のリスト」を作る
+                chart_data = df_t_react_only.groupby(['担当講師', '保護者リアクション']).size().reset_index(name='件数')
+                st.bar_chart(chart_data, x='担当講師', y='件数', color='保護者リアクション')
             else:
                 st.info("今月はまだ保護者からのポジティブリアクションはありません。")
             
