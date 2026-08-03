@@ -165,7 +165,18 @@ def render_salary_dashboard_page():
                     df_h = df_summary[df_summary["🏫 校舎"] == "東十条駅前校"]
                     st.dataframe(df_h, hide_index=True, use_container_width=True)
                 with b_tabs[2]:
-                    st.dataframe(df_summary, hide_index=True, use_container_width=True)
+                    df_total = df_summary.groupby("👨‍🏫 担当講師", as_index=False).agg({
+                        "合計コマ数": "sum",
+                        "1:1コマ": "sum", 
+                        "1:2コマ": "sum", 
+                        "1:3コマ": "sum", 
+                        "授業給 (円)": "sum",
+                        "役職手当 (円)": "sum", 
+                        "出勤日数": "sum", 
+                        "交通費合計 (円)": "sum", 
+                        "💰 最終支給額 (円)": "sum"
+                    })
+                    st.dataframe(df_total, hide_index=True, use_container_width=True)
 
                 c1, c2 = st.columns(2)
                 with c1:
