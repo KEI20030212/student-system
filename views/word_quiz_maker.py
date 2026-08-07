@@ -35,10 +35,9 @@ def render_word_quiz_maker_page():
                 st.rerun()
 
     # --- メイン設定 ---
-    # 🌟 修正1：選択肢を「キクタン」の4つに限定
     target_options = ["キクタン8問", "キクタン16問", "キクタン32問", "キクタン50問", "キクタン8問(東)", "キクタン16問(東)", "キクタン32問(東)", "キクタン50問(東)", "WordCup20問", "WordCup100問", "WordCup200問", "iワーク中3英単語(東書)"]
     
-    # 登録されている中から、対象の4つだけを表示（登録がない場合は警告）
+    # 登録されている中から、対象だけ表示（登録がない場合は警告）
     available_options = [opt for opt in target_options if opt in quiz_dict]
     
     if not available_options:
@@ -49,7 +48,6 @@ def render_word_quiz_maker_page():
     quiz_data = quiz_dict[quiz_name]
     sheet_id = quiz_data.get("id", "") if isinstance(quiz_data, dict) else quiz_data
 
-    # 🌟 修正2：問題数選択ラジオボタンを廃止し、背後で自動設定
     with st.container(border=True):
         st.markdown(f"#### ⚙️ 「{quiz_name}」の設定を適用中")
         
@@ -75,6 +73,8 @@ def render_word_quiz_maker_page():
             ranges, p_size = ["A1:I18", "J1:R18"], "B5"
         elif quiz_name == "キクタン32問(東)":
             ranges, p_size = ["A1:M18", "N1:Z18"], "A4" 
+        elif quiz_name == "iワーク中3英単語(東書)":
+            ranges, p_size = ["A1:I18", "J1:R18"], "B5"
         else: # キクタン50問
             ranges, p_size = ["A1:N27", "O1:AB27"], "A3"
 
