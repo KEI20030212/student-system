@@ -3,8 +3,9 @@ import pandas as pd
 import altair as alt 
 import datetime 
 import time 
-import re 
+import re # 🌟 文字列から数字を抽出するために追加
 
+# 🌟 変更: get_type_advice_dict を追加インポート
 from utils.g_sheets import (
     get_student_master,
     update_student_info,
@@ -13,12 +14,7 @@ from utils.g_sheets import (
     get_student_self_study_points,
     get_student_quiz_records,
     get_quiz_master_dict,
-    get_type_advice_dict,
-    load_compatibility_ng_master,
-    save_compatibility_ng_master,
-    load_nominated_teacher_master, # 🌟 追加: 指名講師読み込み
-    save_nominated_teacher_master, # 🌟 追加: 指名講師保存
-    load_teacher_master
+    get_type_advice_dict # 🌟 ここに追加！
 )
 from utils.calc_logic import (
     calculate_ability_rank,
@@ -26,8 +22,10 @@ from utils.calc_logic import (
     calculate_quiz_points
 )
 
+# 🌟 APIガードをインポート
 from utils.api_guard import robust_api_call
 
+# 🌟 新しく追加：マニュアルをスプレッドシートから取得して記憶するキャッシュ関数
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_type_advice():
     return robust_api_call(get_type_advice_dict, fallback_value={})
@@ -43,6 +41,7 @@ def render_student_details_page(selected_student_option):
     tab_info, tab_input, tab_view = st.tabs(["👤 基本情報・カルテ", "✍️ テスト成績を入力", "📈 テスト成績推移を見る"])
 
     with tab_info:
+        # 🌟 劇的改善: 重い個別取得をやめて、キャッシュされたマスターから一瞬で情報を探す！
         df_students = robust_api_call(get_student_master, fallback_value=pd.DataFrame())
         info = {}
         if not df_students.empty and '生徒名' in df_students.columns:
@@ -53,27 +52,12 @@ def render_student_details_page(selected_student_option):
         if student_id == "未設定" and "生徒ID" in info:
             student_id = str(info["生徒ID"]).strip()
             
+        # 🌟 APIエラー対策付きの読み込み
         df_test = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
         
         df_student_tests = pd.DataFrame()
         if not df_test.empty and 'APIエラー発生' not in df_test.columns:
             df_student_tests = df_test[df_test['生徒名'] == selected_student]
-            
-        # 🌟 マッチング用データの事前読み込み（表示と設定の両方で使用）
-        df_ng = robust_api_call(load_compatibility_ng_master, fallback_value=pd.DataFrame())
-        df_nominate = robust_api_call(load_nominated_teacher_master, fallback_value=pd.DataFrame())
-        df_teachers = robust_api_call(load_teacher_master, fallback_value=pd.DataFrame())
-        
-        all_teachers = df_teachers["講師名"].tolist() if not df_teachers.empty and "講師名" in df_teachers.columns else []
-        
-        current_ng_teachers = []
-        if not df_ng.empty and "NG生徒名" in df_ng.columns and "講師名" in df_ng.columns:
-            current_ng_teachers = df_ng[df_ng["NG生徒名"] == selected_student]["講師名"].tolist()
-            
-        current_nominate_teachers = []
-        if not df_nominate.empty and "指名生徒名" in df_nominate.columns and "講師名" in df_nominate.columns:
-            # カラム名は適宜お使いのGoogleシートの仕様に合わせて調整してください
-            current_nominate_teachers = df_nominate[df_nominate["指名生徒名"] == selected_student]["講師名"].tolist()
 
         col_prof, col_graph = st.columns([1, 1])
         
@@ -96,15 +80,10 @@ def render_student_details_page(selected_student_option):
             st.markdown(f"**📚 受講科目**: {info.get('受講科目', '') or '未設定'}")
             st.markdown(f"**📋 契約コース**: {info.get('契約コース', '') or '未設定'}")
             
-            # 🌟 【新規追加】NG講師・指名講師の表示欄
-            st.markdown("---")
-            st.markdown(f"**🚫 NG講師**: {', '.join(current_ng_teachers) if current_ng_teachers else 'なし'}")
-            st.markdown(f"**💖 指名講師**: {', '.join(current_nominate_teachers) if current_nominate_teachers else 'なし'}")
-            st.markdown("---")
-            
             if disp_types:
                 st.markdown(f"**🎯 生徒タイプ**: {disp_types.replace('、', ' / ')}")
                 
+                # 🌟 【新機能】取得したマニュアルから、この生徒に合ったアドバイスを抽出して表示！
                 type_advice_dict = cached_get_type_advice()
                 advices = []
                 for t_key, t_adv in type_advice_dict.items():
@@ -137,9 +116,11 @@ def render_student_details_page(selected_student_option):
                         new_target = st.text_input("志望校・通塾目的", value=info.get('志望校・目的', ''))
                         new_subjects = st.text_input("受講科目 (例: 英語, 数学)", value=info.get('受講科目', ''))
                         
+                        # 🌟 追加：契約コースの入力欄
                         st.markdown("##### 📋 契約コース (回数/月)")
                         raw_course = str(info.get('契約コース', ''))
                         
+                        # スプレッドシートの文字列から数字を自動抽出（パース）
                         b_match = re.search(r'Bコース[:：](\d+)', raw_course)
                         q_match = re.search(r'Qコース[:：](\d+)', raw_course)
                         b_default = int(b_match.group(1)) if b_match else None
@@ -159,21 +140,31 @@ def render_student_details_page(selected_student_option):
                         type_opts = ["充実", "訓練", "実用", "関係", "自尊", "報酬"]
 
                         current_types = str(info.get('タイプ', '')).replace('未設定', '').split('、')
-                        current_types = [t for t in current_types if t in type_opts]
+                        current_types = [t for t in current_types if t in type_opts] # 空文字などを除去
 
                         new_types = st.multiselect("🎯 生徒タイプ（複数選択可）", type_opts, default=current_types)
 
                         if st.form_submit_button("💾 基本情報を保存", type="primary"):
                             new_type_str = "、".join(new_types)
                             
-                            with st.spinner("☁️ 情報を保存中..."):
+                            with st.spinner("☁️ 情報を保存中...（混雑時は自動で再試行します）"):
                                 def _update_info():
                                     update_student_info(
-                                        student_id, selected_student, new_grade, new_school, 
-                                        new_target, new_subjects, info.get('能力', 3), 
-                                        info.get('やる気', 3), info.get('内申点', 3), 
-                                        info.get('最新偏差値', 50), info.get('宿題履行率', 100),
-                                        new_exam, new_school_type, new_contract_str, new_type_str
+                                        student_id,
+                                        selected_student, 
+                                        new_grade, 
+                                        new_school, 
+                                        new_target, 
+                                        new_subjects, 
+                                        info.get('能力', 3), 
+                                        info.get('やる気', 3), 
+                                        info.get('内申点', 3), 
+                                        info.get('最新偏差値', 50), 
+                                        info.get('宿題履行率', 100),
+                                        new_exam,        
+                                        new_school_type,
+                                        new_contract_str,
+                                        new_type_str
                                     )
                                     return True
                                 
@@ -188,72 +179,6 @@ def render_student_details_page(selected_student_option):
                                     st.error("通信エラーが発生しました。もう一度お試しください。")
             else:
                 st.info("※プロフィールの編集は教室長のみ可能です。")
-
-            # ==========================================
-            # 🌟 自動コマ組みマッチング設定（NG講師・指名講師）
-            # ==========================================
-            st.markdown("### 🧩 自動コマ組みマッチング設定")
-            
-            # マスターに存在する講師のみをデフォルトに設定（エラー防止）
-            safe_ng_teachers = [t for t in current_ng_teachers if t in all_teachers]
-            safe_nominate_teachers = [t for t in current_nominate_teachers if t in all_teachers]
-
-            with st.expander("🚫 NG講師の設定 (相性NG)", expanded=False):
-                st.write(f"**{selected_student}** さんと相性が合わない講師を設定します。ここで選んだ講師は自動コマ組みでアサインされなくなります。")
-                
-                with st.form("ng_teacher_form"):
-                    selected_ngs = st.multiselect(
-                        "⛔ NG講師を選択",
-                        options=all_teachers,
-                        default=safe_ng_teachers,
-                        help="複数選択可能です。候補が出ない場合は、アカウント管理から講師マスタを更新してください。"
-                    )
-                    
-                    if st.form_submit_button("💾 NG設定を保存", type="secondary"):
-                        with st.spinner("保存中..."):
-                            if not df_ng.empty:
-                                df_ng_new = df_ng[df_ng["NG生徒名"] != selected_student].copy()
-                            else:
-                                df_ng_new = pd.DataFrame(columns=["講師名", "NG生徒名"])
-                            
-                            new_rows = [{"講師名": t, "NG生徒名": selected_student} for t in selected_ngs]
-                            if new_rows:
-                                df_ng_new = pd.concat([df_ng_new, pd.DataFrame(new_rows)], ignore_index=True)
-                            
-                            success = robust_api_call(lambda: save_compatibility_ng_master(df_ng_new), fallback_value=False)
-                            if success:
-                                st.success("✅ NG設定を更新しました！")
-                                time.sleep(1.5)
-                                st.rerun()
-
-            # 🌟 【新規追加】指名講師の設定
-            with st.expander("💖 指名講師の設定", expanded=False):
-                st.write(f"**{selected_student}** さんの指名講師を設定します。ここで選んだ講師は自動コマ組みで優先的にアサインされます。")
-                
-                with st.form("nominate_teacher_form"):
-                    selected_nominates = st.multiselect(
-                        "💖 指名講師を選択",
-                        options=all_teachers,
-                        default=safe_nominate_teachers,
-                        help="複数選択可能です。"
-                    )
-                    
-                    if st.form_submit_button("💾 指名設定を保存", type="secondary"):
-                        with st.spinner("保存中..."):
-                            if not df_nominate.empty:
-                                df_nominate_new = df_nominate[df_nominate["指名生徒名"] != selected_student].copy()
-                            else:
-                                df_nominate_new = pd.DataFrame(columns=["講師名", "指名生徒名"])
-                            
-                            new_rows_nom = [{"講師名": t, "指名生徒名": selected_student} for t in selected_nominates]
-                            if new_rows_nom:
-                                df_nominate_new = pd.concat([df_nominate_new, pd.DataFrame(new_rows_nom)], ignore_index=True)
-                            
-                            success_nom = robust_api_call(lambda: save_nominated_teacher_master(df_nominate_new), fallback_value=False)
-                            if success_nom:
-                                st.success("✅ 指名設定を更新しました！")
-                                time.sleep(1.5)
-                                st.rerun()
 
         with col_graph:
             st.markdown("### 🧭 科目別：能力 × やる気 マトリクス")
@@ -359,7 +284,7 @@ def render_student_details_page(selected_student_option):
                     submit_naishin = st.form_submit_button("💾 内申点を登録する", type="primary")
                     
                     if submit_naishin:
-                        with st.spinner("☁️ 保存中..."):
+                        with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
                             def _save_naishin():
                                 save_test_score(date, selected_student, test_type, n_eng, n_math, n_jpn, n_sci, n_soc, 
                                                 None, None, None, None, None, None, None, 
@@ -399,11 +324,12 @@ def render_student_details_page(selected_student_option):
                             m_mus = mc10.number_input("音 満点", 0, 100, 50)
 
                     sc1, sc2, sc3, sc4, sc5 = st.columns(5)
-                    eng = sc1.number_input(f"英語 (/{m_eng})", min_value=0, max_value=int(m_eng), value=None, step=1)
-                    math_score = sc2.number_input(f"数学 (/{m_math})", min_value=0, max_value=int(m_math), value=None, step=1)
-                    jpn = sc3.number_input(f"国語 (/{m_jpn})", min_value=0, max_value=int(m_jpn), value=None, step=1)
-                    sci = sc4.number_input(f"理科 (/{m_sci})", min_value=0, max_value=int(m_sci), value=None, step=1)
-                    soc = sc5.number_input(f"社会 (/{m_soc})", min_value=0, max_value=int(m_soc), value=None, step=1)
+                    eng = sc1.number_input(f"英語 (/{m_eng})", 0, m_eng, value=None)
+                    math_score = sc2.number_input(f"数学 (/{m_math})", 0, m_math, value=None)
+                    jpn = sc3.number_input(f"国語 (/{m_jpn})", 0, m_jpn, value=None)
+                    sci = sc4.number_input(f"理科 (/{m_sci})", 0, m_sci, value=None)
+                    soc = sc5.number_input(f"社会 (/{m_soc})", 0, m_soc, value=None)
+
                     dev_eng, dev_math, dev_jpn, dev_sci, dev_soc = None, None, None, None, None
                     if test_type == "外部模試":
                         st.divider()
@@ -428,7 +354,7 @@ def render_student_details_page(selected_student_option):
                     submit_test = st.form_submit_button("💾 この成績を登録する", type="primary")
                     
                     if submit_test:
-                        with st.spinner("☁️ 保存中..."):
+                        with st.spinner("☁️ 保存中...（混雑時は自動で再試行します）"):
                             def _save_test():
                                 save_test_score(date, selected_student, test_type, eng, math_score, jpn, sci, soc, 
                                                 dev_eng, dev_math, dev_jpn, dev_sci, dev_soc, None, None, 
@@ -516,6 +442,11 @@ def render_student_details_page(selected_student_option):
 
             st.divider()
             st.subheader("📋 成績履歴詳細")
+            
+            def color_attitude(val):
+                if val == 'A': return 'background-color: #d1e7dd'
+                if val == 'C': return 'background-color: #f8d7da'
+                return ''
 
             st.dataframe(
                 df_view.sort_values("日時", ascending=False),
