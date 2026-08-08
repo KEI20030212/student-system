@@ -9,19 +9,19 @@ import math
 import time
 import streamlit.components.v1 as components
 import base64
-import pickle
 import altair as alt # 座標グラフを描くための魔法の絵の具
+import pickle
 
 def get_jst_now():
     """現在時刻を日本時間(JST)で取得する"""
-    jst = datetime.timezone(datetime.timedelta(hours=9), 'JST')
+    jst = datetime.timezone(timedelta(hours=9), 'JST')
     
     # 🌟 ポイント： datetime.datetime.now(...) と2回重ねる！
     return datetime.datetime.now(jst).strftime('%Y-%m-%d %H:%M:%S')
 # --------------------------------------------------
 # ⚙️ 設定（デザインとファイル連携）
 # --------------------------------------------------
-SPREADSHEET_ID = '1fEyisztEGteS22kF1lUlsXiwjmMh1cR7MiXU6aDiZEA'
+SPREADSHEET_ID = '1tnhK-rvf_cSXmuY9REkD_cK6Wg4XP7alc1UHTpSRrv4'
 @st.cache_resource
 def get_gc_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -32,7 +32,7 @@ def get_gc_client():
 
 #改良版コード
 #汎用
-@st.cache_data(ttl=600, show_spinner=False) # 10分間キャッシュ
+@st.cache_data(ttl=600) # 10分間キャッシュ
 def get_all_logs():
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
@@ -44,6 +44,7 @@ def get_student_logs(student_name):
     df = get_all_logs()
     if df.empty:
         return df
+    # 特定の生徒名でフィルタリング
     student_df = df[df["名前"] == student_name]
     return student_df
 
@@ -67,12 +68,13 @@ def _raw_get_student_master():
     【裏方専用】Googleスプレッドシートから直接データを取得する（生通信）
     ※この関数は外から直接呼ばない
     """
+    import pandas as pd
     gc = get_gc_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
     ws = sh.worksheet("設定_生徒情報")
     return pd.DataFrame(ws.get_all_records(numericise_ignore=["all"]))
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=600)
 def get_student_master():
     """
     【全画面からの窓口】
@@ -716,7 +718,7 @@ def get_last_homework_info(name, subject):
     except Exception as e:
         return "なし", "-"
 
-def get_last_page_from_sheet(name, subject):
+def get_last_page_from_sheet(name, subject): # 🌟 引数に subject を追加！
     """
     「授業ログ統合」シートから、特定の科目の前回の終了ページ（進捗）を探し出す関数
     """
@@ -803,6 +805,7 @@ def add_new_textbook(new_name):
 @st.cache_data(ttl=600, show_spinner=False)
 def get_textbook_master():
     """テキストと章、および単元名を取得する"""
+    import streamlit as st
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
@@ -1133,47 +1136,6 @@ def update_quiz_record_in_sheet(date_str, student_name, quiz_name, old_unit, new
         print(f"小テスト修正上書き中にエラー発生: {e}")
         return False
 
-#trial_input
-def save_trial_lesson_to_spreadsheet(date, student_name, subject, text_name, advanced_p, quiz_records, teacher_name, class_type, attendance, class_slot, advice, parent_msg, next_handover, late_time, concentration, reaction):
-    """
-    体験授業の記録を「体験授業ログ」シートに保存する
-    """
-    import gspread
-    gc = get_gc_client()
-    try:
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        ws = sh.worksheet("体験授業ログ")
-        
-        # 小テストの記録を1つの文字列にまとめる（例: "英単語(1回): 90点、漢字(2回): 100点"）
-        quiz_str = ""
-        if quiz_records:
-            quiz_str = "、".join([f"{q['quiz_name']}({q['unit']}回): {q['score']}点" for q in quiz_records])
-            
-        new_row = [
-            date.strftime("%Y/%m/%d"), # A: 日時
-            teacher_name,             # B: 担当講師
-            class_type,               # C: 授業形態
-            class_slot,               # D: 授業コマ
-            student_name,             # E: 名前
-            attendance,               # F: 出欠
-            f"{late_time}分",         # G: 遅刻時間
-            subject,                  # H: 科目
-            text_name,                # I: テキスト
-            advanced_p,               # J: 終了ページ
-            quiz_str,                 # K: 小テスト記録
-            "",                       # L: やる気ランク (後で計算して入れたい場合はロジックを追加)
-            concentration,            # M: 集中力
-            reaction,                 # N: ミスへの反応
-            advice,                   # O: 授業アドバイス
-            parent_msg,               # P: 保護者への連絡
-            next_handover             # Q: 次回への引継ぎ
-        ]
-        ws.append_row(new_row)
-        return True
-    except Exception as e:
-        print(f"体験授業記録の保存エラー: {e}")
-        return False
-
 #dashboard.py
 @st.cache_data(ttl=60, show_spinner=False)
 def load_quiz_records():
@@ -1183,7 +1145,6 @@ def load_quiz_records():
     gc = get_gc_client()
     try:
         sh = gc.open_by_key(SPREADSHEET_ID)
-        # 固定で「小テスト記録」という名前のシートを開く
         return pd.DataFrame(sh.worksheet("小テスト記録").get_all_records())
     except Exception as e:
         print(f"Error loading quiz records: {e}")
@@ -1272,8 +1233,46 @@ def load_self_study_data():
         import pandas as pd
         return pd.DataFrame()
 
+#student_portal.py
+def move_student_to_inactive_sheet(student_id):
+    """現役の生徒情報を退塾生用シートに移動し、現役名簿から削除する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        # 1. 現役生シートから該当生徒のデータを取得
+        ws_active = sh.worksheet("設定_生徒情報")
+        records = ws_active.get_all_records()
+        
+        row_idx = None
+        student_data = None
+        for i, row in enumerate(records):
+            if str(row.get("生徒ID")).strip() == str(student_id).strip():
+                row_idx = i + 2 # ヘッダー分+1、インデックス0始まり分+1
+                student_data = list(row.values())
+                break
+                
+        if not row_idx or not student_data:
+            return False, "対象の生徒データが見つかりませんでした。"
+            
+        # 2. 退塾生用シート（なければ自動作成）にデータを追加
+        try:
+            ws_inactive = sh.worksheet("退塾生情報")
+        except gspread.exceptions.WorksheetNotFound:
+            # 既存の列構成と同じ幅で作成
+            headers = ws_active.row_values(1)
+            ws_inactive = sh.add_worksheet(title="退塾生情報", rows="500", cols=str(len(headers)))
+            ws_inactive.append_row(headers)
+            
+        ws_inactive.append_row(student_data)
+        
+        # 3. 現役生シートから行を完全に削除
+        ws_active.delete_rows(row_idx)
+        return True, "成功"
+    except Exception as e:
+        return False, str(e)
+
 #quiz_dashboard.py
-@st.cache_data(ttl=600, show_spinner=False)
 def get_quiz_master_dict():
     """
     「設定_小テスト一覧」シートから、テスト名と満点・用紙サイズの対応表を取得する
@@ -1347,45 +1346,6 @@ def delete_quiz_maker_sheet(test_name):
     cell = ws.find(test_name, in_column=1)
     if cell: ws.delete_rows(cell.row)
     st.cache_data.clear()
-
-#student_portal.py
-def move_student_to_inactive_sheet(student_id):
-    """現役の生徒情報を退塾生用シートに移動し、現役名簿から削除する"""
-    try:
-        gc = get_gc_client()
-        sh = gc.open_by_key(SPREADSHEET_ID)
-        
-        # 1. 現役生シートから該当生徒のデータを取得
-        ws_active = sh.worksheet("設定_生徒情報")
-        records = ws_active.get_all_records()
-        
-        row_idx = None
-        student_data = None
-        for i, row in enumerate(records):
-            if str(row.get("生徒ID")).strip() == str(student_id).strip():
-                row_idx = i + 2 # ヘッダー分+1、インデックス0始まり分+1
-                student_data = list(row.values())
-                break
-                
-        if not row_idx or not student_data:
-            return False, "対象の生徒データが見つかりませんでした。"
-            
-        # 2. 退塾生用シート（なければ自動作成）にデータを追加
-        try:
-            ws_inactive = sh.worksheet("退塾生情報")
-        except gspread.exceptions.WorksheetNotFound:
-            # 既存の列構成と同じ幅で作成
-            headers = ws_active.row_values(1)
-            ws_inactive = sh.add_worksheet(title="退塾生情報", rows="500", cols=str(len(headers)))
-            ws_inactive.append_row(headers)
-            
-        ws_inactive.append_row(student_data)
-        
-        # 3. 現役生シートから行を完全に削除
-        ws_active.delete_rows(row_idx)
-        return True, "成功"
-    except Exception as e:
-        return False, str(e)
 
 #school_homework.py
 @st.cache_data(ttl=60) # 短めのキャッシュでリアルタイム性を確保
@@ -1668,6 +1628,39 @@ def load_parent_reply_data():
         return pd.DataFrame(records)
     except:
         return pd.DataFrame()
+
+#plan_management.py
+def save_learning_plan(student_id, student_name, plan_type, plan_details):
+    """
+    年間・月間・週間・授業フローの計画データを「生徒学習計画」シートに保存する。
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        # 「生徒学習計画」シートを探す。なければ自動で作成する安全設計！
+        sheet_name = "生徒学習計画"
+        try:
+            worksheet = sh.worksheet(sheet_name)
+        except:
+            # シートが存在しない場合は新規作成し、ヘッダーをセット
+            worksheet = sh.add_worksheet(title=sheet_name, rows="1000", cols="10")
+            worksheet.append_row(["更新日時", "生徒ID", "生徒名", "計画の種類", "計画データ詳細"])
+
+        import datetime
+        now_str = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        
+        # 🌟 例の「RAW」指定で、Googleの勝手な自動変換をブロックして保存！
+        worksheet.append_row(
+            [now_str, student_id, student_name, plan_type, plan_details], 
+            value_input_option="RAW"
+        )
+        return True
+        
+    except Exception as e:
+        import streamlit as st
+        st.error(f"🚨 学習計画の保存でエラーが発生しました: {e}")
+        return False
 
 #my_salary.py
 @st.cache_data(ttl=600, show_spinner=False)
@@ -2034,4 +2027,484 @@ def update_fixed_costs_in_sheet(updated_df):
         return True
     except Exception as e:
         print(f"固定費の更新エラー: {e}")
+        return False
+
+#shift_management.py
+# ==========================================
+# 🛡️ 追加：共通のワークシート取得関数（これでエラーが消えます）
+# ==========================================
+def get_worksheet(sheet_name):
+    """指定された名前のワークシートを安全に取得する共通関数"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    return sh.worksheet(sheet_name)
+
+def _get_shift_sheet_name(target_type):
+    """対象に合わせて読み書きするシート名を切り替える"""
+    if target_type == "講師":
+        return "データ_講師シフト_講習"
+    else:
+        return "データ_生徒シフト_講習"
+
+# ==========================================
+# 🌟 シフトデータの読み込み (Load)
+# ==========================================
+def load_shift_records(target_type, member_name, start_date):
+    """
+    画面側 (views/shift_management.py) から呼び出される関数。
+    自動翻訳された全データの中から、特定のメンバー＆指定された1週間分を抜き出して画面に返します。
+    """
+    import datetime
+    import pandas as pd
+
+    # 1. 前回作成した自動翻訳ロジックを使って、全データをきれいな縦長で取得
+    df_all = load_all_shifts(target_type)
+    if df_all.empty:
+        return pd.DataFrame()
+
+    # 2. 選択されたメンバー名（講師名 または 生徒名）で絞り込み
+    name_col = f"{target_type}名"
+    if name_col in df_all.columns:
+        df_filtered = df_all[df_all[name_col] == member_name].copy()
+    else:
+        return pd.DataFrame()
+
+    # 3. 画面で選択された「週」（月曜日〜日曜日までの7日間）の日付リストを作成
+    # start_date (datetime.date型) を 'YYYY/MM/DD' の文字列に変換して合わせます
+    date_list = [(start_date + datetime.timedelta(days=i)).strftime("%Y/%m/%d") for i in range(7)]
+
+    # 4. その 7日間 のデータだけをパッと抜き出す
+    if "日付" in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered["日付"].isin(date_list)]
+    
+    return df_filtered
+
+# ==========================================
+# 🌟 シフトデータの書き込み (Save / Upsert)
+# ==========================================
+def save_shift_records(target_type, member_name, edited_df):
+    """
+    UIで編集された1週間分のシフトをスプレッドシートに保存（上書き・追加）する
+    """
+    sheet_name = _get_shift_sheet_name(target_type)
+    worksheet = get_worksheet(sheet_name)
+    
+    all_data = worksheet.get_all_values()
+    headers = all_data[0] if all_data else []
+    
+    # ヘッダーしかない、または完全な空シートの場合の処理
+    if len(all_data) > 1:
+        df_all = pd.DataFrame(all_data[1:], columns=headers)
+    else:
+        df_all = pd.DataFrame(columns=headers)
+        
+    name_col = "講師名" if target_type == "講師" else "生徒名"
+    
+    # 1. 保存用データの形を整える
+    records_to_save = edited_df.copy()
+    records_to_save[name_col] = member_name  # UIには無い「講師/生徒名」カラムを追加
+    
+    dates_to_update = records_to_save["日付"].tolist()
+    
+    # 2. 既存データから、今回更新する「対象者 ✕ 対象の7日間」の行を除外する（擬似的な上書き処理）
+    if not df_all.empty and name_col in df_all.columns and "日付" in df_all.columns:
+        mask = (df_all[name_col] == member_name) & (df_all["日付"].isin(dates_to_update))
+        df_kept = df_all[~mask].copy()
+    else:
+        df_kept = pd.DataFrame(columns=headers)
+        
+    # 3. シートのカラム構造に合わせて新しいデータを結合する
+    for col in headers:
+        if col not in records_to_save.columns:
+            records_to_save[col] = ""  # シートにあるがUIにないカラム（備考など）は空欄で埋める
+            
+    records_to_save = records_to_save[headers]  # 列の順番をスプレッドシートと完全に一致させる
+    
+    df_final = pd.concat([df_kept, records_to_save], ignore_index=True)
+    df_final = df_final.fillna("")
+    
+    # 4. スプレッドシートを一括更新
+    worksheet.clear()
+    worksheet.update([df_final.columns.values.tolist()] + df_final.values.tolist())
+    
+    return True
+
+# ==========================================
+# 🌟 講習契約マスタの読み書き（超安全版）
+# ==========================================
+@st.cache_data(ttl=600)
+def load_contract_master():
+    """講習契約マスタをスプレッドシートから純粋に読み込む（10分間キャッシュ）"""
+    import pandas as pd
+    
+    ws = get_worksheet("設定_講習契約マスタ")
+    all_values = ws.get_all_values()
+    
+    # シートが完全に空、またはヘッダーしかない場合は空のDataFrameを返す
+    if not all_values or len(all_values) < 1:
+        return pd.DataFrame()
+        
+    headers = all_values[0]
+    data = all_values[1:]
+    return pd.DataFrame(data, columns=headers)
+
+def save_contract_master(df):
+    """講習契約マスタを保存（一括上書き）する"""
+    worksheet = get_worksheet("設定_講習契約マスタ")
+    worksheet.clear()
+    worksheet.update([df.columns.values.tolist()] + df.values.tolist())
+    return True
+
+# ------------------------------------------
+# 🌟 授業予定表の読み書き（超安全版）
+# ------------------------------------------
+def _raw_load_lesson_schedule():
+    import pandas as pd
+    ws = get_worksheet("データ_授業予定表")
+    all_values = ws.get_all_values()
+    
+    if not all_values or len(all_values) < 1:
+        return pd.DataFrame()
+        
+    headers = all_values[0]
+    data = all_values[1:]
+    return pd.DataFrame(data, columns=headers)
+
+@st.cache_data(ttl=60) 
+def load_lesson_schedule():
+    from utils.api_guard import robust_api_call
+    import pandas as pd
+    return robust_api_call(_raw_load_lesson_schedule, fallback_value=pd.DataFrame())
+
+def save_lesson_schedule(df_new_lessons):
+    """確定した授業予定を末尾に追加(Append)する"""
+    from utils.api_guard import robust_api_call
+    ws = get_worksheet("データ_授業予定表")
+    
+    # 🌟 安全対策: NaN(空データ)を空文字に変換し、すべて文字列にして送信エラーを防ぐ
+    df_safe = df_new_lessons.fillna("").astype(str)
+    
+    values_to_append = df_safe.values.tolist()
+    if values_to_append:
+        # 🌟 USER_ENTERED を付けることで、日付が文字化けせずカレンダー通りに認識されます
+        ws.append_rows(values_to_append, value_input_option="USER_ENTERED")
+        st.cache_data.clear() 
+        return True
+    return False
+
+# ------------------------------------------
+# 🌟 全員のシフトを一括取得する関数（超安全版）
+# ------------------------------------------
+def _raw_load_all_shifts(target_type):
+    import pandas as pd
+    import datetime
+    import re
+    
+    # 1. ターゲットに合わせてシート名を切り替え
+    sheet_name = "データ_講師シフト_講習" if target_type == "講師" else "データ_生徒シフト_講習"
+    ws = get_worksheet(sheet_name)
+    all_values = ws.get_all_values()
+    
+    # シートが空の場合は安全に空の DataFrame を返す
+    if not all_values or len(all_values) < 1:
+        return pd.DataFrame()
+        
+    # ==========================================
+    # パターンA：【講師】新·横長フォーマットの解析
+    # ==========================================
+    if target_type == "講師":
+        if len(all_values) < 3:
+            return pd.DataFrame()
+            
+        date_row = all_values[1] # 2行目が日付
+        
+        time_to_slot = {
+            "9:30": "Aコマ", "11:10": "Bコマ", "13:10": "0コマ",
+            "14:50": "1コマ", "16:40": "2コマ", "16:20": "2コマ",
+            "18:20": "3コマ", "20:00": "4コマ"
+        }
+        current_year = datetime.date.today().year
+        
+        # 日付列のマッピング
+        date_map = {}
+        for col_idx in range(2, len(date_row)):
+            raw_date = date_row[col_idx].strip()
+            if not raw_date:
+                continue
+            match = re.search(r'(\d{1,2})/(\d{1,2})', raw_date)
+            if match:
+                m = int(match.group(1))
+                d = int(match.group(2))
+                date_map[col_idx] = f"{current_year}/{m:02d}/{d:02d}"
+
+        # 縦長データへの組み替え
+        shift_data = {}
+        current_name = ""
+        
+        for row in all_values[2:]:
+            if len(row) < 2:
+                continue
+            raw_name = row[0].strip()
+            if raw_name:
+                if raw_name in ["社員", "M1", "M2", "B1", "B2", "B3", "B4", "B5"]:
+                    continue
+                current_name = raw_name.split('\n')[0].strip()
+                
+            if not current_name:
+                continue
+                
+            time_str = row[1].strip()
+            slot_name = time_to_slot.get(time_str)
+            if not slot_name:
+                continue
+                
+            for col_idx, date_str in date_map.items():
+                if col_idx < len(row):
+                    val = row[col_idx].strip()
+                    if val in ["-", ""]:
+                        val = ""
+                        
+                    if date_str not in shift_data:
+                        shift_data[date_str] = {}
+                    if current_name not in shift_data[date_str]:
+                        shift_data[date_str][current_name] = {
+                            "日付": date_str, "曜日": "", f"{target_type}名": current_name,
+                            "Aコマ": "", "Bコマ": "", "0コマ": "", "1コマ": "", "2コマ": "", "3コマ": "", "4コマ": ""
+                        }
+                    shift_data[date_str][current_name][slot_name] = val
+                    
+        result_list = []
+        days_of_week = ["月", "火", "水", "木", "金", "土", "日"]
+        
+        for date_str, name_dict in shift_data.items():
+            y, m, d = map(int, date_str.split('/'))
+            dt = datetime.date(y, m, d)
+            day_str = days_of_week[dt.weekday()]
+            for name, data in name_dict.items():
+                data["曜日"] = day_str
+                result_list.append(data)
+                
+        return pd.DataFrame(result_list)
+        
+    # ==========================================
+    # パターンB：【生徒】旧·縦長フォーマットの解析
+    # ==========================================
+    else:
+        headers = all_values[0]
+        data = all_values[1:]
+        return pd.DataFrame(data, columns=headers)
+
+
+@st.cache_data(ttl=300)
+def load_all_shifts(target_type):
+    from utils.api_guard import robust_api_call
+    import pandas as pd
+    return robust_api_call(lambda: _raw_load_all_shifts(target_type), fallback_value=pd.DataFrame())
+# ==========================================
+# 🛡️ 修正：講師マスタの読み書き（お手本の体裁に統一）
+# ==========================================
+def load_teacher_master():
+    """設定_講師マスタから講師のスキルと優先度を取得する"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
+    try:
+        worksheet = sh.worksheet("設定_講師マスタ")
+    except gspread.exceptions.WorksheetNotFound:
+        # シートがない場合は空のデータを返す
+        return pd.DataFrame()
+        
+    return pd.DataFrame(worksheet.get_all_records())
+
+def save_teacher_master(df):
+    """設定_講師マスタのデータを保存する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("設定_講師マスタ")
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成（100行10列で仮作成）
+            ws = sh.add_worksheet(title="設定_講師マスタ", rows="100", cols="10")
+        
+        ws.clear()
+        if not df.empty:
+            # データフレームの列名を自動でヘッダーにして書き込む
+            data = [df.columns.values.tolist()] + df.values.tolist()
+            ws.update("A1", data)
+        else:
+            # データが空の場合はヘッダーだけ残す
+            if len(df.columns) > 0:
+                ws.update("A1", [df.columns.values.tolist()])
+        return True
+    except Exception as e:
+        print(f"講師マスタの更新エラー: {e}")
+        return False
+
+# ==========================================
+# 🛡️ 修正：相性NGマスタの読み書き（お手本の体裁に統一）
+# ==========================================
+def load_compatibility_ng_master():
+    """設定_相性NGマスタからNGペアのリストを取得する"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
+    try:
+        worksheet = sh.worksheet("設定_相性NGマスタ")
+    except gspread.exceptions.WorksheetNotFound:
+        # シートがない場合は空のデータを返す
+        return pd.DataFrame()
+        
+    return pd.DataFrame(worksheet.get_all_records())
+
+def save_compatibility_ng_master(df):
+    """設定_相性NGマスタのデータを保存する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("設定_相性NGマスタ")
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成（100行5列で仮作成）
+            ws = sh.add_worksheet(title="設定_相性NGマスタ", rows="100", cols="5")
+        
+        ws.clear()
+        if not df.empty:
+            # データフレームの列名を自動でヘッダーにして書き込む
+            data = [df.columns.values.tolist()] + df.values.tolist()
+            ws.update("A1", data)
+        else:
+            # データが空の場合はヘッダーだけ残す
+            if len(df.columns) > 0:
+                ws.update("A1", [df.columns.values.tolist()])
+        return True
+    except Exception as e:
+        print(f"相性NGマスタの更新エラー: {e}")
+        return False
+
+def load_nominated_teacher_master():
+    """設定_指名講師マスタからデータを取得する"""
+    gc = get_gc_client()
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    
+    try:
+        worksheet = sh.worksheet("設定_指名講師マスタ")
+    except gspread.exceptions.WorksheetNotFound:
+        # シートがない場合は空のデータを返す
+        return pd.DataFrame()
+        
+    return pd.DataFrame(worksheet.get_all_records())
+
+def save_nominated_teacher_master(df):
+    """設定_指名講師マスタのデータを保存する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        try:
+            ws = sh.worksheet("設定_指名講師マスタ")
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成（100行5列で仮作成）
+            ws = sh.add_worksheet(title="設定_指名講師マスタ", rows="100", cols="5")
+        
+        ws.clear()
+        if not df.empty:
+            # データフレームの列名を自動でヘッダーにして書き込む
+            data = [df.columns.values.tolist()] + df.values.tolist()
+            ws.update("A1", data)
+        else:
+            # データが空の場合はヘッダーだけ残す
+            if len(df.columns) > 0:
+                ws.update("A1", [df.columns.values.tolist()])
+        return True
+    except Exception as e:
+        print(f"指名講師マスタの更新エラー: {e}")
+        return False
+
+def load_fixed_shift_master(target_type: str, member_name: str) -> pd.DataFrame:
+    """
+    スプレッドシートの「設定_講師固定シフト」または「設定_生徒固定シフト」シートから
+    指定されたメンバーの曜日ごとの固定シフトマスタを取得する（gspread版）
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        # 1. 対象によって読み込むワークシートを切り替え
+        sheet_name = "設定_講師固定シフト" if target_type == "講師" else "設定_生徒固定シフト"
+        
+        try:
+            ws = sh.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            # シートが存在しない場合は空のデータフレームを返す
+            return pd.DataFrame()
+            
+        # 2. 全データを読み込んでDataFrame化
+        records = ws.get_all_records()
+        if not records:
+            return pd.DataFrame()
+            
+        df_all = pd.DataFrame(records)
+        
+        # 3. 選択されたメンバーのデータだけを抽出（「名前」列でフィルタ）
+        # ※シート側の1列目は「名前」というヘッダーにしてください
+        if "名前" in df_all.columns:
+            df_member = df_all[df_all["名前"] == member_name].copy()
+            return df_member
+        else:
+            print(f"⚠️ {sheet_name} に '名前' 列が見つかりません。")
+            return pd.DataFrame()
+
+    except Exception as e:
+        print(f"固定シフトマスタの読み込みエラー: {e}")
+        return pd.DataFrame()
+
+def save_fixed_shift_master(target_type: str, member_name: str, edited_df: pd.DataFrame) -> bool:
+    """
+    設定_講師固定シフト または 設定_生徒固定シフト のデータを上書き保存する
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        sheet_name = "設定_講師固定シフト" if target_type == "講師" else "設定_生徒固定シフト"
+        
+        try:
+            ws = sh.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            # シートがない場合は新規作成
+            ws = sh.add_worksheet(title=sheet_name, rows="100", cols="10")
+            
+        records = ws.get_all_records()
+        if records:
+            df_all = pd.DataFrame(records)
+        else:
+            df_all = pd.DataFrame(columns=["名前", "曜日", "Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"])
+            
+        # 1. 既存データから、今回保存するメンバーの古い固定シフトを削除（リセット）
+        if not df_all.empty and "名前" in df_all.columns:
+            df_all = df_all[df_all["名前"] != member_name]
+            
+        # 2. 今回画面で入力された新しい固定シフトデータを準備
+        new_data = edited_df.copy()
+        new_data.insert(0, "名前", member_name) # 先頭に名前列を追加
+        
+        # ※データ容量節約のため、すべてが空欄(ー)の曜日は除外して保存する
+        slots = ["Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]
+        mask = new_data[slots].apply(lambda x: x != "").any(axis=1)
+        new_data = new_data[mask]
+        
+        # 3. 古いデータ（他メンバー分）と新しいデータを結合
+        df_final = pd.concat([df_all, new_data], ignore_index=True)
+        df_final = df_final.fillna("") # NaNを空文字に
+        
+        # 4. スプレッドシートをクリアして一括書き込み
+        ws.clear()
+        if not df_final.empty:
+            data = [df_final.columns.values.tolist()] + df_final.values.tolist()
+            ws.update("A1", data)
+        else:
+            ws.update("A1", [["名前", "曜日", "Aコマ", "Bコマ", "0コマ", "1コマ", "2コマ", "3コマ", "4コマ"]])
+            
+        return True
+    except Exception as e:
+        print(f"固定シフトマスタの更新エラー: {e}")
         return False
