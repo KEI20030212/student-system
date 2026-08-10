@@ -194,15 +194,13 @@ def render_quiz_list_page():
                         last_date = df_quiz_s['日時'].max().strftime("%Y年%m月%d日")
                         st.success(f"📅 前回実施日: **{last_date}**")
 
-                        # ==========================================
-                        # 🌟 修正：点数と実施日の「2行」になるようにデータを整形！
-                        # ==========================================
-                        # 点数順（同点なら日付が新しい順）に並べ替えて重複を削除し、各単元の「最高記録」を取得
+                        attempt_counts = df_quiz_s.groupby(['テキスト', '単元']).size().reset_index(name='挑戦回数')
                         df_quiz_s_sorted = df_quiz_s.sort_values(by=['テキスト', '単元', '点数', '日時'], ascending=[True, True, False, False])
                         best_records = df_quiz_s_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first').copy()
+                        best_records = pd.merge(best_records, attempt_counts, on=['テキスト', '単元'], how='left')
                         
-                        # 日付を見やすい形式（MM/DD）で文字列化して追加
                         best_records['実施日'] = best_records['日時'].dt.strftime('%y/%m/%d')
+                        best_records['挑戦回数'] = best_records['挑戦回数'].astype(str) + "回"
                         best_records = best_records.rename(columns={'テキスト': '小テスト名', '点数': '最高点数'})
 
                         quiz_list = best_records['小テスト名'].unique().tolist()
@@ -213,15 +211,15 @@ def render_quiz_list_page():
                                 with s_tabs[i]: 
                                     df_display = best_records[best_records['小テスト名'] == q_name]
                                     
-                                    # 🌟 行に「最高点数」と「実施日」、列に「単元」が来るように変換（転置: T）
-                                    pivot_df = df_display[['単元', '最高点数', '実施日']].set_index('単元').T
+                                    # 🌟 行に「最高点数」「挑戦回数」「実施日」、列に「単元」が来るように変換（転置: T）
+                                    pivot_df = df_display[['単元', '最高点数', '挑戦回数', '実施日']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
                                         # 単元番号順に並べ替え
                                         pivot_df = pivot_df[sorted(pivot_df.columns.tolist(), key=sort_key)]
                                         pivot_df.index.name = None # 左上の項目名を消してスッキリさせる
                                         
-                                        # 🌟 共通スタイリング関数を適用（日付には色が付きません）
+                                        # 🌟 共通スタイリング関数を適用（日付と回数には色が付きません）
                                         styled_df = style_pivot_dataframe(pivot_df, q_name)
                                         st.dataframe(styled_df, use_container_width=True)
 
