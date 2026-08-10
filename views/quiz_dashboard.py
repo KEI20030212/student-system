@@ -52,7 +52,7 @@ def render_quiz_list_page():
             if q_name not in quiz_names:
                 quiz_names.append(q_name)
 
-    # 🌟 共通化：表を綺麗に装飾する関数（生徒別でも小テスト別でも同じデザインを使えるように！）
+    # 🌟 共通化：表を綺麗に装飾する関数
     def sort_key(c):
         nums = re.findall(r'\d+', str(c))
         return int(nums[0]) if nums else 999
@@ -74,18 +74,25 @@ def render_quiz_list_page():
         def add_icon(val):
             if pd.isna(val) or val == "": return ""
             
+            # 🌟 追加：タブ1から送られてきた「点数|日付」の暗号を解読する
+            date_str = ""
+            score_val = val
+            if isinstance(val, str) and "|" in val:
+                score_val, date_part = val.split("|", 1)
+                date_str = f"\n({date_part})" # 改行して日付を添える
+                
             full_m = 100
             matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{target_q_name}_")]
             if matched_marks:
                 full_m = int(pd.Series(matched_marks).mode()[0])
                     
             try:
-                v = float(val)
+                v = float(score_val)
                 ratio = v / full_m if full_m > 0 else 0
-                if ratio >= 1.0: return f"👑 {int(v)}"
-                elif ratio >= 0.8: return f"🟢 {int(v)}"
-                elif ratio >= 0.2: return f"🟡 {int(v)}"
-                else: return f"🔴 {int(v)}"
+                if ratio >= 1.0: return f"👑 {int(v)}{date_str}"
+                elif ratio >= 0.8: return f"🟢 {int(v)}{date_str}"
+                elif ratio >= 0.2: return f"🟡 {int(v)}{date_str}"
+                else: return f"🔴 {int(v)}{date_str}"
             except:
                 return str(val)
 
@@ -111,7 +118,7 @@ def render_quiz_list_page():
     tab_student, tab_quiz_all = st.tabs(["👤 生徒別データ ＆ 結果入力", "📊 小テスト別 クラス全体マップ"])
 
     # -----------------------------------------------------
-    # タブ1: 生徒別データ ＆ 結果入力（既存の機能）
+    # タブ1: 生徒別データ ＆ 結果入力
     # -----------------------------------------------------
     with tab_student:
         st.write("生徒を一人選択し、結果を入力したり過去の習熟度を確認します。")
@@ -193,9 +200,15 @@ def render_quiz_list_page():
                         last_date = df_quiz_s['日時'].max().strftime("%Y年%m月%d日")
                         st.success(f"📅 前回実施日: **{last_date}**")
 
-                        best_scores = df_quiz_s.groupby(['テキスト', '単元'])['点数'].max().reset_index()
-                        best_scores = best_scores.rename(columns={'テキスト': '小テスト名', '点数': '最高点数'})
-
+                        # 🌟 変更点：最高点数を取った時の「行（インデックス）」を特定して、日付も取得する！
+                        idx = df_quiz_s.groupby(['テキスト', '単元'])['点数'].idxmax()
+                        best_scores = df_quiz_s.loc[idx].copy()
+                        
+                        # 「点数|日付」の暗号データを作る
+                        best_scores['表示用日付'] = best_scores['日時'].dt.strftime('%m/%d').fillna('--/--')
+                        best_scores['日付付き点数'] = best_scores['点数'].astype(int).astype(str) + "|" + best_scores['表示用日付']
+                        
+                        best_scores = best_scores.rename(columns={'テキスト': '小テスト名'})
                         quiz_list = best_scores['小テスト名'].unique().tolist()
                         
                         if quiz_list:
@@ -207,18 +220,17 @@ def render_quiz_list_page():
                                     pivot_df = df_display.pivot_table(
                                         index='小テスト名', 
                                         columns='単元', 
-                                        values='最高点数', 
-                                        aggfunc='max'
+                                        values='日付付き点数', # 🌟 暗号データを渡す
+                                        aggfunc='first'        # 🌟 文字列なのでmaxではなくfirstにする
                                     )
                                     
                                     if not pivot_df.empty:
                                         pivot_df = pivot_df[sorted(pivot_df.columns.tolist(), key=sort_key)]
-                                        # 🌟 新設した共通スタイリング関数を適用
                                         styled_df = style_pivot_dataframe(pivot_df, q_name)
                                         st.dataframe(styled_df, use_container_width=True)
 
     # -----------------------------------------------------
-    # タブ2: 小テスト別 クラス全体マップ（新機能！）
+    # タブ2: 小テスト別 クラス全体マップ
     # -----------------------------------------------------
     with tab_quiz_all:
         st.write("特定の小テストを選択すると、それを解いた生徒全員の進捗と最高点数を一覧で確認できます✨")
@@ -226,9 +238,7 @@ def render_quiz_list_page():
         if df_all_quizzes.empty or "APIエラー発生" in df_all_quizzes.columns:
             st.info("小テストの記録がまだありません。")
         else:
-            # 誰かが記録を持っている小テストだけをリストアップ
             taken_quizzes = [q for q in df_all_quizzes['テキスト'].dropna().unique().tolist() if q]
-            
             selected_quiz_for_map = st.selectbox("📚 マップを表示する小テストを選択", taken_quizzes, index=None, placeholder="-- 小テストを選択 --")
             
             if selected_quiz_for_map:
@@ -239,10 +249,9 @@ def render_quiz_list_page():
                 if df_q.empty:
                     st.info("有効な点数記録がありません。")
                 else:
-                    # 全生徒の最高点を算出
+                    # 🌟 タブ2は日付なしの従来の処理（点数のみ）
                     best_scores_all = df_q.groupby(['名前', '単元'])['点数'].max().reset_index()
                     
-                    # ピボットテーブル作成: 行=生徒名、列=単元、値=点数
                     pivot_all = best_scores_all.pivot_table(
                         index='名前',
                         columns='単元',
@@ -251,10 +260,8 @@ def render_quiz_list_page():
                     )
                     
                     if not pivot_all.empty:
-                        # 列（単元）をソート
                         pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
                         
                         st.markdown(f"### 📊 【{selected_quiz_for_map}】 クラス全体マップ")
-                        # 🌟 共通スタイリング関数を適用（生徒名がインデックスになっても綺麗に動きます！）
                         styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
                         st.dataframe(styled_all_df, use_container_width=True)
