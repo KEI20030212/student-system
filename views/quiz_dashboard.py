@@ -198,7 +198,7 @@ def render_quiz_list_page():
                         df_quiz_s_sorted = df_quiz_s.sort_values(by=['テキスト', '単元', '日時'], ascending=[True, True, False])
                         latest_records = df_quiz_s_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first').copy()
                         latest_records = pd.merge(latest_records, attempt_counts, on=['テキスト', '単元'], how='left')
-                        latest_records['実施日'] = latest_records['日時'].dt.strftime('%Y/%m/%d')
+                        latest_records['実施日'] = latest_records['日時'].dt.strftime('%y/%m/%d')
                         latest_records['挑戦回数'] = latest_records['挑戦回数'].astype(str) + "回"
                         
                         latest_records = latest_records.rename(columns={'テキスト': '小テスト名', '点数': '最新点数'})
