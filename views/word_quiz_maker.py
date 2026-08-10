@@ -78,9 +78,9 @@ def render_word_quiz_maker_page():
             ranges, p_size = ["A1:AB27", "A29:AB55", "AC1:BD27", "AC29:BD55"], "A3"
             portrait_val = "false" 
         elif quiz_name == "一問一答(理科)":
-            ranges, p_size = ["A1:M18", "N1:Z18"], "A4"
+            ranges, p_size = ["A1:I23", "J1:R23"], "B5"
         elif quiz_name == "一問一答(社会)":
-            ranges, p_size = ["A1:M18", "N1:Z18"], "A4"
+            ranges, p_size = ["A1:I23", "J1:R23"], "B5"
         elif quiz_name == "キクタン8問(東)":
             ranges, p_size = ["A1:I18", "J1:R18"], "B5" 
         elif quiz_name == "キクタン16問(東)":
