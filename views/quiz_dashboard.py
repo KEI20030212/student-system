@@ -195,24 +195,24 @@ def render_quiz_list_page():
                         st.success(f"📅 前回実施日: **{last_date}**")
 
                         attempt_counts = df_quiz_s.groupby(['テキスト', '単元']).size().reset_index(name='挑戦回数')
-                        df_quiz_s_sorted = df_quiz_s.sort_values(by=['テキスト', '単元', '点数', '日時'], ascending=[True, True, False, False])
-                        best_records = df_quiz_s_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first').copy()
-                        best_records = pd.merge(best_records, attempt_counts, on=['テキスト', '単元'], how='left')
+                        df_quiz_s_sorted = df_quiz_s.sort_values(by=['テキスト', '単元', '日時'], ascending=[True, True, False])
+                        latest_records = df_quiz_s_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first').copy()
+                        latest_records = pd.merge(latest_records, attempt_counts, on=['テキスト', '単元'], how='left')
+                        latest_records['実施日'] = latest_records['日時'].dt.strftime('%Y/%m/%d')
+                        latest_records['挑戦回数'] = latest_records['挑戦回数'].astype(str) + "回"
                         
-                        best_records['実施日'] = best_records['日時'].dt.strftime('%y/%m/%d')
-                        best_records['挑戦回数'] = best_records['挑戦回数'].astype(str) + "回"
-                        best_records = best_records.rename(columns={'テキスト': '小テスト名', '点数': '最高点数'})
+                        latest_records = latest_records.rename(columns={'テキスト': '小テスト名', '点数': '最新点数'})
 
-                        quiz_list = best_records['小テスト名'].unique().tolist()
+                        quiz_list = latest_records['小テスト名'].unique().tolist()
                         
                         if quiz_list:
                             s_tabs = st.tabs(quiz_list)
                             for i, q_name in enumerate(quiz_list):
                                 with s_tabs[i]: 
-                                    df_display = best_records[best_records['小テスト名'] == q_name]
+                                    df_display = latest_records[latest_records['小テスト名'] == q_name]
                                     
-                                    # 🌟 行に「最高点数」「挑戦回数」「実施日」、列に「単元」が来るように変換（転置: T）
-                                    pivot_df = df_display[['単元', '最高点数', '挑戦回数', '実施日']].set_index('単元').T
+                                    # 🌟 行に「最新点数」「挑戦回数」「実施日」、列に「単元」が来るように変換（転置: T）
+                                    pivot_df = df_display[['単元', '最新点数', '挑戦回数', '実施日']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
                                         # 単元番号順に並べ替え
