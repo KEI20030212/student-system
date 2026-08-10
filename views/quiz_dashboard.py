@@ -202,7 +202,7 @@ def render_quiz_list_page():
                         best_records = df_quiz_s_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first').copy()
                         
                         # 日付を見やすい形式（MM/DD）で文字列化して追加
-                        best_records['実施日'] = best_records['日時'].dt.strftime('%m/%d')
+                        best_records['実施日'] = best_records['日時'].dt.strftime('%y/%m/%d')
                         best_records = best_records.rename(columns={'テキスト': '小テスト名', '点数': '最高点数'})
 
                         quiz_list = best_records['小テスト名'].unique().tolist()
