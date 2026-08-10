@@ -74,25 +74,19 @@ def render_quiz_list_page():
         def add_icon(val):
             if pd.isna(val) or val == "": return ""
             
-            # 🌟 追加：タブ1から送られてきた「点数|日付」の暗号を解読する
-            date_str = ""
-            score_val = val
-            if isinstance(val, str) and "|" in val:
-                score_val, date_part = val.split("|", 1)
-                date_str = f"\n({date_part})" # 改行して日付を添える
-                
             full_m = 100
             matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{target_q_name}_")]
             if matched_marks:
                 full_m = int(pd.Series(matched_marks).mode()[0])
                     
             try:
-                v = float(score_val)
+                # 🌟 数字（点数）ならアイコンを付ける。日付（例: 08/10）ならそのまま返す
+                v = float(val)
                 ratio = v / full_m if full_m > 0 else 0
-                if ratio >= 1.0: return f"👑 {int(v)}{date_str}"
-                elif ratio >= 0.8: return f"🟢 {int(v)}{date_str}"
-                elif ratio >= 0.2: return f"🟡 {int(v)}{date_str}"
-                else: return f"🔴 {int(v)}{date_str}"
+                if ratio >= 1.0: return f"👑 {int(v)}"
+                elif ratio >= 0.8: return f"🟢 {int(v)}"
+                elif ratio >= 0.2: return f"🟡 {int(v)}"
+                else: return f"🔴 {int(v)}"
             except:
                 return str(val)
 
@@ -118,7 +112,7 @@ def render_quiz_list_page():
     tab_student, tab_quiz_all = st.tabs(["👤 生徒別データ ＆ 結果入力", "📊 小テスト別 クラス全体マップ"])
 
     # -----------------------------------------------------
-    # タブ1: 生徒別データ ＆ 結果入力
+    # タブ1: 生徒別データ ＆ 結果入力（既存の機能）
     # -----------------------------------------------------
     with tab_student:
         st.write("生徒を一人選択し、結果を入力したり過去の習熟度を確認します。")
@@ -200,37 +194,39 @@ def render_quiz_list_page():
                         last_date = df_quiz_s['日時'].max().strftime("%Y年%m月%d日")
                         st.success(f"📅 前回実施日: **{last_date}**")
 
-                        # 🌟 変更点：最高点数を取った時の「行（インデックス）」を特定して、日付も取得する！
-                        idx = df_quiz_s.groupby(['テキスト', '単元'])['点数'].idxmax()
-                        best_scores = df_quiz_s.loc[idx].copy()
+                        # ==========================================
+                        # 🌟 修正：点数と実施日の「2行」になるようにデータを整形！
+                        # ==========================================
+                        # 点数順（同点なら日付が新しい順）に並べ替えて重複を削除し、各単元の「最高記録」を取得
+                        df_quiz_s_sorted = df_quiz_s.sort_values(by=['テキスト', '単元', '点数', '日時'], ascending=[True, True, False, False])
+                        best_records = df_quiz_s_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first').copy()
                         
-                        # 「点数|日付」の暗号データを作る
-                        best_scores['表示用日付'] = best_scores['日時'].dt.strftime('%m/%d').fillna('--/--')
-                        best_scores['日付付き点数'] = best_scores['点数'].astype(int).astype(str) + "|" + best_scores['表示用日付']
-                        
-                        best_scores = best_scores.rename(columns={'テキスト': '小テスト名'})
-                        quiz_list = best_scores['小テスト名'].unique().tolist()
+                        # 日付を見やすい形式（MM/DD）で文字列化して追加
+                        best_records['実施日'] = best_records['日時'].dt.strftime('%m/%d')
+                        best_records = best_records.rename(columns={'テキスト': '小テスト名', '点数': '最高点数'})
+
+                        quiz_list = best_records['小テスト名'].unique().tolist()
                         
                         if quiz_list:
                             s_tabs = st.tabs(quiz_list)
                             for i, q_name in enumerate(quiz_list):
                                 with s_tabs[i]: 
-                                    df_display = best_scores[best_scores['小テスト名'] == q_name]
+                                    df_display = best_records[best_records['小テスト名'] == q_name]
                                     
-                                    pivot_df = df_display.pivot_table(
-                                        index='小テスト名', 
-                                        columns='単元', 
-                                        values='日付付き点数', # 🌟 暗号データを渡す
-                                        aggfunc='first'        # 🌟 文字列なのでmaxではなくfirstにする
-                                    )
+                                    # 🌟 行に「最高点数」と「実施日」、列に「単元」が来るように変換（転置: T）
+                                    pivot_df = df_display[['単元', '最高点数', '実施日']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
+                                        # 単元番号順に並べ替え
                                         pivot_df = pivot_df[sorted(pivot_df.columns.tolist(), key=sort_key)]
+                                        pivot_df.index.name = None # 左上の項目名を消してスッキリさせる
+                                        
+                                        # 🌟 共通スタイリング関数を適用（日付には色が付きません）
                                         styled_df = style_pivot_dataframe(pivot_df, q_name)
                                         st.dataframe(styled_df, use_container_width=True)
 
     # -----------------------------------------------------
-    # タブ2: 小テスト別 クラス全体マップ
+    # タブ2: 小テスト別 クラス全体マップ（既存の機能のまま変更なし）
     # -----------------------------------------------------
     with tab_quiz_all:
         st.write("特定の小テストを選択すると、それを解いた生徒全員の進捗と最高点数を一覧で確認できます✨")
@@ -249,9 +245,7 @@ def render_quiz_list_page():
                 if df_q.empty:
                     st.info("有効な点数記録がありません。")
                 else:
-                    # 🌟 タブ2は日付なしの従来の処理（点数のみ）
                     best_scores_all = df_q.groupby(['名前', '単元'])['点数'].max().reset_index()
-                    
                     pivot_all = best_scores_all.pivot_table(
                         index='名前',
                         columns='単元',
@@ -261,7 +255,6 @@ def render_quiz_list_page():
                     
                     if not pivot_all.empty:
                         pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
-                        
                         st.markdown(f"### 📊 【{selected_quiz_for_map}】 クラス全体マップ")
                         styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
                         st.dataframe(styled_all_df, use_container_width=True)
