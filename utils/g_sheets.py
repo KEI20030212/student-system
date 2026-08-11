@@ -1658,6 +1658,7 @@ def save_parent_reply(date_str, student_id, student_name, teacher_name, reaction
     except:
         return False
 
+@st.cache_data(ttl=60, show_spinner=False)
 def load_parent_reply_data():
     """保護者からの返信・リアクション履歴をすべて取得する"""
     try:
