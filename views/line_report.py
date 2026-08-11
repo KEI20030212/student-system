@@ -2,7 +2,6 @@ import streamlit as st
 from views.line_report_generate import render_report_generation_tab
 from views.line_report_reply import render_parent_reply_tab
 from views.line_parent_reply_dashboard import render_parent_reply_dashboard
-# 🌟 追加：新しく作った画像生成ファイルを呼び出す
 from views.line_monthly_report import render_monthly_visual_report_tab
 
 def render_line_report_page():
