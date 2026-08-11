@@ -5,7 +5,7 @@ from utils.g_sheets import (
     save_parent_reply,
     get_student_master,
     get_all_teacher_names,
-    get_parent_replies  # 🌟 ここをご自身の関数名に書き換えてください！
+    load_parent_reply_data
 )
 from utils.api_guard import robust_api_call
 
@@ -82,7 +82,7 @@ def render_parent_reply_tab():
                         )
                         if success:
                             st.toast(f"{student_name} さんの返信を記録しました！", icon="✅")
-                            get_parent_replies.clear()
+                            load_parent_reply_data.clear()
                         else:
                             st.error("❌ スプレッドシートへの保存に失敗しました。")
 
@@ -90,7 +90,7 @@ def render_parent_reply_tab():
         # 🌟 追加：過去のリアクション履歴アコーディオン
         # ==========================================
         st.write("")
-        df_replies = robust_api_call(get_parent_replies, fallback_value=pd.DataFrame())
+        df_replies = robust_api_call(load_parent_reply_data, fallback_value=pd.DataFrame())
         
         if not df_replies.empty and "APIエラー発生" not in df_replies.columns:
             # 汎用的にカラム名を取得（スプレッドシートの実際の見出しに合わせます）
