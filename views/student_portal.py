@@ -4,19 +4,24 @@ import pandas as pd
 import datetime
 import re
 
-# 🌟 新しく追加した move_student_to_inactive_sheet をインポート
+# 🌟 get_all_logs を追加でインポート
 from utils.g_sheets import (
     get_student_master, 
     get_student_info, 
     update_student_info,
-    move_student_to_inactive_sheet
+    move_student_to_inactive_sheet,
+    get_all_logs 
 )
 from utils.api_guard import robust_api_call
 
 from views.student_details import render_student_details_page
 from views.analysis import render_analysis_page
 from views.conference_report import render_conference_report
-from views.admin_tools import render_admin_tools_page # 🌟 追加：一括進級ツールを読み込む
+from views.admin_tools import render_admin_tools_page 
+
+# 🌟 修正：裏側でキャッシュされているので、二重キャッシュ防止のため@st.cache_dataを削除！
+def cached_get_all_logs():
+    return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
 
 def render_student_portal_page():
     col_title, col_toggle = st.columns([3, 1])
@@ -61,8 +66,55 @@ def render_student_portal_page():
                 st.success(st.session_state['flash_success_msg'])
                 del st.session_state['flash_success_msg'] 
             
-            # 🌟 ここに追加！「管理ツール（一括進級）」を一番上に表示
             st.divider()
+            
+            # ==========================================
+            # 🚨 追加：サイレントアラート（授業態度の悪化検知）
+            # ==========================================
+            df_logs = cached_get_all_logs()
+            alert_students = []
+            
+            if not df_logs.empty and "APIエラー発生" not in df_logs.columns:
+                name_col = '生徒名' if '生徒名' in df_logs.columns else '名前'
+                if name_col in df_logs.columns and '集中力' in df_logs.columns and 'ミスへの反応' in df_logs.columns:
+                    df_logs['日時'] = pd.to_datetime(df_logs['日時'], format='mixed', errors='coerce')
+                    
+                    # 生徒ごとに直近5回のログをチェック
+                    for student_name, group in df_logs.groupby(name_col):
+                        recent_logs = group.sort_values('日時', ascending=False).head(5)
+                        if len(recent_logs) < 3: 
+                            continue # データが少なすぎる場合は判定をスキップ
+                            
+                        neg_count = 0
+                        for _, row in recent_logs.iterrows():
+                            conc = str(row.get('集中力', ''))
+                            reac = str(row.get('ミスへの反応', ''))
+                            # ネガティブなログをカウント
+                            if conc in ["疲労気味", "ムラあり", "集中できない"] or reac in ["放置しようとした"]:
+                                neg_count += 1
+                                
+                        ratio = neg_count / len(recent_logs)
+                        # 🌟 40%以上（5回中2回以上）ネガティブな記録があればアラート！
+                        if ratio >= 0.4: 
+                            alert_students.append({
+                                "name": student_name,
+                                "ratio": int(ratio * 100),
+                                "count": neg_count,
+                                "total": len(recent_logs)
+                            })
+                            
+            if alert_students:
+                # 危険度（割合）が高い順に並べ替え
+                alert_students = sorted(alert_students, key=lambda x: x["ratio"], reverse=True)
+                
+                with st.container(border=True):
+                    st.error("🚨 **【退塾予備軍アラート】最近の授業でネガティブな様子が目立つ生徒**")
+                    st.caption("直近の授業ログで「疲労気味」「集中できない」「放置しようとした」等が40%以上記録された生徒です。早めの声かけや面談を検討してください。")
+                    for ast in alert_students:
+                        st.markdown(f"- 👤 **{ast['name']}** さん （直近{ast['total']}回中 **{ast['count']}回** / 危険度 **{ast['ratio']}%**）")
+                st.write("")
+            # ==========================================
+
             render_admin_tools_page()
             st.divider()
 
@@ -74,7 +126,8 @@ def render_student_portal_page():
                         st.markdown("##### 📝 基本情報の入力")
                         
                         branch_opts = {
-                            "池上校": "i",
+                            "田端新町校": "t",
+                            "東十条校": "h",
                             "プレフィックスなし (数字のみ)": ""
                         }
                         selected_branch_key = st.selectbox("🏫 所属校舎（生徒IDの頭文字になります）", list(branch_opts.keys()), index=0)
