@@ -20,14 +20,7 @@ def get_teacher_list():
     return list(lst)
 
 def render_parent_reply_dashboard():
-    col_h, col_r = st.columns([0.8, 0.2])
-    with col_h:
-        st.header("💬 保護者リアクション検索ダッシュボード")
-    with col_r:
-        if st.button("🔄 データを更新", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-            
+    st.header("💬 保護者リアクション検索ダッシュボード")
     st.write("LINE報告に対する保護者様からの過去のリアクションを、タイムライン形式で一覧表示・検索できる画面です。")
     
     # データの読み込み
