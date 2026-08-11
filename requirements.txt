@@ -9,5 +9,4 @@ pypdf
 google-api-python-client
 google-auth
 plotly
-japanize-matplotlib
 ortools
