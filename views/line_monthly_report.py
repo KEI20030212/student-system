@@ -44,18 +44,39 @@ def cached_load_quiz_records():
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-# --- 画像描画ロジック ---
+# --- 画像描画ロジック（デザイン大改造・プロフェッショナル版） ---
 def create_report_image(student_name, target_month_str, df_logs, df_quiz):
-    # 画像のキャンバスを用意（スマホで見やすい縦長サイズ）
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12), gridspec_kw={'height_ratios': [1, 2]})
-    fig.patch.set_facecolor('#f8f9fa') # 優しい背景色
+    # 🌟 デザイン設定（Tailwind CSS風のモダンカラーパレット）
+    COLOR_BG = "#F1F5F9"        # 全体背景（薄いグレー）
+    COLOR_HEADER = "#0F172A"    # 一番上のヘッダー帯（濃いネイビー）
+    COLOR_TEXT_MAIN = "#1E293B" # メインテキスト（濃いグレー）
+    COLOR_TEXT_SUB = "#64748B"  # サブテキスト（中間グレー）
+    COLOR_BAR = "#3B82F6"       # 棒グラフ（爽やかなブルー）
     
-    # 🌟 タイトル
-    fig.suptitle(f"{student_name} さん 月末学習レポート\n【 {target_month_str} 】", fontsize=24, fontweight='bold', color='#333333', y=0.95)
+    # 画像のキャンバスを用意
+    fig = plt.figure(figsize=(10, 14), facecolor=COLOR_BG)
+    gs = fig.add_gridspec(3, 1, height_ratios=[0.8, 2.5, 6])
     
     # ==========================================
-    # 📊 1. 今月の学習量（科目別コマ数グラフ）
+    # 🎨 1. ヘッダーエリア（リッチな帯）
     # ==========================================
+    ax_head = fig.add_subplot(gs[0])
+    ax_head.axis('off')
+    # ヘッダーの背景帯を描画
+    ax_head.add_patch(plt.Rectangle((0, 0), 1, 1, transform=ax_head.transAxes, color=COLOR_HEADER, zorder=-1))
+    
+    # 文字の配置
+    ax_head.text(0.05, 0.7, "Monthly Learning Report", color='#94A3B8', fontsize=14, fontweight='bold', transform=ax_head.transAxes)
+    ax_head.text(0.05, 0.3, f"{student_name} さんの学習レポート", color='white', fontsize=26, fontweight='bold', transform=ax_head.transAxes)
+    ax_head.text(0.95, 0.3, f"{target_month_str}", color='#38BDF8', fontsize=22, fontweight='bold', ha='right', transform=ax_head.transAxes)
+
+    # ==========================================
+    # 📊 2. 今月の学習量（モダンな棒グラフ）
+    # ==========================================
+    ax_graph = fig.add_subplot(gs[1])
+    ax_graph.set_facecolor(COLOR_BG)
+    ax_graph.set_title("今月の受講状況", fontsize=18, fontweight='bold', color=COLOR_TEXT_MAIN, loc='left', pad=15)
+    
     name_col_log = '生徒名' if '生徒名' in df_logs.columns else '名前'
     df_student_logs = df_logs[df_logs[name_col_log] == student_name].copy()
     
@@ -67,87 +88,133 @@ def create_report_image(student_name, target_month_str, df_logs, df_quiz):
         if not df_month_logs.empty and '科目' in df_month_logs.columns:
             subject_counts = df_month_logs['科目'].value_counts()
             
-            # 横棒グラフを描画
-            bars = ax1.barh(subject_counts.index, subject_counts.values, color='#4CAF50', height=0.6)
-            ax1.set_title("📚 今月の受講状況（科目別 授業回数）", fontsize=18, fontweight='bold', color='#555555')
-            ax1.set_xlabel("回数 (コマ)", fontsize=14)
-            ax1.tick_params(axis='both', which='major', labelsize=14)
-            ax1.invert_yaxis() # 上から多い順にする
+            y_pos = range(len(subject_counts))
+            bars = ax_graph.barh(y_pos, subject_counts.values, color=COLOR_BAR, height=0.4)
             
-            # 棒の横に数字を書く
+            # 軸の装飾
+            ax_graph.set_yticks(y_pos)
+            ax_graph.set_yticklabels(subject_counts.index, fontsize=14, fontweight='bold', color=COLOR_TEXT_MAIN)
+            ax_graph.invert_yaxis() # 上から多い順
+            
+            # 不要な枠線や目盛りを完全に消してスタイリッシュに！
+            for spine in ax_graph.spines.values():
+                spine.set_visible(False)
+            ax_graph.xaxis.set_visible(False)
+            ax_graph.tick_params(axis='y', length=0, pad=10)
+            
+            # 棒の右側に直接数値を書く
             for bar in bars:
-                ax1.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2, 
-                         f"{int(bar.get_width())} 回", 
-                         va='center', fontsize=14, fontweight='bold', color='#333333')
+                width = bar.get_width()
+                ax_graph.text(width + 0.15, bar.get_y() + bar.get_height()/2, 
+                              f"{int(width)} コマ", 
+                              va='center', fontsize=14, fontweight='bold', color=COLOR_BAR)
         else:
-            ax1.text(0.5, 0.5, "今月の授業データがありません", ha='center', va='center', fontsize=16)
-            ax1.axis('off')
+            ax_graph.text(0.5, 0.5, "今月の受講データがありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
+            ax_graph.axis('off')
     else:
-        ax1.text(0.5, 0.5, "授業データがありません", ha='center', va='center', fontsize=16)
-        ax1.axis('off')
-        
+        ax_graph.text(0.5, 0.5, "授業データがありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
+        ax_graph.axis('off')
+
     # ==========================================
-    # 👑 2. 今までの小テスト習熟度（色付き表）
+    # 👑 3. 小テスト習熟度（Webデザイン風の美しい表）
     # ==========================================
-    ax2.set_title("👑 これまでの小テスト習熟度", fontsize=18, fontweight='bold', color='#555555')
-    ax2.axis('off') # グラフの軸を消して表だけにする
+    ax_table = fig.add_subplot(gs[2])
+    ax_table.axis('off')
+    ax_table.set_title("最近の小テスト習熟度", fontsize=18, fontweight='bold', color=COLOR_TEXT_MAIN, loc='left', pad=15)
     
     name_col_quiz = '生徒名' if '生徒名' in df_quiz.columns else '名前'
     df_student_quiz = df_quiz[df_quiz[name_col_quiz] == student_name].copy()
     
     if not df_student_quiz.empty:
         df_student_quiz['日時'] = pd.to_datetime(df_student_quiz['日時'], format='mixed', errors='coerce')
-        # 最新の記録だけを残す
         df_quiz_sorted = df_student_quiz.sort_values(by=['テキスト', '単元', '日時'], ascending=[True, True, False])
         latest_quiz = df_quiz_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first')
         
-        # 表のデータを作る（最新15件くらいに絞る）
-        display_data = latest_quiz.head(15)
+        display_data = latest_quiz.head(12) # 見やすさ重視で最大12件
         
         cell_text = []
         cell_colors = []
+        text_colors = []
+        
         for _, row in display_data.iterrows():
             text = str(row.get('テキスト', ''))
             unit = str(row.get('単元', ''))
             score_raw = row.get('点数', 0)
-            date_str = row['日時'].strftime('%Y/%m/%d') if pd.notna(row['日時']) else ""
+            date_str = row['日時'].strftime('%m/%d') if pd.notna(row['日時']) else ""
             
             try: score = float(score_raw)
             except: score = 0
             
-            score_text = f"👑 {int(score)} 点" if score >= 100 else f"🔴 {int(score)} 点" if score < 80 else f"🟢 {int(score)} 点"
-            
-            # 色分けロジック
-            color = "#ffebee" # 🔴 赤系（80点未満）
-            if score >= 100: color = "#fff8e1" # 👑 金系（100点）
-            elif score >= 80: color = "#e8f5e9" # 🟢 緑系（80点以上）
+            # 点数に応じたステータスカラー
+            if score >= 100:
+                bg_c = "#FEF9C3" # 薄い黄色
+                txt_c = "#854D0E" # 濃い茶色
+                s_txt = f"👑 {int(score)}点"
+            elif score >= 80:
+                bg_c = "#DCFCE7" # 薄い緑
+                txt_c = "#166534" # 濃い緑
+                s_txt = f"🟢 {int(score)}点"
+            else:
+                bg_c = "#FEE2E2" # 薄い赤
+                txt_c = "#991B1B" # 濃い赤
+                s_txt = f"🔴 {int(score)}点"
                 
-            cell_text.append([text, unit, score_text, date_str])
-            cell_colors.append(["#ffffff", "#ffffff", color, "#ffffff"])
+            # 文字列を適度な長さにカットしてレイアウト崩れを防ぐ
+            if len(text) > 10: text = text[:9] + "…"
+            if len(unit) > 12: unit = unit[:11] + "…"
+                
+            cell_text.append([date_str, text, unit, s_txt])
+            cell_colors.append(["", "", "", bg_c])
+            text_colors.append([COLOR_TEXT_MAIN, COLOR_TEXT_MAIN, COLOR_TEXT_MAIN, txt_c])
             
         if cell_text:
-            col_labels = ["テキスト名", "単元", "最新点数", "最終実施日"]
-            table = ax2.table(cellText=cell_text, cellColours=cell_colors, colLabels=col_labels, loc='center', cellLoc='center', bbox=[0.05, 0.1, 0.9, 0.8])
+            col_labels = ["実施日", "テキスト名", "単元名", "点数・評価"]
+            # bboxを指定して表を画面いっぱいに広げ、ゆとりを持たせる
+            table = ax_table.table(cellText=cell_text, colLabels=col_labels, loc='center', cellLoc='center', bbox=[0, 0, 1, 1])
             table.auto_set_font_size(False)
-            table.set_fontsize(12)
+            table.set_fontsize(13)
             
-            # ヘッダーの色付け
-            for j, label in enumerate(col_labels):
-                table[(0, j)].set_facecolor('#e0e0e0')
-                table[(0, j)].set_text_props(weight='bold')
+            # 🌟 表のデザインを徹底的に作り込む
+            for (row, col), cell in table.get_celld().items():
+                # 罫線を背景色と同じにして「見えない太枠（パディング）」のように扱う
+                cell.set_edgecolor(COLOR_BG)
+                cell.set_linewidth(5)
+                
+                if row == 0:
+                    # ヘッダー行
+                    cell.set_facecolor('#E2E8F0')
+                    cell.set_text_props(color=COLOR_TEXT_SUB, fontweight='bold')
+                else:
+                    # 行ごとに背景色を交互に変える（ストライプ）
+                    if row % 2 == 1:
+                        cell.set_facecolor('#FFFFFF')
+                    else:
+                        cell.set_facecolor('#F8FAFC')
+                        
+                    # セルの文字色を設定
+                    cell.set_text_props(color=text_colors[row-1][col], fontweight='normal')
+                    
+                    # 🌟 点数列（一番右）のみ特別デザイン
+                    if col == 3:
+                        cell.set_facecolor(cell_colors[row-1][3])
+                        cell.set_text_props(fontweight='bold')
+                        
+            # 列幅の調整
+            table.auto_set_column_width(col=[0, 3])
+            
         else:
-            ax2.text(0.5, 0.5, "小テストの記録がありません", ha='center', va='center', fontsize=16)
+            ax_table.text(0.5, 0.5, "小テストの記録がありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
     else:
-        ax2.text(0.5, 0.5, "小テストの記録がありません", ha='center', va='center', fontsize=16)
+        ax_table.text(0.5, 0.5, "小テストの記録がありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
 
-    # 署名
-    fig.text(0.95, 0.02, "Powered by 教室管理システム", fontsize=10, color='gray', ha='right')
+    # 署名（フッター）
+    fig.text(0.95, 0.02, "Generated by 教室管理システム", fontsize=10, color='#CBD5E1', ha='right')
 
-    plt.tight_layout(rect=[0, 0.05, 1, 0.92]) # タイトルとフッターの余白調整
+    plt.tight_layout(rect=[0.02, 0.05, 0.98, 0.98], h_pad=3.0) 
     
-    # 画像データとして保存（メモリ上）
+    # 画像データとして保存（超高画質）
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=200, bbox_inches='tight', facecolor=fig.get_facecolor())
+    plt.savefig(buf, format='png', dpi=250, bbox_inches='tight', facecolor=fig.get_facecolor())
     buf.seek(0)
     plt.close(fig)
     return buf.getvalue()
