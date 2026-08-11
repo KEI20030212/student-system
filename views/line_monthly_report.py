@@ -2,10 +2,32 @@ import streamlit as st
 import pandas as pd
 import datetime
 import io
+import os
+import urllib.request
 import matplotlib.pyplot as plt
-import japanize_matplotlib  # 🌟 画像の日本語文字化けを防ぐ神ツール
+import matplotlib.font_manager as fm
+
 from utils.g_sheets import get_all_logs, load_quiz_records, get_student_master
 from utils.api_guard import robust_api_call
+
+# ==========================================
+# 🌟 日本語文字化けを防ぐ最新のプロ仕様関数
+# ==========================================
+@st.cache_resource
+def setup_japanese_font():
+    font_path = "NotoSansJP-Regular.ttf"
+    
+    # サーバーにフォントファイルが無ければ、Google公式から直接ダウンロード
+    if not os.path.exists(font_path):
+        url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Regular.ttf"
+        urllib.request.urlretrieve(url, font_path)
+        
+    # ダウンロードしたフォントをMatplotlib（画像描画ツール）に直接セット
+    fm.fontManager.addfont(font_path)
+    plt.rcParams['font.family'] = 'Noto Sans JP'
+
+# 描画の前にフォント設定を呼び出す（キャッシュにより起動時1回だけ実行されます）
+setup_japanese_font()
 
 # --- キャッシュ関数 ---
 def cached_get_all_logs():
