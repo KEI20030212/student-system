@@ -4,7 +4,8 @@ import pandas as pd
 from utils.g_sheets import (
     save_parent_reply,
     get_student_master,
-    get_all_teacher_names
+    get_all_teacher_names,
+    get_parent_replies  # 🌟 ここをご自身の関数名に書き換えてください！
 )
 from utils.api_guard import robust_api_call
 
@@ -81,5 +82,49 @@ def render_parent_reply_tab():
                         )
                         if success:
                             st.toast(f"{student_name} さんの返信を記録しました！", icon="✅")
+                            get_parent_replies.clear()
                         else:
                             st.error("❌ スプレッドシートへの保存に失敗しました。")
+
+        # ==========================================
+        # 🌟 追加：過去のリアクション履歴アコーディオン
+        # ==========================================
+        st.write("")
+        df_replies = robust_api_call(get_parent_replies, fallback_value=pd.DataFrame())
+        
+        if not df_replies.empty and "APIエラー発生" not in df_replies.columns:
+            # 汎用的にカラム名を取得（スプレッドシートの実際の見出しに合わせます）
+            name_col = '生徒名' if '生徒名' in df_replies.columns else ('名前' if '名前' in df_replies.columns else None)
+            
+            if name_col:
+                student_history = df_replies[df_replies[name_col] == student_name].copy()
+                
+                if not student_history.empty:
+                    # 日付順（新しい順）に並べ替え
+                    date_col = '授業日' if '授業日' in df_replies.columns else ('日付' if '日付' in df_replies.columns else ('日時' if '日時' in df_replies.columns else None))
+                    
+                    if date_col:
+                        student_history[date_col] = pd.to_datetime(student_history[date_col], errors='coerce')
+                        student_history = student_history.sort_values(by=date_col, ascending=False)
+                        
+                    count = len(student_history)
+                    with st.expander(f"📚 {student_name} さんの過去の保護者リアクション履歴 (全{count}件)", expanded=False):
+                        for _, row in student_history.iterrows():
+                            
+                            d_val = row.get(date_col, "日付不明")
+                            if isinstance(d_val, pd.Timestamp) and pd.notna(d_val):
+                                d_val = d_val.strftime('%Y/%m/%d')
+                                
+                            t_val = row.get('担当講師', row.get('講師', '不明'))
+                            reac_val = row.get('評価', row.get('リアクション', row.get('ファン化度', '不明')))
+                            text_val = row.get('内容', row.get('返信内容', row.get('メモ', '')))
+                            
+                            st.markdown(f"**📅 {d_val}** （報告者: {t_val}先生）")
+                            st.markdown(f"**評価:** {reac_val}")
+                            if str(text_val).strip() and str(text_val) != "nan":
+                                st.info(str(text_val).replace('\n', '  \n'))
+                            else:
+                                st.caption("（コメントなし）")
+                            st.divider()
+                else:
+                    st.info(f"💡 {student_name} さんの過去のリアクション記録はまだありません。")

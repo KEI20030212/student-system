@@ -20,11 +20,9 @@ def calculate_page_amount(text):
 def cached_get_all_logs():
     return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
 
-# 🌟 修正：二重キャッシュ防止のため @st.cache_data を削除！
 def cached_load_quiz_records():
     return robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
 
-@st.cache_data(ttl=60)
 def cached_load_parent_reply_data():
     return robust_api_call(load_parent_reply_data, fallback_value=pd.DataFrame())
 
@@ -250,7 +248,6 @@ def render_analytics_dashboard_page():
         with col_r2:
             df_t_react_only = df_t[df_t['保護者リアクション'] != "🔵 既読スルー（自動カウント）"]
             if not df_t_react_only.empty:
-                # 1. groupbyで「先生名・リアクション・件数」の「縦長のリスト」を作る
                 chart_data = df_t_react_only.groupby(['担当講師', '保護者リアクション']).size().reset_index(name='件数')
                 st.bar_chart(chart_data, x='担当講師', y='件数', color='保護者リアクション')
             else:
