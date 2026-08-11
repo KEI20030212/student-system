@@ -11,20 +11,25 @@ from utils.g_sheets import get_all_logs, load_quiz_records, get_student_master
 from utils.api_guard import robust_api_call
 
 # ==========================================
-# 🌟 日本語文字化けを防ぐ最新のプロ仕様関数
+# 🌟 日本語文字化けを防ぐ最新のプロ仕様関数（ブロック回避版）
 # ==========================================
 @st.cache_resource
 def setup_japanese_font():
-    font_path = "NotoSansJP-Regular.ttf"
+    font_path = "BIZUDGothic-Regular.ttf"
     
-    # サーバーにフォントファイルが無ければ、Google公式から直接ダウンロード
+    # サーバーにフォントファイルが無ければダウンロード
     if not os.path.exists(font_path):
-        url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Regular.ttf"
-        urllib.request.urlretrieve(url, font_path)
+        # 🌟 変更点1: 教育現場のレポートに最適な美しいフォント（BIZ UDゴシック）
+        url = "https://raw.githubusercontent.com/googlefonts/morisawa-biz-ud-gothic/main/fonts/ttf/BIZUDGothic-Regular.ttf"
         
+        # 🌟 変更点2: サーバーにブロックされないように「身分証(User-Agent)」を持たせて通信する
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response, open(font_path, 'wb') as out_file:
+            out_file.write(response.read())
+            
     # ダウンロードしたフォントをMatplotlib（画像描画ツール）に直接セット
     fm.fontManager.addfont(font_path)
-    plt.rcParams['font.family'] = 'Noto Sans JP'
+    plt.rcParams['font.family'] = 'BIZ UDGothic'
 
 # 描画の前にフォント設定を呼び出す（キャッシュにより起動時1回だけ実行されます）
 setup_japanese_font()
