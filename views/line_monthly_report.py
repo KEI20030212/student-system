@@ -7,31 +7,25 @@ import urllib.request
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
-from utils.g_sheets import get_all_logs, load_quiz_records, get_student_master
+# 🌟 追加: get_textbook_master をインポート
+from utils.g_sheets import get_all_logs, load_quiz_records, get_student_master, get_textbook_master
 from utils.api_guard import robust_api_call
 
 # ==========================================
-# 🌟 日本語文字化けを防ぐ最新のプロ仕様関数（ブロック回避版）
+# 🌟 日本語文字化けを防ぐ関数
 # ==========================================
 @st.cache_resource
 def setup_japanese_font():
     font_path = "BIZUDGothic-Regular.ttf"
-    
-    # サーバーにフォントファイルが無ければダウンロード
     if not os.path.exists(font_path):
-        # 🌟 変更点1: 教育現場のレポートに最適な美しいフォント（BIZ UDゴシック）
         url = "https://raw.githubusercontent.com/googlefonts/morisawa-biz-ud-gothic/main/fonts/ttf/BIZUDGothic-Regular.ttf"
-        
-        # 🌟 変更点2: サーバーにブロックされないように「身分証(User-Agent)」を持たせて通信する
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response, open(font_path, 'wb') as out_file:
             out_file.write(response.read())
             
-    # ダウンロードしたフォントをMatplotlib（画像描画ツール）に直接セット
     fm.fontManager.addfont(font_path)
     plt.rcParams['font.family'] = 'BIZ UDGothic'
 
-# 描画の前にフォント設定を呼び出す（キャッシュにより起動時1回だけ実行されます）
 setup_japanese_font()
 
 # --- キャッシュ関数 ---
@@ -44,35 +38,39 @@ def cached_load_quiz_records():
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-# --- 画像描画ロジック（デザイン大改造・プロフェッショナル版） ---
-def create_report_image(student_name, target_month_str, df_logs, df_quiz):
-    # 🌟 デザイン設定（Tailwind CSS風のモダンカラーパレット）
-    COLOR_BG = "#F1F5F9"        # 全体背景（薄いグレー）
-    COLOR_HEADER = "#0F172A"    # 一番上のヘッダー帯（濃いネイビー）
-    COLOR_TEXT_MAIN = "#1E293B" # メインテキスト（濃いグレー）
-    COLOR_TEXT_SUB = "#64748B"  # サブテキスト（中間グレー）
-    COLOR_BAR = "#3B82F6"       # 棒グラフ（爽やかなブルー）
+# 🌟 追加: テキストマスタ（分母）を取得する関数
+def cached_get_textbook_master():
+    return robust_api_call(get_textbook_master, fallback_value={})
+
+# ==========================================
+# 🎨 画像描画ロジック（プログレスバー進化版）
+# ==========================================
+def create_report_image(student_name, target_month_str, df_logs, df_quiz, tb_master):
+    # デザイン設定（モダンカラーパレット）
+    COLOR_BG = "#F1F5F9"
+    COLOR_HEADER = "#0F172A"
+    COLOR_TEXT_MAIN = "#1E293B"
+    COLOR_TEXT_SUB = "#64748B"
+    COLOR_BAR_FILL = "#3B82F6" # プログレスバーの鮮やかな青
+    COLOR_BAR_BG = "#E2E8F0"   # プログレスバーの背景グレー
     
-    # 画像のキャンバスを用意
     fig = plt.figure(figsize=(10, 14), facecolor=COLOR_BG)
     gs = fig.add_gridspec(3, 1, height_ratios=[0.8, 2.5, 6])
     
-    # ==========================================
-    # 🎨 1. ヘッダーエリア（リッチな帯）
-    # ==========================================
+    # ------------------------------------------
+    # 1. ヘッダーエリア
+    # ------------------------------------------
     ax_head = fig.add_subplot(gs[0])
     ax_head.axis('off')
-    # ヘッダーの背景帯を描画
     ax_head.add_patch(plt.Rectangle((0, 0), 1, 1, transform=ax_head.transAxes, color=COLOR_HEADER, zorder=-1))
     
-    # 文字の配置
     ax_head.text(0.05, 0.7, "Monthly Learning Report", color='#94A3B8', fontsize=14, fontweight='bold', transform=ax_head.transAxes)
     ax_head.text(0.05, 0.3, f"{student_name} さんの学習レポート", color='white', fontsize=26, fontweight='bold', transform=ax_head.transAxes)
     ax_head.text(0.95, 0.3, f"{target_month_str}", color='#38BDF8', fontsize=22, fontweight='bold', ha='right', transform=ax_head.transAxes)
 
-    # ==========================================
-    # 📊 2. 今月の学習量（モダンな棒グラフ）
-    # ==========================================
+    # ------------------------------------------
+    # 2. 今月の学習量（コマ数）
+    # ------------------------------------------
     ax_graph = fig.add_subplot(gs[1])
     ax_graph.set_facecolor(COLOR_BG)
     ax_graph.set_title("今月の受講状況", fontsize=18, fontweight='bold', color=COLOR_TEXT_MAIN, loc='left', pad=15)
@@ -87,27 +85,21 @@ def create_report_image(student_name, target_month_str, df_logs, df_quiz):
         
         if not df_month_logs.empty and '科目' in df_month_logs.columns:
             subject_counts = df_month_logs['科目'].value_counts()
-            
             y_pos = range(len(subject_counts))
-            bars = ax_graph.barh(y_pos, subject_counts.values, color=COLOR_BAR, height=0.4)
+            bars = ax_graph.barh(y_pos, subject_counts.values, color=COLOR_BAR_FILL, height=0.4)
             
-            # 軸の装飾
             ax_graph.set_yticks(y_pos)
             ax_graph.set_yticklabels(subject_counts.index, fontsize=14, fontweight='bold', color=COLOR_TEXT_MAIN)
-            ax_graph.invert_yaxis() # 上から多い順
+            ax_graph.invert_yaxis() 
             
-            # 不要な枠線や目盛りを完全に消してスタイリッシュに！
-            for spine in ax_graph.spines.values():
-                spine.set_visible(False)
+            for spine in ax_graph.spines.values(): spine.set_visible(False)
             ax_graph.xaxis.set_visible(False)
             ax_graph.tick_params(axis='y', length=0, pad=10)
             
-            # 棒の右側に直接数値を書く
             for bar in bars:
                 width = bar.get_width()
                 ax_graph.text(width + 0.15, bar.get_y() + bar.get_height()/2, 
-                              f"{int(width)} コマ", 
-                              va='center', fontsize=14, fontweight='bold', color=COLOR_BAR)
+                              f"{int(width)} コマ", va='center', fontsize=14, fontweight='bold', color=COLOR_BAR_FILL)
         else:
             ax_graph.text(0.5, 0.5, "今月の受講データがありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
             ax_graph.axis('off')
@@ -115,104 +107,82 @@ def create_report_image(student_name, target_month_str, df_logs, df_quiz):
         ax_graph.text(0.5, 0.5, "授業データがありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
         ax_graph.axis('off')
 
-    # ==========================================
-    # 👑 3. 小テスト習熟度（Webデザイン風の美しい表）
-    # ==========================================
-    ax_table = fig.add_subplot(gs[2])
-    ax_table.axis('off')
-    ax_table.set_title("最近の小テスト習熟度", fontsize=18, fontweight='bold', color=COLOR_TEXT_MAIN, loc='left', pad=15)
+    # ------------------------------------------
+    # 🌟 3. 進行中テキストのプログレスバー（大改造部分）
+    # ------------------------------------------
+    ax_prog = fig.add_subplot(gs[2])
+    ax_prog.axis('off')
+    ax_prog.set_title("テキスト習熟度 ＆ 進捗ゲージ", fontsize=18, fontweight='bold', color=COLOR_TEXT_MAIN, loc='left', pad=15)
     
     name_col_quiz = '生徒名' if '生徒名' in df_quiz.columns else '名前'
     df_student_quiz = df_quiz[df_quiz[name_col_quiz] == student_name].copy()
     
     if not df_student_quiz.empty:
         df_student_quiz['日時'] = pd.to_datetime(df_student_quiz['日時'], format='mixed', errors='coerce')
-        df_quiz_sorted = df_student_quiz.sort_values(by=['テキスト', '単元', '日時'], ascending=[True, True, False])
-        latest_quiz = df_quiz_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first')
         
-        display_data = latest_quiz.head(12) # 見やすさ重視で最大12件
+        # 最近取り組んだテキスト上位5冊を特定
+        recent_texts = df_student_quiz.groupby('テキスト')['日時'].max().sort_values(ascending=False).head(5).index.tolist()
         
-        cell_text = []
-        cell_colors = []
-        text_colors = []
+        MAX_ITEMS = 5
+        ax_prog.set_xlim(0, 100)
+        ax_prog.set_ylim(-0.5, MAX_ITEMS - 0.5)
         
-        for _, row in display_data.iterrows():
-            text = str(row.get('テキスト', ''))
-            unit = str(row.get('単元', ''))
-            score_raw = row.get('点数', 0)
-            date_str = row['日時'].strftime('%m/%d') if pd.notna(row['日時']) else ""
+        for i, tb_name in enumerate(recent_texts):
+            y_center = MAX_ITEMS - 1 - i # 上から順に描画
             
-            try: score = float(score_raw)
-            except: score = 0
+            # このテキストの生徒の記録
+            df_tb = df_student_quiz[df_student_quiz['テキスト'] == tb_name].copy()
+            # 各単元の「最新の点数」だけを残す
+            latest_units = df_tb.sort_values('日時', ascending=False).drop_duplicates('単元', keep='first')
             
-            # 点数に応じたステータスカラー
-            if score >= 100:
-                bg_c = "#FEF9C3" # 薄い黄色
-                txt_c = "#854D0E" # 濃い茶色
-                s_txt = f"👑 {int(score)}点"
-            elif score >= 80:
-                bg_c = "#DCFCE7" # 薄い緑
-                txt_c = "#166534" # 濃い緑
-                s_txt = f"🟢 {int(score)}点"
-            else:
-                bg_c = "#FEE2E2" # 薄い赤
-                txt_c = "#991B1B" # 濃い赤
-                s_txt = f"🔴 {int(score)}点"
+            def safe_float(val):
+                try: return float(val)
+                except: return 0.0
+            latest_units['点数_num'] = latest_units['点数'].apply(safe_float)
+            
+            # 成績のカウント
+            gold = len(latest_units[latest_units['点数_num'] >= 100])
+            green = len(latest_units[(latest_units['点数_num'] >= 80) & (latest_units['点数_num'] < 100)])
+            red = len(latest_units[latest_units['点数_num'] < 80])
+            completed_units = len(latest_units)
+            
+            # 🌟 マスタから分母を取得
+            master_units = tb_master.get(tb_name, {})
+            total_units = len(master_units)
+            
+            # 万が一マスタに未登録の場合は、安全のために補正
+            if total_units == 0 or total_units < completed_units:
+                total_units = completed_units if completed_units > 0 else 1
                 
-            # 文字列を適度な長さにカットしてレイアウト崩れを防ぐ
-            if len(text) > 10: text = text[:9] + "…"
-            if len(unit) > 12: unit = unit[:11] + "…"
+            # 進捗率の計算
+            pct = (completed_units / total_units) * 100
+            if pct > 100: pct = 100
+            
+            # ① テキスト名 ＆ 右端に進捗テキスト
+            ax_prog.text(0, y_center + 0.35, f"📘 {tb_name}", fontsize=15, fontweight='bold', color=COLOR_TEXT_MAIN, ha='left')
+            ax_prog.text(100, y_center + 0.35, f"{completed_units} / {total_units} 単元完了 ({int(pct)}%)", fontsize=14, fontweight='bold', color=COLOR_TEXT_MAIN, ha='right')
+            
+            # ② プログレスバーの背景（全体）
+            ax_prog.barh(y_center, 100, height=0.25, color=COLOR_BAR_BG, left=0, edgecolor='none')
+            # ③ プログレスバーの前面（進捗分）
+            if pct > 0:
+                ax_prog.barh(y_center, pct, height=0.25, color=COLOR_BAR_FILL, left=0, edgecolor='none')
                 
-            cell_text.append([date_str, text, unit, s_txt])
-            cell_colors.append(["", "", "", bg_c])
-            text_colors.append([COLOR_TEXT_MAIN, COLOR_TEXT_MAIN, COLOR_TEXT_MAIN, txt_c])
-            
-        if cell_text:
-            col_labels = ["実施日", "テキスト名", "単元名", "点数・評価"]
-            # bboxを指定して表を画面いっぱいに広げ、ゆとりを持たせる
-            table = ax_table.table(cellText=cell_text, colLabels=col_labels, loc='center', cellLoc='center', bbox=[0, 0, 1, 1])
-            table.auto_set_font_size(False)
-            table.set_fontsize(13)
-            
-            # 🌟 表のデザインを徹底的に作り込む
-            for (row, col), cell in table.get_celld().items():
-                # 罫線を背景色と同じにして「見えない太枠（パディング）」のように扱う
-                cell.set_edgecolor(COLOR_BG)
-                cell.set_linewidth(5)
-                
-                if row == 0:
-                    # ヘッダー行
-                    cell.set_facecolor('#E2E8F0')
-                    cell.set_text_props(color=COLOR_TEXT_SUB, fontweight='bold')
-                else:
-                    # 行ごとに背景色を交互に変える（ストライプ）
-                    if row % 2 == 1:
-                        cell.set_facecolor('#FFFFFF')
-                    else:
-                        cell.set_facecolor('#F8FAFC')
-                        
-                    # セルの文字色を設定
-                    cell.set_text_props(color=text_colors[row-1][col], fontweight='normal')
-                    
-                    # 🌟 点数列（一番右）のみ特別デザイン
-                    if col == 3:
-                        cell.set_facecolor(cell_colors[row-1][3])
-                        cell.set_text_props(fontweight='bold')
-                        
-            # 列幅の調整
-            table.auto_set_column_width(col=[0, 3])
-            
-        else:
-            ax_table.text(0.5, 0.5, "小テストの記録がありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
-    else:
-        ax_table.text(0.5, 0.5, "小テストの記録がありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
+            # ④ バーの下に成績の内訳を表示
+            stats_text = f"👑 完璧(100点): {gold} 単元   /   🟢 合格(80点~): {green} 単元   /   🔴 要復習: {red} 単元"
+            ax_prog.text(0, y_center - 0.32, stats_text, fontsize=12, color=COLOR_TEXT_SUB, ha='left', fontweight='bold')
 
-    # 署名（フッター）
+    else:
+        ax_prog.text(50, 2.5, "小テストの記録がありません", ha='center', va='center', fontsize=14, color=COLOR_TEXT_SUB)
+
+    # ------------------------------------------
+    # フッター署名
+    # ------------------------------------------
     fig.text(0.95, 0.02, "Generated by 教室管理システム", fontsize=10, color='#CBD5E1', ha='right')
 
     plt.tight_layout(rect=[0.02, 0.05, 0.98, 0.98], h_pad=3.0) 
     
-    # 画像データとして保存（超高画質）
+    # 画像書き出し
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=250, bbox_inches='tight', facecolor=fig.get_facecolor())
     buf.seek(0)
@@ -223,7 +193,7 @@ def create_report_image(student_name, target_month_str, df_logs, df_quiz):
 # --- タブの描画関数 ---
 def render_monthly_visual_report_tab():
     st.write("保護者のLINEへ送付する「月末学習レポート画像（PNG）」を自動生成します。")
-    st.caption("※スクショ不要！ボタンを押すと、画質が統一された最高品質のレポート画像がダウンロードできます。")
+    st.caption("※テキストマスタと連携し、生徒が今どのテキストをどれくらい進めているかを美しいプログレスバーで可視化します。")
     
     df_students = cached_get_student_master()
     if df_students.empty:
@@ -237,7 +207,6 @@ def render_monthly_visual_report_tab():
         selected_student = st.selectbox("👤 対象の生徒を選択", student_options, index=None, placeholder="-- 生徒を選択 --", key="monthly_report_student")
     with c2:
         today = datetime.date.today()
-        # 直近6ヶ月分の選択肢を作る
         month_options = [(today.replace(day=1) - pd.DateOffset(months=i)).strftime('%Y年%m月') for i in range(6)]
         selected_month = st.selectbox("📅 出力する月", month_options)
         
@@ -250,9 +219,10 @@ def render_monthly_visual_report_tab():
             with st.spinner("データを集計し、プロ仕様のレポート画像を描き上げています...（約3秒）"):
                 df_logs = cached_get_all_logs()
                 df_quiz = cached_load_quiz_records()
+                # 🌟 追加: テキストマスタを読み込んで画像生成に渡す
+                tb_master = cached_get_textbook_master()
                 
-                # 裏側で画像を作成
-                img_bytes = create_report_image(student_name, selected_month, df_logs, df_quiz)
+                img_bytes = create_report_image(student_name, selected_month, df_logs, df_quiz, tb_master)
                 
                 st.success("✅ レポート画像の生成が完了しました！プレビューを確認してダウンロードしてください。")
                 
