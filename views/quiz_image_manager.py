@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import time
 import io
-from PIL import Image
+from PIL import Image, ImageOps
 
 from utils.g_sheets import get_student_master
 from utils.g_drive import upload_image_to_drive, list_student_images, delete_file_from_drive
@@ -21,6 +21,8 @@ def process_image_quality(file_bytes):
     """文字が読める画質をキープしたまま、サイズを適正化して超軽量化する関数"""
     try:
         img = Image.open(io.BytesIO(file_bytes))
+        
+        img = ImageOps.exif_transpose(img)
         
         if img.mode != 'RGB':
             img = img.convert('RGB')
