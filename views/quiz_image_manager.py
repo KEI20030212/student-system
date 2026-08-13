@@ -178,6 +178,7 @@ def render_quiz_image_manager_page():
                     # ==========================================
                     # 🗑️ 誤操作防止付き画像削除エリア
                     # ==========================================
+                    invisible_id = "".join(["\u200b" if ord(c) % 2 == 0 else "\u200c" for c in img.get('id')])
                     with st.popover("🗑️ この画像を削除", use_container_width=True):
                         st.warning("⚠️ 本当に削除しますか？\nGoogle Driveから完全に消去され、元に戻せなくなります。")
                         
