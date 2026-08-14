@@ -20,7 +20,6 @@ def render_self_study_dashboard():
     # ==========================================
     # 🌟 各スプレッドシートごとのGASのURLを設定
     # ==========================================
-    # ※ 先ほど作成していただいたURLは「全体」として設定しています
     GAS_URLS = {
         "小学生": "https://script.google.com/macros/s/AKfycbxmaI040Qm0iDYykcP14JWw-eID_jeh_2oauTpW6ysYtYkdamtgn4uMLDYts72AQ71s/exec",
         "中学生": "https://script.google.com/macros/s/AKfycbyFMRO5HJXNH7rh8TELMU5DXta_1qINJ41AexRe5KX0kOMDu-kXMG5ZJxNkiYgHSmQn7w/exec",
@@ -31,8 +30,9 @@ def render_self_study_dashboard():
     GAS_URL = GAS_URLS.get(target_grade)
     SECRET_KEY = "juku-graph-2026"
     
-    if GAS_URL == "https://script.google.com/macros/s/AKfycbxmaI040Qm0iDYykcP14JWw-eID_jeh_2oauTpW6ysYtYkdamtgn4uMLDYts72AQ71s/exec" or GAS_URL == "https://script.google.com/macros/s/AKfycbyFMRO5HJXNH7rh8TELMU5DXta_1qINJ41AexRe5KX0kOMDu-kXMG5ZJxNkiYgHSmQn7w/exec" or GAS_URL == "https://script.google.com/macros/s/AKfycbxEXhITzJWJrW7P_LdI1tEzFFm8p3YwoEUQ5u_-ZGmQj_GzV3dCbRJRk4a8v2SeEBgz/exec":
-        st.warning(f"⚠️ 【{target_grade}】用のGASのURLがまだ設定されていません！コードの中のURLを書き換えてください。")
+    # 🌟 修正：URLが空っぽの時だけ止まるように変更しました！
+    if not GAS_URL:
+        st.error("システムエラー：URLが設定されていません。")
         return
         
     if st.button(f"🚀 【{target_grade}】の最新グラフ画像をスプレッドシートから取得する", type="primary", use_container_width=True):
@@ -57,7 +57,7 @@ def render_self_study_dashboard():
                         with st.container(border=True):
                             st.image(image_bytes, use_container_width=True)
                         
-                        # 🌟 ダウンロードされるファイル名も「学習時間グラフ_中学生.png」のように自動で変わります！
+                        # ダウンロードボタン
                         st.download_button(
                             label=f"📥 【{target_grade}】のグラフ画像をダウンロードする（PNG形式）",
                             data=image_bytes,
