@@ -79,10 +79,13 @@ def render_self_study_input_page():
                 total_earned_points += pts
                 
                 st.caption(f"⏱️ 滞在: {diff_min}分 ／ 🔥 実質勉強時間: **{actual_min}分** （獲得: {pts}pt）")
-                ss_memo = st.text_area("📖 学習内容（テキスト名など）", height=70, key=f"m_{d}")
+                
+                col_sub, col_memo = st.columns([1, 2])
+                ss_sub = col_sub.selectbox("📚 科目", ["英語", "数学", "国語", "理科", "社会", "その他"], key=f"sub_{d}")
+                ss_memo = col_memo.text_area("📖 学習内容（テキスト名など）", height=68, key=f"m_{d}")
                 
                 ss_records.append({
-                    "date": ss_date, "start": s_time, "end": e_time, 
+                    "date": ss_date, "start": s_time, "end": e_time, "subject": ss_sub,
                     "break": b_min, "actual": actual_min, "content": ss_memo, "pts": pts
                 })
                 st.divider()
@@ -102,7 +105,8 @@ def render_self_study_input_page():
                             start_time=rec["start"], 
                             end_time=rec["end"], 
                             break_time=rec["break"], 
-                            actual_minutes=rec["actual"], 
+                            actual_minutes=rec["actual"],
+                            subject=rec["subject"], 
                             content=rec["content"], 
                             points=rec["pts"],
                             grade_category=grade_category, # ここで学年を裏側に伝えます
@@ -124,5 +128,5 @@ def render_self_study_input_page():
                         time.sleep(2)
                         
                         for k in list(st.session_state.keys()):
-                            if k.startswith(("d_","s_","e_","b_","m_","ss_")): del st.session_state[k]
+                            if k.startswith(("d_","s_","e_","b_","m_","sub_","ss_")): del st.session_state[k]
                         st.rerun()
