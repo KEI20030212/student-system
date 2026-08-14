@@ -243,7 +243,7 @@ def render_student_portal_page():
                 
                 with st.container(border=True):
                     st.error("🚨 **【退塾予備軍アラート】最近の様子に変化が見られる生徒**")
-                    st.caption("直近の授業ログから「ネガティブな態度」や「遅刻・欠席の多発」が40%以上記録された生徒を自動検知しています。")
+                    st.caption("直近の5回の授業ログから「ネガティブな態度」や「遅刻・欠席の多発」が40%以上記録された生徒を自動検知しています。")
                     for ast in alert_students:
                         reason_text = " / ".join(ast['reasons'])
                         st.markdown(f"- 👤 **{ast['name']}** さん （危険度: **{ast['ratio']}%**） ➡ ⚠️ **理由:** {reason_text}")
