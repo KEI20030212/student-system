@@ -9,7 +9,6 @@ from utils.g_sheets import (
 )
 from utils.api_guard import robust_api_call
 
-@st.cache_data(ttl=600, show_spinner=False)
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
@@ -17,7 +16,8 @@ def render_self_study_input_page():
     st.header("📝 自習記録の入力")
     
     # マスターデータ取得
-    student_df = cached_get_student_master()
+    student_df_raw = cached_get_student_master()
+    student_df = student_df_raw.copy()
     if not student_df.empty:
         student_options = (student_df['生徒ID'].astype(str) + " - " + student_df['生徒名']).tolist()
     else:
@@ -30,11 +30,28 @@ def render_self_study_input_page():
         ss_options = ["🆕 新規登録"] + student_options
         ss_name = st.selectbox("👤 生徒を選択", ss_options, index=None, placeholder="生徒を選択", key="ss_name")
         
+        grade_category = "その他" # デフォルト値
+        
         if ss_name == "🆕 新規登録": 
             ss_name = st.text_input("新しい生徒の名前", key="ss_new_name")
+            # 新規の時は保存先をプルダウンで選ばせる
+            grade_category = st.selectbox("🏫 学年区分（保存先スプレッドシートの決定に使用）", ["小学生", "中学生", "高校生", "その他"])
+            
+        elif ss_name:
+            # 🌟 生徒マスタから学年を読み取り、小・中・高を自動判別！
+            student_id = ss_name.split(" - ")[0]
+            student_row = student_df[student_df['生徒ID'].astype(str) == student_id]
+            if not student_row.empty and '学年' in student_row.columns:
+                grade_raw = str(student_row['学年'].values[0])
+                if "小" in grade_raw: grade_category = "小学生"
+                elif "中" in grade_raw: grade_category = "中学生"
+                elif "高" in grade_raw: grade_category = "高校生"
         
         if ss_name:
             num_days = st.number_input("🗓️ 登録する日数", min_value=1, max_value=14, value=1, key="ss_num_days")
+            
+            # 自動判別した保存先を先生にチラ見せして安心感を出す
+            st.caption(f"💡 保存先: 全体用シート ＋ 【 {grade_category} 】用シート")
             st.divider()
             
             ss_records = []
@@ -77,10 +94,18 @@ def render_self_study_input_page():
                     pure_name = ss_name.split(" - ")[1] if " - " in ss_name else ss_name
 
                     for idx, rec in enumerate(ss_records):
+                        # 🌟 grade_category（学年）も渡すように変更！
                         ok, msg = robust_api_call(
                             save_self_study_record,
-                            rec["date"], pure_name, rec["start"], rec["end"], 
-                            rec["break"], rec["actual"], rec["content"], rec["pts"],
+                            date=rec["date"], 
+                            name=pure_name, 
+                            start_time=rec["start"], 
+                            end_time=rec["end"], 
+                            break_time=rec["break"], 
+                            actual_minutes=rec["actual"], 
+                            content=rec["content"], 
+                            points=rec["pts"],
+                            grade_category=grade_category, # ここで学年を裏側に伝えます
                             fallback_value=(False, "エラー")
                         )
                         if ok:
