@@ -796,12 +796,11 @@ def get_last_page_from_sheet(name, subject): # 🌟 引数に subject を追加�
     except Exception as e:
         return 0
 
-def save_self_study_record(date, name, start_time, end_time, break_time, actual_minutes, content, points, grade_category="その他"):
+def save_self_study_record(date, name, start_time, end_time, break_time, actual_minutes, subject, content, points, grade_category="その他"):
     """自習の記録を全体シートと学年別シートの2箇所に同時保存する（APIエラー対策版）"""
     import time
     
-    # 🌟 ここに各学年の新しいスプレッドシートIDを設定してください！
-    # （※サービスアカウントにこれらのシートへの共有/編集権限を付与するのを忘れずに！）
+    # 🌟 各学年のスプレッドシートID
     GRADE_SHEET_IDS = {
         "小学生": "1V4ID3wirXoTM3M-rdZeYhfu0wrVE19wu3AZOod2XVJ0",
         "中学生": "1Tbbz7SO0-chcOlUwsDjTVhAYQ9zXNhopfwSPFpByD9A",
@@ -813,16 +812,17 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
         try:
             gc = get_gc_client()
             
+            # 🌟 先生ご指定の順番に変更しました！
             row_data = [
-                str(date),
-                name,
-                subject,
-                actual_minutes,
-                str(start_time),
-                str(end_time),
-                break_time,
-                content,
-                points
+                str(date),         # 1列目: 日付
+                name,              # 2列目: 名前
+                subject,           # 3列目: 科目
+                actual_minutes,    # 4列目: 実質勉強時間
+                str(start_time),   # 5列目: 開始時間
+                str(end_time),     # 6列目: 終了時間
+                break_time,        # 7列目: 休憩
+                content,           # 8列目: 内容
+                points             # 9列目: ポイント
             ]
             
             # 1️⃣ 全体用のスプレッドシート（マスター）に保存
@@ -834,7 +834,6 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
             target_sheet_id = GRADE_SHEET_IDS.get(grade_category)
             if target_sheet_id and target_sheet_id != "ここに小学生用スプレッドシートのIDを入れる":
                 sh_sub = gc.open_by_key(target_sheet_id)
-                # ※学年別スプレッドシートにも「自習記録」という名前のシート（タブ）を作っておいてください
                 worksheet_sub = sh_sub.worksheet("自習記録")
                 worksheet_sub.append_row(row_data)
                 
