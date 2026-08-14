@@ -816,10 +816,11 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
             row_data = [
                 str(date),
                 name,
+                subject,
+                actual_minutes,
                 str(start_time),
                 str(end_time),
                 break_time,
-                actual_minutes,
                 content,
                 points
             ]
