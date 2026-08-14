@@ -796,15 +796,22 @@ def get_last_page_from_sheet(name, subject): # 🌟 引数に subject を追加�
     except Exception as e:
         return 0
 
-def save_self_study_record(date, name, start_time, end_time, break_time, actual_minutes, content, points):
-    """自習の記録を「自習記録」シートに保存する（APIエラー対策版）"""
+def save_self_study_record(date, name, start_time, end_time, break_time, actual_minutes, content, points, grade_category="その他"):
+    """自習の記録を全体シートと学年別シートの2箇所に同時保存する（APIエラー対策版）"""
     import time
+    
+    # 🌟 ここに各学年の新しいスプレッドシートIDを設定してください！
+    # （※サービスアカウントにこれらのシートへの共有/編集権限を付与するのを忘れずに！）
+    GRADE_SHEET_IDS = {
+        "小学生": "1V4ID3wirXoTM3M-rdZeYhfu0wrVE19wu3AZOod2XVJ0",
+        "中学生": "1Tbbz7SO0-chcOlUwsDjTVhAYQ9zXNhopfwSPFpByD9A",
+        "高校生": "1nnFJo8k81VBuz232gAZYVnSX47YgLuaU8Mqt1hzuS_M"
+    }
+    
     max_retries = 3
     for attempt in range(max_retries):
         try:
             gc = get_gc_client()
-            sh = gc.open_by_key(SPREADSHEET_ID)
-            worksheet = sh.worksheet("自習記録")
             
             row_data = [
                 str(date),
@@ -817,8 +824,21 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
                 points
             ]
             
-            worksheet.append_row(row_data)
+            # 1️⃣ 全体用のスプレッドシート（マスター）に保存
+            sh_main = gc.open_by_key(SPREADSHEET_ID)
+            worksheet_main = sh_main.worksheet("自習記録")
+            worksheet_main.append_row(row_data)
+            
+            # 2️⃣ 学年別のスプレッドシートにも保存（該当する場合）
+            target_sheet_id = GRADE_SHEET_IDS.get(grade_category)
+            if target_sheet_id and target_sheet_id != "ここに小学生用スプレッドシートのIDを入れる":
+                sh_sub = gc.open_by_key(target_sheet_id)
+                # ※学年別スプレッドシートにも「自習記録」という名前のシート（タブ）を作っておいてください
+                worksheet_sub = sh_sub.worksheet("自習記録")
+                worksheet_sub.append_row(row_data)
+                
             return True, "成功"
+            
         except Exception as e:
             if attempt < max_retries - 1:
                 time.sleep(2) # 失敗したら2秒待って再試行
