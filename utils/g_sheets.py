@@ -1361,7 +1361,6 @@ def sync_self_study_settings_add(student_id, name, grade_raw):
     except Exception as e:
         return False, str(e)
 
-
 def sync_self_study_settings_remove(student_id, name):
     """退塾生を自習管理スプレッドシートの「設定」シートから自動削除する（複数校舎対応）"""
     import time
@@ -1405,6 +1404,21 @@ def sync_self_study_settings_remove(student_id, name):
                             pass
             except:
                 continue 
+        return True, "成功"
+    except Exception as e:
+        return False, str(e)
+
+def update_self_study_dashboard_date(sheet_id, year, month):
+    """自習ダッシュボードの年月（設定シートのC1, D1）を更新する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(sheet_id)
+        worksheet = sh.worksheet("設定")
+        
+        # C1セルに「年」、D1セルに「月」を書き込む
+        worksheet.update_acell('C1', year)
+        worksheet.update_acell('D1', month)
+        
         return True, "成功"
     except Exception as e:
         return False, str(e)
