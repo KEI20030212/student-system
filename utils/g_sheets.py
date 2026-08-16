@@ -1332,8 +1332,31 @@ def sync_self_study_settings_add(student_id, name, grade_raw):
         
         records_a_col = worksheet.col_values(1)
         next_row = len(records_a_col) + 1
-        
         worksheet.update_cell(next_row, 1, name)
+        
+        try:
+            sh.worksheet(name) # すでにシートが存在するかチェック
+        except:
+            # シートが存在しない場合のみ作成処理を行う
+            template_ws = sh.worksheet("テンプレート")
+            new_ws = sh.duplicate_sheet(template_ws.id, new_sheet_name=name)
+            
+            # B8〜B12の数式を取得
+            formulas = template_ws.get("B8:B12", value_render_option="FORMULA")
+            new_formulas = []
+            
+            for row in formulas:
+                if row and len(row) > 0:
+                    # "'設定'!A1" を "生徒名" に置換（先生のマクロと同じ処理）
+                    f_str = str(row[0]).replace("'設定'!A1", f'"{name}"')
+                    new_formulas.append([f_str])
+                else:
+                    new_formulas.append([""])
+                    
+            try:
+                new_ws.update(values=new_formulas, range_name="B8:B12", value_input_option="USER_ENTERED")
+            except TypeError:
+                new_ws.update("B8:B12", new_formulas, value_input_option="USER_ENTERED")
         return True, "成功"
     except Exception as e:
         return False, str(e)
@@ -1372,6 +1395,14 @@ def sync_self_study_settings_remove(student_id, name):
                 if name in records:
                     row_idx = records.index(name) + 1 
                     worksheet.delete_rows(row_idx)
+                    
+                    protected_sheets = ['設定', 'テンプレート', '自習記録', '棒グラフ']
+                    if name not in protected_sheets:
+                        try:
+                            target_ws = sh.worksheet(name)
+                            sh.del_worksheet(target_ws)
+                        except:
+                            pass
             except:
                 continue 
         return True, "成功"
