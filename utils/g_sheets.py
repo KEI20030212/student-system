@@ -1330,8 +1330,10 @@ def sync_self_study_settings_add(student_id, name, grade_raw):
         sh = gc.open_by_key(target_sheet_id)
         worksheet = sh.worksheet("設定")
         
-        # A列の一番下に追加（名前のみ）
-        worksheet.append_row([name])
+        records_a_col = worksheet.col_values(1)
+        next_row = len(records_a_col) + 1
+        
+        worksheet.update_cell(next_row, 1, name)
         return True, "成功"
     except Exception as e:
         return False, str(e)
