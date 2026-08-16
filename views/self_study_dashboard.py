@@ -77,30 +77,50 @@ def render_self_study_dashboard():
     # ==========================================
     # 📊 既存機能：グラフ画像ダウンロード
     # ==========================================
-    target_grade = st.radio(
-        "🏫 グラフを取得する対象（スプレッドシート）を選択してください", 
+    st.subheader("📥 グラフ画像のダウンロード")
+    
+    # 🌟 変更：校舎と学年を両方選べるように2列に分割！
+    col1, col2 = st.columns(2)
+    target_branch = col1.radio(
+        "🏢 校舎を選択", 
+        ["田端新町校", "東十条校"], 
+        horizontal=True
+    )
+    target_grade = col2.radio(
+        "🏫 学年を選択", 
         ["小学生", "中学生", "高校生"], 
         horizontal=True
     )
 
+    # 🌟 校舎 × 学年 の組み合わせでURLを設定する辞書
     GAS_URLS = {
-        "小学生": "https://script.google.com/macros/s/AKfycbxmaI040Qm0iDYykcP14JWw-eID_jeh_2oauTpW6ysYtYkdamtgn4uMLDYts72AQ71s/exec",
-        "中学生": "https://script.google.com/macros/s/AKfycbyFMRO5HJXNH7rh8TELMU5DXta_1qINJ41AexRe5KX0kOMDu-kXMG5ZJxNkiYgHSmQn7w/exec",
-        "高校生": "https://script.google.com/macros/s/AKfycbxEXhITzJWJrW7P_LdI1tEzFFm8p3YwoEUQ5u_-ZGmQj_GzV3dCbRJRk4a8v2SeEBgz/exec"
+        "田端新町校": {
+            "小学生": "https://script.google.com/macros/s/AKfycbxmaI040Qm0iDYykcP14JWw-eID_jeh_2oauTpW6ysYtYkdamtgn4uMLDYts72AQ71s/exec",
+            "中学生": "https://script.google.com/macros/s/AKfycbyFMRO5HJXNH7rh8TELMU5DXta_1qINJ41AexRe5KX0kOMDu-kXMG5ZJxNkiYgHSmQn7w/exec",
+            "高校生": "https://script.google.com/macros/s/AKfycbxEXhITzJWJrW7P_LdI1tEzFFm8p3YwoEUQ5u_-ZGmQj_GzV3dCbRJRk4a8v2SeEBgz/exec"
+        },
+        "東十条校": {
+            "小学生": "https://script.google.com/macros/s/AKfycbzzCAbe8J24XICaGNR57qD9ui_yO7Dc2D-SrZxTxRiVU77YMM0xvGC7eO0wpHxhC5IF/exec",
+            "中学生": "https://script.google.com/macros/s/AKfycbybDCaLgbVei66H7XdQgCaALoA0s1k-4lLuuIaESdRN5AYAwoROTLnJCU4bbp-wBhvf/exec",
+            "高校生": "https://script.google.com/macros/s/AKfycbz-_v6lPKqWQUpzMiZ8ExrwY722jmAbfI2Xmf2J6Lz0Z2S6HPx50KIoZMAth7lk8DEVKA/exec"
+        }
     }
     
-    GAS_URL = GAS_URLS.get(target_grade)
+    # 選ばれた校舎の中から、選ばれた学年のURLを引っこ抜く
+    GAS_URL = GAS_URLS[target_branch].get(target_grade)
     SECRET_KEY = "juku-graph-2026"
     
-    if not GAS_URL:
-        st.error("システムエラー：URLが設定されていません。")
+    if not GAS_URL or GAS_URL.startswith("ここ"):
+        st.warning(f"⚠️ 【{target_branch} - {target_grade}】用のGASのURLがまだ設定されていません！コードの中のURLを書き換えてください。")
         return
         
-    if st.button(f"🚀 【{target_grade}】の最新グラフ画像をスプレッドシートから取得する", type="primary", use_container_width=True):
+    if st.button(f"🚀 【{target_branch} - {target_grade}】の最新グラフ画像を取得する", type="primary", use_container_width=True):
         
-        with st.spinner(f"【{target_grade}】のスプレッドシートからグラフを画像化して引っ張っています...（約3秒）"):
+        # 中学生などの重い処理のために最大60秒待つ設定
+        with st.spinner(f"【{target_branch} - {target_grade}】のスプレッドシートからグラフを引っ張っています...（最大1分ほどかかる場合があります）"):
             try:
-                response = requests.get(f"{GAS_URL}?key={SECRET_KEY}", timeout=20)
+                # 🌟 タイムアウトを60秒に戻して安全対策！
+                response = requests.get(f"{GAS_URL}?key={SECRET_KEY}", timeout=60)
                 
                 if response.status_code == 200:
                     result_text = response.text
@@ -110,20 +130,23 @@ def render_self_study_dashboard():
                     else:
                         image_bytes = base64.b64decode(result_text)
                         
-                        st.success(f"✅ 【{target_grade}】のグラフ画像の取得に成功しました！プレビューを確認してダウンロードしてください。")
+                        st.success(f"✅ 【{target_branch} - {target_grade}】のグラフ画像の取得に成功しました！プレビューを確認してダウンロードしてください。")
                         
                         with st.container(border=True):
                             st.image(image_bytes, use_container_width=True)
                         
+                        # 🌟 ダウンロードファイル名も「校舎名」が入るように自動調整
                         st.download_button(
-                            label=f"📥 【{target_grade}】のグラフ画像をダウンロードする（PNG形式）",
+                            label=f"📥 【{target_branch} - {target_grade}】のグラフ画像をダウンロードする（PNG形式）",
                             data=image_bytes,
-                            file_name=f"学習時間グラフ_{target_grade}.png",
+                            file_name=f"学習時間グラフ_{target_branch}_{target_grade}.png",
                             mime="image/png",
                             type="primary",
                             use_container_width=True
                         )
                 else:
                     st.error(f"通信エラーが発生しました。（ステータスコード: {response.status_code}）")
+            except requests.exceptions.Timeout:
+                st.error("❌ 画像の生成に時間がかかりすぎています。スプレッドシートのデータ量が多すぎるか、Googleのサーバーが混雑している可能性があります。")
             except Exception as e:
                 st.error(f"システムエラー: {str(e)}")
