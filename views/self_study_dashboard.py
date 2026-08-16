@@ -3,8 +3,10 @@ import requests
 import base64
 import pandas as pd
 import datetime
+import time # 🌟 追加：待ち時間を作るためのモジュール
 
-from utils.g_sheets import load_self_study_data
+# 🌟 変更：新しく作った update_self_study_dashboard_date 関数を読み込む
+from utils.g_sheets import load_self_study_data, update_self_study_dashboard_date
 from utils.api_guard import robust_api_call
 
 def render_self_study_dashboard():
@@ -27,20 +29,16 @@ def render_self_study_dashboard():
         if df_ss.empty or 'APIエラー発生' in df_ss.columns:
             st.info("自習データが取得できないため、アラート分析をスキップしました。")
         else:
-            # 日付データとして正確に処理
             df_ss['日付'] = pd.to_datetime(df_ss['日付'], errors='coerce')
             df_ss = df_ss.dropna(subset=['日付'])
             
-            # 日数の定義（今日、7日前、35日前）
             today = pd.Timestamp.today().normalize()
             recent_start = today - pd.Timedelta(days=7)
-            past_start = recent_start - pd.Timedelta(days=28) # 過去4週間
+            past_start = recent_start - pd.Timedelta(days=28) 
             
-            # 期間ごとにデータを分割
             df_past = df_ss[(df_ss['日付'] >= past_start) & (df_ss['日付'] < recent_start)]
             df_recent = df_ss[df_ss['日付'] >= recent_start]
             
-            # 生徒ごとの来店回数をカウント（列名が「名前」か「生徒名」かを確認）
             name_col = '名前' if '名前' in df_ss.columns else ('生徒名' if '生徒名' in df_ss.columns else None)
             
             if name_col:
@@ -49,10 +47,8 @@ def render_self_study_dashboard():
                 
                 alerts = []
                 for student, p_count in past_counts.items():
-                    # 💡 条件：過去4週間で「4回以上（平均週1以上）」来ていた生徒を対象とする
                     if p_count >= 4:
                         r_count = recent_counts.get(student, 0)
-                        # 💡 条件：直近7日間は「0回」しか来ていない
                         if r_count == 0:
                             avg_per_week = p_count / 4
                             alerts.append({
@@ -64,7 +60,6 @@ def render_self_study_dashboard():
                 if alerts:
                     st.error("⚠️ **以下の生徒の足が遠のいています！次回の授業時などに必ず声かけ（ヒアリング）を行ってください。**")
                     df_alerts = pd.DataFrame(alerts)
-                    # インデックスを1からにする
                     df_alerts.index = df_alerts.index + 1
                     st.table(df_alerts)
                 else:
@@ -79,7 +74,6 @@ def render_self_study_dashboard():
     # ==========================================
     st.subheader("📥 グラフ画像のダウンロード")
     
-    # 🌟 変更：校舎と学年を両方選べるように2列に分割！
     col1, col2 = st.columns(2)
     target_branch = col1.radio(
         "🏢 校舎を選択", 
@@ -92,7 +86,17 @@ def render_self_study_dashboard():
         horizontal=True
     )
 
-    # 🌟 校舎 × 学年 の組み合わせでURLを設定する辞書
+    # 🌟 追加：年月の選択UI（デフォルトは今の年月）
+    st.markdown("##### 📅 集計する月を設定")
+    col_y, col_m = st.columns(2)
+    current_year = datetime.date.today().year
+    current_month = datetime.date.today().month
+    selected_year = col_y.number_input("年 (C1セルに反映)", min_value=2020, max_value=2050, value=current_year)
+    selected_month = col_m.number_input("月 (D1セルに反映)", min_value=1, max_value=12, value=current_month)
+
+    # ==========================================
+    # 🌟 ① 画像を引っ張るための「GASのURL」
+    # ==========================================
     GAS_URLS = {
         "田端新町校": {
             "小学生": "https://script.google.com/macros/s/AKfycbxmaI040Qm0iDYykcP14JWw-eID_jeh_2oauTpW6ysYtYkdamtgn4uMLDYts72AQ71s/exec",
@@ -106,20 +110,52 @@ def render_self_study_dashboard():
         }
     }
     
-    # 選ばれた校舎の中から、選ばれた学年のURLを引っこ抜く
+    # ==========================================
+    # 🌟 ② セル(C1, D1)に直接書き込むための「スプレッドシートID」
+    # ==========================================
+    SHEET_IDS = {
+        "田端新町校": {
+            "小学生": "1V4ID3wirXoTM3M-rdZeYhfu0wrVE19wu3AZOod2XVJ0",
+            "中学生": "1Tbbz7SO0-chcOlUwsDjTVhAYQ9zXNhopfwSPFpByD9A",
+            "高校生": "1nnFJo8k81VBuz232gAZYVnSX47YgLuaU8Mqt1hzuS_M"
+        },
+        "東十条校": {
+            "小学生": "1n0NvREF5Sf8WHMVOXXHCfm6EhsYDtcDd0qB4dXMR4c8",
+            "中学生": "1okTYoVDhBfZzjcq5bVBeMxqc-7Ocv1Woz4JISDI3vGQ",
+            "高校生": "12fWkakGZPt8it_OxZNmddDOimzM0CTmCrD2GS5mIX2U"
+        }
+    }
+    
     GAS_URL = GAS_URLS[target_branch].get(target_grade)
+    target_sheet_id = SHEET_IDS[target_branch].get(target_grade)
     SECRET_KEY = "juku-graph-2026"
     
-    if not GAS_URL or GAS_URL.startswith("ここ"):
-        st.warning(f"⚠️ 【{target_branch} - {target_grade}】用のGASのURLがまだ設定されていません！コードの中のURLを書き換えてください。")
+    if not GAS_URL or GAS_URL.startswith("ここ") or not target_sheet_id or target_sheet_id.startswith("ここ"):
+        st.warning(f"⚠️ 【{target_branch} - {target_grade}】用の設定が未完了です。コードのURLまたはスプレッドシートIDを書き換えてください。")
         return
         
-    if st.button(f"🚀 【{target_branch} - {target_grade}】の最新グラフ画像を取得する", type="primary", use_container_width=True):
+    if st.button(f"🚀 【{target_branch} - {target_grade}】の {selected_month}月 のグラフ画像を取得する", type="primary", use_container_width=True):
         
-        # 中学生などの重い処理のために最大60秒待つ設定
-        with st.spinner(f"【{target_branch} - {target_grade}】のスプレッドシートからグラフを引っ張っています...（最大1分ほどかかる場合があります）"):
+        # 🌟 処理1：スプレッドシートの年月を書き換える
+        with st.spinner(f"スプレッドシートを {selected_year}年 {selected_month}月 に設定しています..."):
+            success, msg = robust_api_call(
+                update_self_study_dashboard_date, 
+                target_sheet_id, 
+                selected_year, 
+                selected_month, 
+                fallback_value=(False, "通信エラー")
+            )
+            
+            if not success:
+                st.error(f"❌ スプレッドシートの日付更新に失敗しました: {msg}")
+                st.stop() # 失敗したらここで処理をストップ
+                
+            # 🌟 超重要：Google側が新しい月でグラフを「描き直す」まで3秒待ってあげる
+            time.sleep(3)
+        
+        # 🌟 処理2：書き換わって完成した最新グラフを引っ張ってくる
+        with st.spinner(f"最新のグラフ画像を引っ張っています...（最大1分ほどかかる場合があります）"):
             try:
-                # 🌟 タイムアウトを60秒に戻して安全対策！
                 response = requests.get(f"{GAS_URL}?key={SECRET_KEY}", timeout=60)
                 
                 if response.status_code == 200:
@@ -130,16 +166,15 @@ def render_self_study_dashboard():
                     else:
                         image_bytes = base64.b64decode(result_text)
                         
-                        st.success(f"✅ 【{target_branch} - {target_grade}】のグラフ画像の取得に成功しました！プレビューを確認してダウンロードしてください。")
+                        st.success(f"✅ 【{target_branch} - {target_grade}】の {selected_month}月分 のグラフ取得に成功しました！")
                         
                         with st.container(border=True):
                             st.image(image_bytes, use_container_width=True)
                         
-                        # 🌟 ダウンロードファイル名も「校舎名」が入るように自動調整
                         st.download_button(
-                            label=f"📥 【{target_branch} - {target_grade}】のグラフ画像をダウンロードする（PNG形式）",
+                            label=f"📥 このグラフ画像をダウンロードする（PNG形式）",
                             data=image_bytes,
-                            file_name=f"学習時間グラフ_{target_branch}_{target_grade}.png",
+                            file_name=f"学習時間グラフ_{target_branch}_{target_grade}_{selected_year}年{selected_month}月.png",
                             mime="image/png",
                             type="primary",
                             use_container_width=True
