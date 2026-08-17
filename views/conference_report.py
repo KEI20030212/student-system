@@ -39,7 +39,6 @@ def safe_load_test_scores():
     from utils.g_sheets import load_test_scores
     return robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
 
-# 🌟 修正箇所：二重キャッシュ防止のため @st.cache_data を削除！
 def cached_get_textbook_master():
     from utils.g_sheets import get_textbook_master
     return robust_api_call(get_textbook_master, fallback_value={})
@@ -85,7 +84,6 @@ def cached_get_student_master_for_report():
     from utils.g_sheets import get_student_master
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
 
-@st.cache_data(ttl=600, show_spinner=False)
 def cached_get_quiz_details_for_report():
     from utils.g_sheets import get_quiz_master_dict
     return robust_api_call(get_quiz_master_dict, fallback_value={})
@@ -253,14 +251,19 @@ def render_conference_report(selected_student_option, info):
     # 3. 小テスト進捗の一覧
     # ==========================================
     st.subheader("📊 小テスト（基礎学力）の定着状況")
-    if master_dict is not None and not df_quiz.empty: 
+    
+    # 🌟 修正：ここで全テストの「正答率」を先に計算しておく！
+    if not df_quiz.empty:
         df_quiz['点数'] = pd.to_numeric(df_quiz['点数'], errors='coerce')
+        df_quiz['正答率'] = df_quiz.apply(lambda row: calculate_score_ratio(row, quiz_details), axis=1)
+
+    if master_dict is not None and not df_quiz.empty: 
         summary_data = []
-        
         attempted_texts = df_quiz['テキスト'].dropna().unique()
         
         for text_name in attempted_texts:
-            df_text = df_quiz[(df_quiz['テキスト'] == text_name) & (df_quiz['点数'] >= 80)]
+            # 🌟 修正：「点数が80点以上」ではなく「正答率が80%（0.8）以上」で合格判定！
+            df_text = df_quiz[(df_quiz['テキスト'] == text_name) & (df_quiz['正答率'] >= 0.8)]
             done_chaps = df_text['単元'].nunique() if '単元' in df_text.columns else 0
             
             if text_name in master_dict:
@@ -300,21 +303,17 @@ def render_conference_report(selected_student_option, info):
     # ==========================================
     st.subheader("💡 優先して復習すべき単元（自動ピックアップ）")
     if not df_quiz.empty:
-        # 🌟 外部から持ってきた計算専門の関数（calculate_score_ratio）を使う！
-        df_quiz['正答率'] = df_quiz.apply(lambda row: calculate_score_ratio(row, quiz_details), axis=1)
-        
+        # 正答率の計算は上で済んでいるので、そのまま抽出に使います
         # 正答率60%未満を弱点として抽出
         df_weak = df_quiz[df_quiz['正答率'] < 0.6].sort_values(by='日時', ascending=False).head(5)
         
         if not df_weak.empty:
             st.write("以下の単元は、直近のテストで点数が伸び悩んだため、次回の授業や講習で優先的に対策を行います。")
             
-            # 🌟 【新機能】単元（章数）にテキストマスタの単元名を合体させる魔法！
             def format_weak_unit(row):
                 t_name = str(row.get('テキスト', ''))
                 chap_str = str(row.get('単元', ''))
                 
-                # そのテスト（テキスト）の単元マスタを引っ張ってくる
                 t_master = master_dict.get(t_name, {})
                 chap_name = t_master.get(chap_str, "")
                 
@@ -323,7 +322,6 @@ def render_conference_report(selected_student_option, info):
                 else:
                     return f"第{chap_str}回"
                     
-            # 弱点データフレームの「単元」列を一括で書き換え
             df_weak['単元'] = df_weak.apply(format_weak_unit, axis=1)
             
             desired_columns = ['日時', 'テキスト', '単元', '点数', 'ミス番号', '間違えた問題', 'ミス問題番号', 'ミス']
