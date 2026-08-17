@@ -16,10 +16,10 @@ def cached_load_self_study_by_student(student_name):
     from utils.g_sheets import load_self_study_data
     df = robust_api_call(load_self_study_data, fallback_value=pd.DataFrame())
 
-    if df.empty or '生徒名' not in df.columns or "APIエラー発生" in df.columns:
+    if df.empty or '名前' not in df.columns or "APIエラー発生" in df.columns:
         return pd.DataFrame()
     
-    df_student = df[df['生徒名'] == student_name].copy()
+    df_student = df[df['名前'] == student_name].copy()
     if df_student.empty:
         return pd.DataFrame()
         
