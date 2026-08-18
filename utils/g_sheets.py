@@ -656,8 +656,46 @@ def save_logs_to_spreadsheet(rows):
     sh = gc.open_by_key(SPREADSHEET_ID)
     worksheet = sh.worksheet("授業ログ統合")
     
-    worksheet.append_rows(rows, value_input_option="RAW")
+    # 🌟 追加：作成したAI頭脳を読み込む
+    from utils.ai_feedback import generate_ai_feedback
+    
+    processed_rows = []
+    for row in rows:
+        # 万が一列が足りない場合の安全対策
+        while len(row) < 24:
+            row.append("")
+            
+        # 🌟 1. AIに読ませる情報を抽出してまとめる
+        name = str(row[2])
+        subject = str(row[3])
+        assigned_p = str(row[13])
+        completed_p = str(row[14])
+        hw_status = f"出した宿題: {assigned_p}P, やった宿題: {completed_p}P"
+        
+        advice = str(row[10])
+        parent_msg = str(row[11])
+        next_handover = str(row[12])
+        report_text = f"【指導アドバイス】{advice} 【保護者連絡】{parent_msg} 【次回引継ぎ】{next_handover}"
+        
+        concentration = str(row[21])
+        
+        # 🌟 2. AIを呼び出してスコアとコメントを自動作成！
+        ai_score, ai_comment = generate_ai_feedback(
+            student_name=name,
+            subject=subject,
+            homework_status=hw_status,
+            concentration=concentration,
+            report_text=report_text
+        )
+        
+        # 🌟 3. 元のデータの後ろ（Y列とZ列）にAIの回答をくっつける
+        row.extend([ai_comment, ai_score])
+        processed_rows.append(row)
+    
+    # AIの回答ごと、一気にスプレッドシートへ保存！
+    worksheet.append_rows(processed_rows, value_input_option="RAW")
     return True
+
 
 def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_records, date, teacher_name="未入力", class_type="1:1", attendance="出席（通常）", class_slot="-", advice="-", parent_msg="-", next_handover="-", assigned_p=0, completed_p=0, motivation_rank=0, hw_reason="", hw_fix="", next_hw_text="-", next_hw_pages=0, late_time="-", concentration="-", reaction="-", next_bring=""):
     print(f"🌟🌟🌟 保存処理スタート！ ID:{student_id} 生徒名:{name} 🌟🌟🌟") 
@@ -668,6 +706,22 @@ def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_r
     
     date_str = date.strftime("%Y/%m/%d") if hasattr(date, 'strftime') else str(date)
 
+    # 🌟 追加：作成したAI頭脳を読み込む
+    from utils.ai_feedback import generate_ai_feedback
+    
+    # 🌟 1. AIに読ませる情報をまとめる
+    hw_status = f"出した宿題: {assigned_p}P, やった宿題: {completed_p}P"
+    report_text = f"【指導アドバイス】{advice}  【保護者連絡】{parent_msg}  【次回引継ぎ】{next_handover}"
+    
+    # 🌟 2. AIを呼び出してスコアとコメントを自動作成！
+    ai_score, ai_comment = generate_ai_feedback(
+        student_name=name,
+        subject=subject,
+        homework_status=hw_status,
+        concentration=concentration,
+        report_text=report_text
+    )
+
     row_data = [
         date_str,          # 0: 日時
         student_id,        # 1: 生徒ID
@@ -675,7 +729,7 @@ def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_r
         subject,           # 3: 科目
         text_name,         # 4: テキスト
         advanced_p,        # 5: 終了ページ
-        teacher_name,      # 6: 担当講師 (ここから左に3列詰めました)
+        teacher_name,      # 6: 担当講師
         class_type,        # 7: 授業形態
         attendance,        # 8: 出欠
         class_slot,        # 9: 授業コマ
@@ -692,7 +746,9 @@ def save_to_spreadsheet(student_id, name, subject, text_name, advanced_p, quiz_r
         late_time,         # 20: 遅刻時間
         concentration,     # 21: 集中力
         reaction,          # 22: ミスへの反応
-        next_bring         # 23: 次回の持ち物
+        next_bring,        # 23: 次回の持ち物
+        ai_comment,        # 🌟 24: (Y列) AIからのフィードバックコメント
+        ai_score           # 🌟 25: (Z列) AIの評価スコア
     ]
     
     worksheet.append_row(row_data, value_input_option="RAW")
