@@ -1,74 +1,80 @@
-import google.generativeai as genai
 import streamlit as st
-import json
+import pandas as pd
 
-def generate_ai_feedback(student_name, subject, homework_status, concentration, report_text):
-    """
-    授業ログからAIフィードバック(Y列)とスコア(Z列)を自動生成する関数
-    """
-    try:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    except Exception as e:
-        return "B", f"APIキー設定エラー: {str(e)}"
+from utils.g_sheets import get_all_logs
+from utils.api_guard import robust_api_call
 
-    # Geminiの中でも「高速かつ賢い」最新のFlashモデルを使用
-    model = genai.GenerativeModel('gemini-1.5-flash')
+def safe_get_all_logs():
+    df = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
+    return df.copy() if not df.empty else df
+
+def render_feedback_board():
+    # 今ログインしている人の情報を取得
+    teacher_name = st.session_state.get('username', '')
+    user_role = st.session_state.get('role', '')
     
-    prompt = f"""
-    あなたは学習塾のプロの教室長です。
-    以下の講師が書いた授業報告書（ログ）を読み、講師に対する「フィードバックコメント」と、「報告書の品質スコア（S, A, B, C）」を作成してください。
-
-    【今回の授業情報】
-    ・生徒名: {student_name}
-    ・科目: {subject}
-    ・宿題の実施状況: {homework_status}
-    ・授業中の様子（集中力など）: {concentration}
-    ・講師が書いた報告コメント: {report_text}
-
-    【評価基準（スコア）】
-    S: 生徒の具体的なつまずきや、それに対する具体的な指導内容、次回の改善策が明確に書かれている。素晴らしいレポート。
-    A: 指導内容は書かれているが、さらに具体的な声かけや生徒の反応があるとより良くなる。
-    B: 事実の羅列（「〇〇をやりました」）のみで、講師の考察や具体的な指導内容が薄い。
-    C: 文字数が極端に少ない、または内容が不十分。ネガティブな事実のみで改善の対策がない。
-
-    【フィードバックのトーン＆マナー】
-    ・講師のモチベーションが上がるよう、まずは「お疲れ様です！」「〇〇の記載、素晴らしいですね！」とポジティブに褒めてください。
-    ・その上で、スコアに応じて「次回はこうするともっと良くなりますよ」という具体的なアドバイスを1〜2文で添えてください。
-    ・文字数は150〜200文字程度に収めてください。
-
-    【出力形式】
-    以下のJSON形式でのみ出力してください。挨拶や他のテキストは絶対に含めないでください。
-    {{
-        "score": "A",
-        "comment": "お疲れ様です！本日の指導ありがとうございます..."
-    }}
-    """
+    st.subheader("📩 教室長（AI）からのフィードバック")
+    st.caption("あなたが作成した指導報告書に対するフィードバックです。今後の指導の参考にしてください！")
     
-    try:
-        # AIに考えてもらう
-        response = model.generate_content(prompt)
-        response_text = response.text.strip()
+    df_logs = safe_get_all_logs()
+    
+    if df_logs.empty or "APIエラー発生" in df_logs.columns:
+        st.info("データが取得できませんでした。")
+        return
         
-        # 🌟 改善：AIが余計な文字をつけてきても、データ部分だけを抜き取る処理
-        clean_text = response_text
-        if "```json" in clean_text:
-            clean_text = clean_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in clean_text:
-            clean_text = clean_text.split("```")[1].strip()
-            
-        try:
-            # データをシステムで使える形に変換
-            result = json.loads(clean_text)
-            return str(result.get("score", "B")), str(result.get("comment", response_text))
-            
-        except json.JSONDecodeError:
-            # 🌟 失敗した場合、AIが何を喋ったのかをそのままスプレッドシートに書き込む（原因特定用）
-            return "B", f"【AI回答の形式エラー】{response_text}"
-            
-    except Exception as e:
-        # 🌟 APIの通信そのものに失敗した場合、本当のエラー理由を書き込む
-        error_msg = str(e)
-        if "403" in error_msg or "API_KEY_INVALID" in error_msg:
-            return "B", "APIキーが間違っているか、有効になっていません。(認証エラー)"
-        else:
-            return "B", f"API通信エラー: {error_msg}"
+    # 列を探す（もし名前が違っても、インデックス24と25で強制的に探す安全設計）
+    fb_col = 'AIフィードバック' if 'AIフィードバック' in df_logs.columns else (df_logs.columns[24] if len(df_logs.columns) > 24 else None)
+    score_col = 'AIスコア' if 'AIスコア' in df_logs.columns else (df_logs.columns[25] if len(df_logs.columns) > 25 else None)
+    teacher_col = '担当講師' if '担当講師' in df_logs.columns else None
+    date_col = '日時' if '日時' in df_logs.columns else None
+    student_col = '名前' if '名前' in df_logs.columns else ('生徒名' if '生徒名' in df_logs.columns else None)
+    
+    if not fb_col or not teacher_col:
+        st.warning("⚠️ フィードバック機能の準備中です。（スプレッドシートのY列1行目に「AIフィードバック」、Z列に「AIスコア」と入力してください）")
+        return
+        
+    # 🌟 自分が担当した授業ログだけを抽出する（管理者の場合は全員分を表示！）
+    if user_role in ['admin', 'owner', 'head_teacher']:
+        st.info("※管理者モードのため、全講師の最新フィードバックをまとめて表示しています。")
+        df_my_logs = df_logs.copy()
+    else:
+        df_my_logs = df_logs[df_logs[teacher_col] == teacher_name].copy()
+        
+    # FBが空欄（まだ書かれていない）ものを除外
+    df_with_fb = df_my_logs.dropna(subset=[fb_col])
+    df_with_fb = df_with_fb[df_with_fb[fb_col].astype(str).str.strip() != ""]
+    
+    if df_with_fb.empty:
+        st.success("現在、あなた宛ての新しいフィードバックはありません！")
+        return
+        
+    # 新しい日付順に並べ替え
+    if date_col:
+        df_with_fb[date_col] = pd.to_datetime(df_with_fb[date_col], format='mixed', errors='coerce')
+        df_with_fb = df_with_fb.sort_values(date_col, ascending=False)
+        
+    # 最新の10件だけを表示（画面が長くなりすぎるのを防ぐ）
+    df_recent_fb = df_with_fb.head(10)
+    
+    # 🌟 FBカードを1件ずつ描画する
+    for _, row in df_recent_fb.iterrows():
+        dt_val = row[date_col] if date_col else None
+        ts = dt_val.strftime('%Y/%m/%d') if pd.notna(dt_val) else "不明な日時"
+        
+        student = row[student_col] if student_col else "不明な生徒"
+        teacher = row[teacher_col]
+        score = str(row[score_col]).strip() if score_col else "-"
+        comment = row[fb_col]
+        
+        # スコアに応じたバッジを作成
+        if score == "S": score_badge = "🌟 **評価: S** (素晴らしいレポートです！)"
+        elif score == "A": score_badge = "✨ **評価: A** (良いレポートです！)"
+        elif score == "B": score_badge = "✅ **評価: B**"
+        elif score == "C": score_badge = "⚠️ **評価: C** (もう少し具体的に書いてみましょう)"
+        else: score_badge = f"**評価: {score}**"
+        
+        # 枠線付きのカードで綺麗に表示
+        with st.container(border=True):
+            st.markdown(f"**🗓 {ts} | 👤 生徒: {student} | 👨‍🏫 担当: {teacher}**")
+            st.markdown(score_badge)
+            st.info(comment)
