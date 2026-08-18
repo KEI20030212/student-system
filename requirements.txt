@@ -11,3 +11,4 @@ google-auth
 plotly
 matplotlib
 ortools
+google-generativeai
