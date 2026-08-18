@@ -6,16 +6,14 @@ def generate_ai_feedback(student_name, subject, homework_status, concentration, 
     """
     授業ログからAIフィードバック(Y列)とスコア(Z列)を自動生成する関数
     """
-    # secrets.tomlからAPIキーを読み込んでGeminiをセットアップ
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    except Exception:
-        return "B", "APIキーが設定されていないため、AIの自動評価をスキップしました。"
+    except Exception as e:
+        return "B", f"APIキー設定エラー: {str(e)}"
 
     # Geminiの中でも「高速かつ賢い」最新のFlashモデルを使用
     model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # 🌟 ここがAIの頭脳（プロンプト）！先生の代わりにどう評価するかを指示しています
     prompt = f"""
     あなたは学習塾のプロの教室長です。
     以下の講師が書いた授業報告書（ログ）を読み、講師に対する「フィードバックコメント」と、「報告書の品質スコア（S, A, B, C）」を作成してください。
@@ -39,10 +37,10 @@ def generate_ai_feedback(student_name, subject, homework_status, concentration, 
     ・文字数は150〜200文字程度に収めてください。
 
     【出力形式】
-    以下のJSON形式でのみ出力してください。他のテキスト（マークダウンなど）は絶対に含めないでください。
+    以下のJSON形式でのみ出力してください。挨拶や他のテキストは絶対に含めないでください。
     {{
-        "score": "S, A, B, Cのいずれか",
-        "comment": "講師へのフィードバックコメント"
+        "score": "A",
+        "comment": "お疲れ様です！本日の指導ありがとうございます..."
     }}
     """
     
@@ -51,17 +49,26 @@ def generate_ai_feedback(student_name, subject, homework_status, concentration, 
         response = model.generate_content(prompt)
         response_text = response.text.strip()
         
-        # JSON（データ）以外のゴミ文字が入っていたら取り除く安全処理
-        if response_text.startswith("```json"):
-            response_text = response_text[7:-3]
-        elif response_text.startswith("```"):
-            response_text = response_text[3:-3]
+        # 🌟 改善：AIが余計な文字をつけてきても、データ部分だけを抜き取る処理
+        clean_text = response_text
+        if "```json" in clean_text:
+            clean_text = clean_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in clean_text:
+            clean_text = clean_text.split("```")[1].strip()
             
-        # データをPythonで扱える形に変換
-        result = json.loads(response_text)
-        
-        return result.get("score", "B"), result.get("comment", "フィードバックの生成に失敗しました。")
-        
+        try:
+            # データをシステムで使える形に変換
+            result = json.loads(clean_text)
+            return str(result.get("score", "B")), str(result.get("comment", response_text))
+            
+        except json.JSONDecodeError:
+            # 🌟 失敗した場合、AIが何を喋ったのかをそのままスプレッドシートに書き込む（原因特定用）
+            return "B", f"【AI回答の形式エラー】{response_text}"
+            
     except Exception as e:
-        print(f"AI Feedback Error: {e}")
-        return "B", "通信エラーまたは文字数制限などにより、AIの自動評価ができませんでした。"
+        # 🌟 APIの通信そのものに失敗した場合、本当のエラー理由を書き込む
+        error_msg = str(e)
+        if "403" in error_msg or "API_KEY_INVALID" in error_msg:
+            return "B", "APIキーが間違っているか、有効になっていません。(認証エラー)"
+        else:
+            return "B", f"API通信エラー: {error_msg}"
