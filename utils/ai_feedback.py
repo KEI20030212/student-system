@@ -11,8 +11,17 @@ def generate_ai_feedback(student_name, subject, homework_status, concentration, 
     except Exception as e:
         return "B", f"APIキー設定エラー: {str(e)}"
 
-    # Geminiの中でも「高速かつ賢い」最新のFlashモデルを使用
-    model = genai.GenerativeModel('gemini-3.6-flash')
+    best_model = 'gemini-3.6-flash' # 万が一見つからなかった時の保険
+    try:
+        for m in genai.list_models():
+            # Googleのリストの中から「文章が作れて、名前に"flash"が入っている」最新モデルを探す
+            if 'generateContent' in m.supported_generation_methods and 'flash' in m.name:
+                best_model = m.name
+                break # 一番最初に見つかった最新版を採用！
+    except Exception:
+        pass # エラーが起きたら保険のモデルを使う
+        
+    model = genai.GenerativeModel(best_model)
     
     prompt = f"""
     あなたは学習塾のプロの教室長です。
