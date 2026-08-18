@@ -12,7 +12,7 @@ def generate_ai_feedback(student_name, subject, homework_status, concentration, 
         return "B", f"APIキー設定エラー: {str(e)}"
 
     # Geminiの中でも「高速かつ賢い」最新のFlashモデルを使用
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     prompt = f"""
     あなたは学習塾のプロの教室長です。
