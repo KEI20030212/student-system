@@ -9,5 +9,4 @@ pypdf
 google-api-python-client
 plotly
 matplotlib
-ortools
 google-generativeai
