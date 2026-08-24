@@ -76,7 +76,7 @@ def render_analytics_dashboard_page():
         quiz_done = pd.DataFrame(columns=['日付', '生徒名', '小テスト実施'])
 
     df_all = df_all.merge(quiz_done, on=['日付', '生徒名'], how='left')
-    df_all['小テスト実施'] = df_all['小テスト実施'].fillna(False)
+    df_all['小テスト実施'] = df_all['小テスト実施'].fillna(False).infer_objects(copy=False)
 
     # --- 保護者リアクションの結合 ---
     if not df_reply.empty and "APIエラー発生" not in df_reply.columns:
