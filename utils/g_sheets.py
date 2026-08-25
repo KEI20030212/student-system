@@ -672,8 +672,8 @@ def background_ai_tasks_bulk(spreadsheet_id, sheet_name, start_row, ai_tasks_inf
 
                 # もし「スピード違反（429）」や「制限到達（quota）」で怒られていたら...
                 if "429" in ai_comment or "quota" in ai_comment.lower():
-                    print(f"⚠️ Googleの速度制限に到達。35秒待機して再トライします... (試行 {attempt+1}/3)")
-                    time.sleep(35)  # 35秒間じっと待機する
+                    print(f"⚠️ Googleの速度制限に到達。50秒待機して再トライします... (試行 {attempt+1}/3)")
+                    time.sleep(50)  # 50秒間じっと待機する
                     continue        # もう一回、同じ生徒の処理をやり直す
                 else:
                     break           # 成功したら、やり直しループを抜ける！
