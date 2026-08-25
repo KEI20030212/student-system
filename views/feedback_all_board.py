@@ -8,7 +8,7 @@ def safe_get_all_logs():
     df = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
     return df.copy() if not df.empty else df
 
-def render_feedback_board():
+def render_feedback_all_board():
     teacher_name = st.session_state.get('username', '')
     user_role = st.session_state.get('role', '')
     
