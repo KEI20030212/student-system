@@ -5,8 +5,8 @@ import time
 
 from utils.g_sheets import get_student_master, delete_specific_log
 from utils.api_guard import robust_api_call
-from components.search_tab_lesson import render_lesson_tab
-from components.search_tab_quiz import render_quiz_tab
+from views.search_tab_lesson import render_lesson_tab
+from views.search_tab_quiz import render_quiz_tab
 
 def cached_get_student_master():
     return robust_api_call(get_student_master, fallback_value=pd.DataFrame())
