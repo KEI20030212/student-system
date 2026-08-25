@@ -12,6 +12,7 @@ import base64
 import altair as alt # 座標グラフを描くための魔法の絵の具
 import pickle
 import threading
+from utils.api_guard import robust_api_call
 
 def get_jst_now():
     """現在時刻を日本時間(JST)で取得する"""
@@ -657,14 +658,19 @@ def background_ai_tasks_bulk(spreadsheet_id, sheet_name, start_row, ai_tasks_inf
         for i, info in enumerate(ai_tasks_info):
             current_row_index = start_row + i
             
-            # AIを呼び出してスコアとコメントを作成
-            ai_score, ai_comment = generate_ai_feedback(
-                student_name=info[0],
-                subject=info[1],
-                homework_status=info[2],
-                concentration=info[3],
-                report_text=info[4]
+            # 🌟 変更：先生の robust_api_call に丸投げしてエラーを完全回避！
+            result = robust_api_call(
+                generate_ai_feedback, 
+                info[0], info[1], info[2], info[3], info[4], # 渡すデータ5つ
+                retries=5,       # Googleに怒られても最大5回まで粘って自動待機する
+                notify=False     # 【重要】裏側処理なので、画面のスピナー通知は出さない
             )
+            
+            if result:
+                ai_score, ai_comment = result
+            else:
+                ai_score = "B"
+                ai_comment = "API通信が大変混雑しているため、AIの自動評価をスキップしました。"
 
             # 1件ずつスプレッドシートを更新
             worksheet.update(
@@ -672,34 +678,33 @@ def background_ai_tasks_bulk(spreadsheet_id, sheet_name, start_row, ai_tasks_inf
                 range_name=f"Y{current_row_index}:Z{current_row_index}"
             )
             
-            # 🌟 超重要：Googleに怒られないよう、次の処理の前に「3秒休憩」する！
-            time.sleep(3)
+            # 普段は1秒の爆速処理！（怒られた時だけ robust_api_call が勝手に長めの休憩をとってくれます）
+            time.sleep(1)
             
     except Exception as e:
         print(f"バックグラウンドバルク更新エラー: {e}")
 
 def background_ai_task(spreadsheet_id, sheet_name, row_index, student_name, subject, homework_status, concentration, report_text):
     from utils.ai_feedback import generate_ai_feedback
-    # AIを呼び出してスコアとコメントを自動作成
-    ai_score, ai_comment = generate_ai_feedback(
-        student_name=student_name,
-        subject=subject,
-        homework_status=homework_status,
-        concentration=concentration,
-        report_text=report_text
+    
+    # 🌟 単発用も robust_api_call でガード！
+    result = robust_api_call(
+        generate_ai_feedback,
+        student_name, subject, homework_status, concentration, report_text,
+        retries=5,
+        notify=False
     )
+    
+    if result:
+        ai_score, ai_comment = result
+    else:
+        ai_score, ai_comment = "B", "通信混雑のためAI評価をスキップしました。"
 
     try:
-        # スプレッドシートをこっそり再度開いて、仮文字を上書きする
         gc = get_gc_client()
         sh = gc.open_by_key(spreadsheet_id)
         worksheet = sh.worksheet(sheet_name)
-        
-        # Y列（25番目）、Z列（26番目）をピンポイントで上書き更新！
-        worksheet.update(
-            values=[[ai_comment, ai_score]],
-            range_name=f"Y{row_index}:Z{row_index}"
-        )
+        worksheet.update(values=[[ai_comment, ai_score]], range_name=f"Y{row_index}:Z{row_index}")
     except Exception as e:
         print(f"バックグラウンドAI更新エラー: {e}")
 
@@ -744,7 +749,7 @@ def save_logs_to_spreadsheet(rows):
     
     # 🌟 3. 追加された「行番号」をシステムから取得して、裏側にパスを出す
     updated_range = res.get('updates', {}).get('updatedRange', '')
-    match = re.search(r'[A-Z]+(\d+)', updated_range) # 「A42:Z43」みたいな文字から最初の行数(42)だけ抜き出す
+    match = re.search(r'[A-Z]+(\d+)', updated_range)
         
     if match:
         start_row = int(match.group(1))
