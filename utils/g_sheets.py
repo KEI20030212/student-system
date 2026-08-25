@@ -684,8 +684,7 @@ def background_ai_tasks_bulk(spreadsheet_id, sheet_name, start_row, ai_tasks_inf
                 range_name=f"Y{current_row_index}:Z{current_row_index}"
             )
             
-            # 普段の休憩時間は1秒（爆速！）
-            time.sleep(1)
+            time.sleep(4)
             
     except Exception as e:
         print(f"バックグラウンドバルク更新エラー: {e}")
