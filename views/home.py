@@ -2,7 +2,7 @@ import streamlit as st
 
 from views.board import render_home_page
 #from views.attendance_check import render_attendance_seat_page
-from views.feedback_all_board.py import render_feedback_all_board
+from views.feedback_all_board import render_feedback_all_board
 
 def render_combined_home_page():
     st.header("📢 ホーム")
