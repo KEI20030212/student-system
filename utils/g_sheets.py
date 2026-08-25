@@ -12,7 +12,6 @@ import base64
 import altair as alt # 座標グラフを描くための魔法の絵の具
 import pickle
 import threading
-from utils.api_guard import robust_api_call
 
 def get_jst_now():
     """現在時刻を日本時間(JST)で取得する"""
@@ -658,27 +657,34 @@ def background_ai_tasks_bulk(spreadsheet_id, sheet_name, start_row, ai_tasks_inf
         for i, info in enumerate(ai_tasks_info):
             current_row_index = start_row + i
             
-            # 🌟 変更：先生の robust_api_call に丸投げしてエラーを完全回避！
-            result = robust_api_call(
-                generate_ai_feedback, 
-                info[0], info[1], info[2], info[3], info[4], # 渡すデータ5つ
-                retries=5,       # Googleに怒られても最大5回まで粘って自動待機する
-                notify=False     # 【重要】裏側処理なので、画面のスピナー通知は出さない
-            )
+            ai_score, ai_comment = "B", ""
             
-            if result:
-                ai_score, ai_comment = result
-            else:
-                ai_score = "B"
-                ai_comment = "API通信が大変混雑しているため、AIの自動評価をスキップしました。"
+            # 🌟 新機能：怒られたら最大3回まで「待ってやり直す」シンプルループ！
+            for attempt in range(3):
+                # AIにスコアとコメントを作ってもらう
+                ai_score, ai_comment = generate_ai_feedback(
+                    student_name=info[0],
+                    subject=info[1],
+                    homework_status=info[2],
+                    concentration=info[3],
+                    report_text=info[4]
+                )
 
-            # 1件ずつスプレッドシートを更新
+                # もし「スピード違反（429）」や「制限到達（quota）」で怒られていたら...
+                if "429" in ai_comment or "quota" in ai_comment.lower():
+                    print(f"⚠️ Googleの速度制限に到達。35秒待機して再トライします... (試行 {attempt+1}/3)")
+                    time.sleep(35)  # 35秒間じっと待機する
+                    continue        # もう一回、同じ生徒の処理をやり直す
+                else:
+                    break           # 成功したら、やり直しループを抜ける！
+
+            # 1件ずつスプレッドシートを更新（綺麗な状態のものを書き込む）
             worksheet.update(
                 values=[[ai_comment, ai_score]],
                 range_name=f"Y{current_row_index}:Z{current_row_index}"
             )
             
-            # 普段は1秒の爆速処理！（怒られた時だけ robust_api_call が勝手に長めの休憩をとってくれます）
+            # 普段の休憩時間は1秒（爆速！）
             time.sleep(1)
             
     except Exception as e:
@@ -687,24 +693,34 @@ def background_ai_tasks_bulk(spreadsheet_id, sheet_name, start_row, ai_tasks_inf
 def background_ai_task(spreadsheet_id, sheet_name, row_index, student_name, subject, homework_status, concentration, report_text):
     from utils.ai_feedback import generate_ai_feedback
     
-    # 🌟 単発用も robust_api_call でガード！
-    result = robust_api_call(
-        generate_ai_feedback,
-        student_name, subject, homework_status, concentration, report_text,
-        retries=5,
-        notify=False
-    )
+    ai_score, ai_comment = "B", ""
     
-    if result:
-        ai_score, ai_comment = result
-    else:
-        ai_score, ai_comment = "B", "通信混雑のためAI評価をスキップしました。"
+    # 🌟 単発保存の場合も、最大3回まで「待ってやり直す」ループを追加！
+    for attempt in range(3):
+        ai_score, ai_comment = generate_ai_feedback(
+            student_name=student_name,
+            subject=subject,
+            homework_status=homework_status,
+            concentration=concentration,
+            report_text=report_text
+        )
+        
+        if "429" in ai_comment or "quota" in ai_comment.lower():
+            print(f"⚠️ Googleの速度制限に到達。35秒待機して再トライします... (試行 {attempt+1}/3)")
+            time.sleep(35)
+            continue
+        else:
+            break
 
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(spreadsheet_id)
         worksheet = sh.worksheet(sheet_name)
-        worksheet.update(values=[[ai_comment, ai_score]], range_name=f"Y{row_index}:Z{row_index}")
+        
+        worksheet.update(
+            values=[[ai_comment, ai_score]],
+            range_name=f"Y{row_index}:Z{row_index}"
+        )
     except Exception as e:
         print(f"バックグラウンドAI更新エラー: {e}")
 
@@ -749,7 +765,7 @@ def save_logs_to_spreadsheet(rows):
     
     # 🌟 3. 追加された「行番号」をシステムから取得して、裏側にパスを出す
     updated_range = res.get('updates', {}).get('updatedRange', '')
-    match = re.search(r'[A-Z]+(\d+)', updated_range)
+    match = re.search(r'[A-Z]+(\d+)', updated_range) 
         
     if match:
         start_row = int(match.group(1))
