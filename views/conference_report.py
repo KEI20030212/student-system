@@ -80,9 +80,6 @@ def cached_calculate_attendance_rate(student_id, student_name):
     rate = (attend_count / total_lessons) * 100
     return f"{int(rate)}%"
 
-# ==========================================
-# 🌟 追加：宿題履行率をログから自動計算する関数
-# ==========================================
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_calculate_homework_rate(student_id, student_name):
     from utils.g_sheets import get_all_logs
@@ -108,19 +105,17 @@ def cached_calculate_homework_rate(student_id, student_name):
     if '出した宿題P' not in df_student.columns or 'やった宿題P' not in df_student.columns:
         return "データなし"
 
-    # 数値化して欠損値を0にする
     assigned = pd.to_numeric(df_student['出した宿題P'], errors='coerce').fillna(0)
     done = pd.to_numeric(df_student['やった宿題P'], errors='coerce').fillna(0)
     
     total_assigned = assigned.sum()
     total_done = done.sum()
     
-    # 宿題がまだ一度も出されていない場合は100%（警告回避）とする
     if total_assigned == 0:
         return "100% (宿題なし)"
         
     rate = (total_done / total_assigned) * 100
-    rate = min(rate, 100.0) # 余分にやった場合でも上限100%にする
+    rate = min(rate, 100.0) 
     
     return f"{int(rate)}%"
 
@@ -197,12 +192,10 @@ def render_conference_report(selected_student_option, info):
     st.subheader("🔥 学習への取り組み姿勢")
     col1, col2, col3, col4 = st.columns(4)
     
-    # 🌟 変更：マスタの数字ではなく、ログから宿題履行率を自動計算して取得！
     with st.spinner("出席率・宿題進捗を計算中..."):
         attendance_rate = cached_calculate_attendance_rate(student_id, student_name)
         hw_rate_str = cached_calculate_homework_rate(student_id, student_name)
     
-    # "85%" などの文字列から数字だけを取り出して評価メッセージ用に使う
     try:
         hw_rate = float(hw_rate_str.replace('%', '').split()[0])
     except Exception:
@@ -294,7 +287,7 @@ def render_conference_report(selected_student_option, info):
     st.divider()
 
     # ==========================================
-    # 3. 小テスト進捗の一覧
+    # 3. 小テスト進捗の一覧 ＆ カラーマップ
     # ==========================================
     st.subheader("📊 小テスト（基礎学力）の定着状況")
     
@@ -332,7 +325,6 @@ def render_conference_report(selected_student_option, info):
             
         if summary_data:
             df_summary = pd.DataFrame(summary_data)
-            
             dynamic_height = max(200, len(df_summary) * 40)
             
             bar_chart = alt.Chart(df_summary).mark_bar().encode(
@@ -343,12 +335,97 @@ def render_conference_report(selected_student_option, info):
             ).properties(height=dynamic_height) 
             
             st.altair_chart(bar_chart, use_container_width=True)
-            
-            st.table(df_summary.set_index("テキスト名"))
         else:
             st.info("集計できる小テストデータがありません。")
     else:
         st.info("小テストのデータがまだありません。")
+
+    # ==========================================
+    # 🌟 NEW: 学年横断カラーマップ（ヒートマップ）
+    # ==========================================
+    st.write("---")
+    st.markdown("#### 🗺️ 学年横断カラーマップ（弱点分析ヒートマップ）")
+    st.write("積み上げ科目の弱点分析に最適です。比較したいテキストを最大3つ選ぶと、横並びで定着度を比較できます。")
+    st.caption("🟦 80%以上 (合格) / 🟨 60~79% (要復習) / 🟥 60%未満 (苦手) / ⬜ 未実施")
+
+    # 選択肢の作成（マスタにあるもの＋実際に受けたもの）
+    available_texts = set()
+    if master_dict: available_texts.update(master_dict.keys())
+    if not df_quiz.empty and 'テキスト' in df_quiz.columns:
+        available_texts.update(df_quiz['テキスト'].dropna().unique())
+        
+    all_texts_options = ["未選択"] + sorted(list(available_texts))
+
+    c_t1, c_t2, c_t3 = st.columns(3)
+    t1 = c_t1.selectbox("比較テキスト① (例:中1数学)", all_texts_options, key="cm_t1")
+    t2 = c_t2.selectbox("比較テキスト② (例:中2数学)", all_texts_options, key="cm_t2")
+    t3 = c_t3.selectbox("比較テキスト③ (例:中3数学)", all_texts_options, key="cm_t3")
+
+    selected_texts = [t for t in [t1, t2, t3] if t != "未選択"]
+
+    if selected_texts:
+        # 選ばれたテキストの中で「最も章が多い数」を探す
+        max_chaps = 0
+        text_chap_maps = {}
+        for t in selected_texts:
+            chaps = master_dict.get(t, {})
+            text_chap_maps[t] = chaps
+            if chaps:
+                int_keys = [int(k) for k in chaps.keys() if str(k).isdigit()]
+                if int_keys: max_chaps = max(max_chaps, max(int_keys))
+            else:
+                if not df_quiz.empty:
+                    quiz_chaps = df_quiz[df_quiz['テキスト'] == t]['単元'].dropna().astype(str)
+                    int_quiz_chaps = [int(k) for k in quiz_chaps if k.isdigit()]
+                    if int_quiz_chaps: max_chaps = max(max_chaps, max(int_quiz_chaps))
+        
+        if max_chaps == 0: max_chaps = 15 # 安全のための初期値
+
+        # カラーマップ表の作成
+        map_data = []
+        for i in range(1, max_chaps + 1):
+            row = {"縦軸(章)": f"第{i}章"}
+            
+            for t in selected_texts:
+                chap_name = text_chap_maps[t].get(str(i), "-")
+                score_disp = "⬜ -"
+                
+                if not df_quiz.empty:
+                    # そのテキスト・その章のテスト履歴を取得
+                    df_target = df_quiz[(df_quiz['テキスト'] == t) & (df_quiz['単元'].astype(str) == str(i))]
+                    df_target = df_target.dropna(subset=['正答率'])
+                    
+                    if not df_target.empty:
+                        # 複数回受けている場合は、ベストスコア（最高正答率）を採用する
+                        idx_max = df_target['正答率'].idxmax()
+                        best_ratio = df_target.loc[idx_max, '正答率']
+                        best_score_raw = df_target.loc[idx_max, '点数']
+                        
+                        try:
+                            score_val = int(float(best_score_raw))
+                        except:
+                            score_val = best_score_raw
+                            
+                        # 点数（正答率）に応じて色付き絵文字を付与
+                        if best_ratio >= 0.8:
+                            score_disp = f"🟦 {score_val}"
+                        elif best_ratio >= 0.6:
+                            score_disp = f"🟨 {score_val}"
+                        else:
+                            score_disp = f"🟥 {score_val}"
+
+                # 列名を動的に作成（例：「中1数学 単元名」「中1数学 点数」）
+                row[f"{t} (単元名)"] = chap_name
+                row[f"点数 ({t})"] = score_disp
+                
+            map_data.append(row)
+
+        df_map = pd.DataFrame(map_data)
+        st.dataframe(df_map, use_container_width=True, hide_index=True)
+    else:
+        st.info("👆 上のドロップダウンから、比較したいテキストを選択してください。")
+
+    st.divider()
 
     # ==========================================
     # 4. 弱点分析
