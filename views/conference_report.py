@@ -420,11 +420,29 @@ def render_conference_report(selected_student_option, info):
                 
             map_data.append(row)
 
+        # 画面に表を表示
         df_map = pd.DataFrame(map_data)
         st.dataframe(df_map, use_container_width=True, hide_index=True)
+        
+        # 🌟 NEW: CSVダウンロードボタンの追加
+        st.write("") # 少し隙間を空ける
+        col_dl, col_blank = st.columns([1, 2]) # ボタンの横幅を調整
+        with col_dl:
+            # Excelで開いても文字化けしないように「utf-8-sig」で変換する魔法
+            csv_data = df_map.to_csv(index=False).encode('utf-8-sig')
+            
+            st.download_button(
+                label="📥 この表をCSV（Excel形式）でダウンロード",
+                data=csv_data,
+                file_name=f"{student_name}_弱点分析カラーマップ.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True
+            )
+            
     else:
         st.info("👆 上のドロップダウンから、比較したいテキストを選択してください。")
-
+        
     st.divider()
 
     # ==========================================
