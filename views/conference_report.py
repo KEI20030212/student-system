@@ -3,6 +3,7 @@ import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
 import io  # 🌟 NEW: Excelファイルをメモリ上で作るための部品
+import re  # 🌟 NEW: ファイル名を安全にするための部品
 
 # 🌟 APIガードをインポート
 from utils.api_guard import robust_api_call
@@ -356,19 +357,16 @@ def render_conference_report(selected_student_option, info):
         
     all_texts_options = ["未選択"] + sorted(list(available_texts))
 
-    # 🌟 1. 比較するテキスト数を自由に選べるようにする！
     num_texts = st.selectbox("比較するテキストの数を選択", [1, 2, 3, 4, 5], index=2)
     
     cols = st.columns(num_texts)
     selected_texts_raw = []
     
-    # 選ばれた数の分だけドロップダウンを動的生成
     for i in range(num_texts):
         with cols[i]:
             t_val = st.selectbox(f"比較テキスト {i+1}", all_texts_options, key=f"cm_t{i}")
             selected_texts_raw.append(t_val)
 
-    # 「未選択」を除外し、かつ重複も防ぐ
     selected_texts = []
     for t in selected_texts_raw:
         if t != "未選択" and t not in selected_texts:
@@ -391,7 +389,6 @@ def render_conference_report(selected_student_option, info):
         
         if max_chaps == 0: max_chaps = 15
 
-        # 値を入れる表（map_data）と、色を入れる表（style_data）を2つ用意する
         map_data = []
         style_data = []
         
@@ -402,7 +399,7 @@ def render_conference_report(selected_student_option, info):
             for t in selected_texts:
                 chap_name = text_chap_maps[t].get(str(i), "-")
                 score_disp = "-"
-                cell_style = "" # デフォルトの背景色
+                cell_style = "" 
                 
                 if not df_quiz.empty:
                     df_target = df_quiz[(df_quiz['テキスト'] == t) & (df_quiz['単元'].astype(str) == str(i))]
@@ -418,16 +415,14 @@ def render_conference_report(selected_student_option, info):
                         except:
                             score_val = best_score_raw
                             
-                        # ここは点数（文字）だけを入れる！
                         score_disp = f"{score_val}"
                         
-                        # 🌟 2. ここで「背景色」をCSSで指定する！
                         if best_ratio >= 0.8:
-                            cell_style = "background-color: #c6efce; color: #006100; font-weight: bold; text-align: center;" # Excel風の緑
+                            cell_style = "background-color: #c6efce; color: #006100; font-weight: bold; text-align: center;" 
                         elif best_ratio >= 0.6:
-                            cell_style = "background-color: #ffeb9c; color: #9c5700; font-weight: bold; text-align: center;" # Excel風の黄
+                            cell_style = "background-color: #ffeb9c; color: #9c5700; font-weight: bold; text-align: center;" 
                         else:
-                            cell_style = "background-color: #ffc7ce; color: #9c0006; font-weight: bold; text-align: center;" # Excel風の赤
+                            cell_style = "background-color: #ffc7ce; color: #9c0006; font-weight: bold; text-align: center;" 
 
                 row[f"{t} (単元名)"] = chap_name
                 row[f"点数 ({t})"] = score_disp
@@ -441,27 +436,32 @@ def render_conference_report(selected_student_option, info):
         df_map = pd.DataFrame(map_data)
         df_style = pd.DataFrame(style_data)
         
-        # 🌟 魔法のコード：値の表に、色の表を完全に重ね合わせる
         styler = df_map.style.apply(lambda _: df_style, axis=None)
         
-        # 画面に美しく表示
         st.dataframe(styler, use_container_width=True, hide_index=True)
         
-        # 🌟 3. Excel形式でのダウンロードボタン
         st.write("") 
         col_dl, col_blank = st.columns([1, 2])
         with col_dl:
             excel_buffer = io.BytesIO()
-            # Stylerから直接Excelを作成するため、背景色がそのまま保持される！
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                 styler.to_excel(writer, index=False, sheet_name='弱点分析マップ')
             
             excel_data = excel_buffer.getvalue()
             
+            # 🌟 変更: ファイル名を動的にカスタマイズ！
+            # 選択されたテキスト名をアンダーバーで繋ぐ
+            texts_joined = "_".join(selected_texts)
+            # ファイル名に使えない記号（/や\など）を安全のため全角に変換するか削除する
+            texts_for_filename = re.sub(r'[\\/:*?"<>|]', ' ', texts_joined)
+            
+            # 生徒ID_生徒名_選択テキスト_カラーマップ.xlsx という美しい名前に！
+            dynamic_file_name = f"{student_id}_{student_name}_{texts_for_filename}_カラーマップ.xlsx"
+            
             st.download_button(
                 label="📥 この表をExcel形式（色付き）でダウンロード",
                 data=excel_data,
-                file_name=f"{student_name}_弱点分析カラーマップ.xlsx",
+                file_name=dynamic_file_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True
