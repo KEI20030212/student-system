@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import streamlit.components.v1 as components
+import io  # 🌟 NEW: Excelファイルをメモリ上で作るための部品
 
 # 🌟 APIガードをインポート
 from utils.api_guard import robust_api_call
@@ -341,14 +342,13 @@ def render_conference_report(selected_student_option, info):
         st.info("小テストのデータがまだありません。")
 
     # ==========================================
-    # 🌟 NEW: 学年横断カラーマップ（ヒートマップ）
+    # 🌟 NEW: 学年横断カラーマップ（ヒートマップ） - 完全版
     # ==========================================
     st.write("---")
     st.markdown("#### 🗺️ 学年横断カラーマップ（弱点分析ヒートマップ）")
-    st.write("積み上げ科目の弱点分析に最適です。比較したいテキストを最大3つ選ぶと、横並びで定着度を比較できます。")
-    st.caption("🟦 80%以上 (合格) / 🟨 60~79% (要復習) / 🟥 60%未満 (苦手) / ⬜ 未実施")
+    st.write("積み上げ科目の弱点分析に最適です。横並びで定着度を比較できます。")
+    st.caption("🟩 80%以上 (合格) / 🟨 60~79% (要復習) / 🟥 60%未満 (苦手) / ⬜ 未実施")
 
-    # 選択肢の作成（マスタにあるもの＋実際に受けたもの）
     available_texts = set()
     if master_dict: available_texts.update(master_dict.keys())
     if not df_quiz.empty and 'テキスト' in df_quiz.columns:
@@ -356,15 +356,25 @@ def render_conference_report(selected_student_option, info):
         
     all_texts_options = ["未選択"] + sorted(list(available_texts))
 
-    c_t1, c_t2, c_t3 = st.columns(3)
-    t1 = c_t1.selectbox("比較テキスト① (例:中1数学)", all_texts_options, key="cm_t1")
-    t2 = c_t2.selectbox("比較テキスト② (例:中2数学)", all_texts_options, key="cm_t2")
-    t3 = c_t3.selectbox("比較テキスト③ (例:中3数学)", all_texts_options, key="cm_t3")
+    # 🌟 1. 比較するテキスト数を自由に選べるようにする！
+    num_texts = st.selectbox("比較するテキストの数を選択", [1, 2, 3, 4, 5], index=2)
+    
+    cols = st.columns(num_texts)
+    selected_texts_raw = []
+    
+    # 選ばれた数の分だけドロップダウンを動的生成
+    for i in range(num_texts):
+        with cols[i]:
+            t_val = st.selectbox(f"比較テキスト {i+1}", all_texts_options, key=f"cm_t{i}")
+            selected_texts_raw.append(t_val)
 
-    selected_texts = [t for t in [t1, t2, t3] if t != "未選択"]
+    # 「未選択」を除外し、かつ重複も防ぐ
+    selected_texts = []
+    for t in selected_texts_raw:
+        if t != "未選択" and t not in selected_texts:
+            selected_texts.append(t)
 
     if selected_texts:
-        # 選ばれたテキストの中で「最も章が多い数」を探す
         max_chaps = 0
         text_chap_maps = {}
         for t in selected_texts:
@@ -379,24 +389,26 @@ def render_conference_report(selected_student_option, info):
                     int_quiz_chaps = [int(k) for k in quiz_chaps if k.isdigit()]
                     if int_quiz_chaps: max_chaps = max(max_chaps, max(int_quiz_chaps))
         
-        if max_chaps == 0: max_chaps = 15 # 安全のための初期値
+        if max_chaps == 0: max_chaps = 15
 
-        # カラーマップ表の作成
+        # 値を入れる表（map_data）と、色を入れる表（style_data）を2つ用意する
         map_data = []
+        style_data = []
+        
         for i in range(1, max_chaps + 1):
             row = {"縦軸(章)": f"第{i}章"}
+            style_row = {"縦軸(章)": "font-weight: bold; background-color: #f0f2f6; text-align: center;"}
             
             for t in selected_texts:
                 chap_name = text_chap_maps[t].get(str(i), "-")
-                score_disp = "⬜ -"
+                score_disp = "-"
+                cell_style = "" # デフォルトの背景色
                 
                 if not df_quiz.empty:
-                    # そのテキスト・その章のテスト履歴を取得
                     df_target = df_quiz[(df_quiz['テキスト'] == t) & (df_quiz['単元'].astype(str) == str(i))]
                     df_target = df_target.dropna(subset=['正答率'])
                     
                     if not df_target.empty:
-                        # 複数回受けている場合は、ベストスコア（最高正答率）を採用する
                         idx_max = df_target['正答率'].idxmax()
                         best_ratio = df_target.loc[idx_max, '正答率']
                         best_score_raw = df_target.loc[idx_max, '点数']
@@ -406,43 +418,58 @@ def render_conference_report(selected_student_option, info):
                         except:
                             score_val = best_score_raw
                             
-                        # 点数（正答率）に応じて色付き絵文字を付与
+                        # ここは点数（文字）だけを入れる！
+                        score_disp = f"{score_val}"
+                        
+                        # 🌟 2. ここで「背景色」をCSSで指定する！
                         if best_ratio >= 0.8:
-                            score_disp = f"🟦 {score_val}"
+                            cell_style = "background-color: #c6efce; color: #006100; font-weight: bold; text-align: center;" # Excel風の緑
                         elif best_ratio >= 0.6:
-                            score_disp = f"🟨 {score_val}"
+                            cell_style = "background-color: #ffeb9c; color: #9c5700; font-weight: bold; text-align: center;" # Excel風の黄
                         else:
-                            score_disp = f"🟥 {score_val}"
+                            cell_style = "background-color: #ffc7ce; color: #9c0006; font-weight: bold; text-align: center;" # Excel風の赤
 
-                # 列名を動的に作成（例：「中1数学 単元名」「中1数学 点数」）
                 row[f"{t} (単元名)"] = chap_name
                 row[f"点数 ({t})"] = score_disp
                 
+                style_row[f"{t} (単元名)"] = ""
+                style_row[f"点数 ({t})"] = cell_style
+                
             map_data.append(row)
+            style_data.append(style_row)
 
-        # 画面に表を表示
         df_map = pd.DataFrame(map_data)
-        st.dataframe(df_map, use_container_width=True, hide_index=True)
+        df_style = pd.DataFrame(style_data)
         
-        # 🌟 NEW: CSVダウンロードボタンの追加
-        st.write("") # 少し隙間を空ける
-        col_dl, col_blank = st.columns([1, 2]) # ボタンの横幅を調整
+        # 🌟 魔法のコード：値の表に、色の表を完全に重ね合わせる
+        styler = df_map.style.apply(lambda _: df_style, axis=None)
+        
+        # 画面に美しく表示
+        st.dataframe(styler, use_container_width=True, hide_index=True)
+        
+        # 🌟 3. Excel形式でのダウンロードボタン
+        st.write("") 
+        col_dl, col_blank = st.columns([1, 2])
         with col_dl:
-            # Excelで開いても文字化けしないように「utf-8-sig」で変換する魔法
-            csv_data = df_map.to_csv(index=False).encode('utf-8-sig')
+            excel_buffer = io.BytesIO()
+            # Stylerから直接Excelを作成するため、背景色がそのまま保持される！
+            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                styler.to_excel(writer, index=False, sheet_name='弱点分析マップ')
+            
+            excel_data = excel_buffer.getvalue()
             
             st.download_button(
-                label="📥 この表をCSV（Excel形式）でダウンロード",
-                data=csv_data,
-                file_name=f"{student_name}_弱点分析カラーマップ.csv",
-                mime="text/csv",
+                label="📥 この表をExcel形式（色付き）でダウンロード",
+                data=excel_data,
+                file_name=f"{student_name}_弱点分析カラーマップ.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True
             )
             
     else:
         st.info("👆 上のドロップダウンから、比較したいテキストを選択してください。")
-        
+
     st.divider()
 
     # ==========================================
