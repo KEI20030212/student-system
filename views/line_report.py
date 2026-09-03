@@ -25,7 +25,7 @@ def render_line_report_page():
 
     if can_use_reply:
         # 🌟 修正：タブを「4つ」に増やしました！
-        main_tab1, main_tab2, main_tab3, main_tab4 = st.tabs([
+        main_tab1, main_tab2, main_tab3, main_tab4, main_tab5 = st.tabs([
             "📱 LINEレポート一括生成",
             "📧 メール送信用レポート生成"
             "💬 保護者返信・ファン化度記録", 
