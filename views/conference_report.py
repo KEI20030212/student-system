@@ -9,6 +9,7 @@ import re  # 🌟 NEW: ファイル名を安全にするための部品
 from utils.api_guard import robust_api_call
 # 🌟 計算専門の関数をインポート！
 from utils.calc_logic import calculate_score_ratio
+from utils.ai_feedback import generate_conference_summary
 
 # ==========================================
 # 🛡️ APIエラー対策：データ読み込み関数群
@@ -507,3 +508,45 @@ def render_conference_report(selected_student_option, info):
                 st.table(display_weak)
         else:
             st.success("現在、極端に正答率が低い（苦手な）単元は見当たりません！順調です。")
+
+    # ==========================================
+    # 5. AIによる総合学習アドバイス
+    # ==========================================
+    st.divider()
+    st.subheader("🤖 AI 面談用アドバイス生成")
+    st.write("これまでの学習データを元に、AIが保護者様・生徒様向けの「総合学習アドバイス」を自動生成します。")
+
+    if st.button("✨ AIアドバイスを生成する", key="generate_ai_summary"):
+        with st.spinner("学習データを分析してアドバイスを執筆中..."):
+            
+            # AIに渡すための「苦手単元テキスト」を作成
+            weak_points_text = "特になし（順調に定着しています）"
+            if not df_quiz.empty:
+                df_weak_for_ai = df_quiz[df_quiz['正答率'] < 0.6].sort_values(by='日時', ascending=False).head(3)
+                if not df_weak_for_ai.empty:
+                    weak_list = []
+                    for _, row in df_weak_for_ai.iterrows():
+                        t_name = str(row.get('テキスト', ''))
+                        chap = str(row.get('単元', ''))
+                        t_master = master_dict.get(t_name, {})
+                        chap_name = t_master.get(chap, "")
+                        
+                        if chap_name:
+                            weak_list.append(f"『{t_name}』の「{chap_name}」")
+                        else:
+                            weak_list.append(f"『{t_name}』の第{chap}単元")
+                    
+                    weak_points_text = "、".join(weak_list)
+
+            # 🌟 utils/ai_feedback.py にまとめた関数を使う！
+            ai_result = generate_conference_summary(
+                student_name=student_name,
+                target_goal=target_goal,
+                hw_rate=hw_rate_str,
+                attendance_rate=attendance_rate,
+                total_quiz=total_quiz_attempts,
+                weak_points_text=weak_points_text
+            )
+
+            st.success("生成が完了しました！この文章をコピーして面談時にお話ししたり、レポートのコメント欄に転記してご活用ください。")
+            st.info(ai_result)
