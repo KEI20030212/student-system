@@ -6,7 +6,8 @@ from utils.g_sheets import (
     load_quiz_records, 
     load_school_homework_data,
     get_sent_list,      
-    update_sent_flag
+    update_sent_flag,
+    get_quiz_master_dict
 )
 from utils.g_drive import get_or_create_student_folder
 from utils.api_guard import robust_api_call
@@ -21,6 +22,9 @@ def cached_load_quiz_records():
 def cached_load_hw_records():
     return robust_api_call(load_school_homework_data, fallback_value=pd.DataFrame())
 
+def cached_get_quiz_master():
+    return robust_api_call(get_quiz_master_dict, fallback_value={})
+
 # --- メイン描画関数 ---
 def render_report_generation_tab(can_use_report):
     st.write("授業日を選択するだけで、**校舎ごと**に全生徒のレポートを自動生成します✨")
@@ -34,6 +38,7 @@ def render_report_generation_tab(can_use_report):
         df_all_logs = cached_get_all_logs()
         df_all_quizzes = cached_load_quiz_records()
         df_hw = cached_load_hw_records() # ※現状未使用ですが将来の拡張用に保持
+        quiz_master = cached_get_quiz_master()
 
         if df_all_logs.empty or "APIエラー発生" in df_all_logs.columns:
             st.error("授業記録データの取得に失敗しました。")
@@ -164,7 +169,24 @@ def render_report_generation_tab(can_use_report):
                     df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
                     student_quizzes = df_all_quizzes[(df_all_quizzes['名前'] == student_name) & (df_all_quizzes['日時'].dt.date == target_date)]
                     if not student_quizzes.empty:
-                        quiz_results_list = [f"【{row.get('テキスト', '不明')} {row.get('単元', '不明')}】: {row.get('点数', '不明')}点" for _, row in student_quizzes.iterrows()]
+                        quiz_results_list = []
+                        for _, row in student_quizzes.iterrows():
+                            t_name = row.get('テキスト', '不明')
+                            chap = row.get('単元', '不明')
+                            score = row.get('点数', '不明')
+                            
+                            # テキスト名と単元名をつなげて、マスター辞書のキー（例: "英単語_第1章"）を作る
+                            quiz_key = f"{t_name}_{chap}"
+                            
+                            # 辞書から満点を取得（もし辞書になければデフォルトで100点とする）
+                            full_marks = quiz_master.get(quiz_key, {}).get("full_marks", 100)
+                            
+                            # 16.0 などの表示を防ぐため、整数の場合はイント型（16）に変換
+                            if isinstance(full_marks, float) and full_marks.is_integer():
+                                full_marks = int(full_marks)
+                                
+                            # リストに「〇〇/〇〇点」の形式で追加！
+                            quiz_results_list.append(f"【{t_name} {chap}】: {score}/{full_marks}点")
                         folder_id = robust_api_call(get_or_create_student_folder, student_id, student_name, fallback_value=None)
                         if folder_id:
                             drive_url_line = f"📂 【本日の答案確認URL】\nhttps://drive.google.com/drive/folders/{folder_id}\n\n"
