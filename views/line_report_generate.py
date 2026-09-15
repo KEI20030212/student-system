@@ -171,17 +171,33 @@ def render_report_generation_tab(can_use_report):
                     if not student_quizzes.empty:
                         quiz_results_list = []
                         for _, row in student_quizzes.iterrows():
-                            t_name = row.get('テキスト', '不明')
-                            chap = row.get('単元', '不明')
+                            t_name_raw = row.get('テキスト', '不明')
+                            chap_raw = row.get('単元', '不明')
                             score = row.get('点数', '不明')
                             
-                            # テキスト名と単元名をつなげて、マスター辞書のキー（例: "英単語_第1章"）を作る
-                            quiz_key = f"{t_name}_{chap}"
+                            # 余計な空白を消して綺麗にする
+                            t_name = str(t_name_raw).strip()
                             
-                            # 辞書から満点を取得（もし辞書になければデフォルトで100点とする）
-                            full_marks = quiz_master.get(quiz_key, {}).get("full_marks", 100)
+                            # 単元名も「1.0」のようにならないように綺麗にする
+                            try:
+                                chap = str(int(float(chap_raw)))
+                            except Exception:
+                                chap = str(chap_raw).strip()
+                                if chap.endswith('.0'):
+                                    chap = chap[:-2]
                             
-                            # 16.0 などの表示を防ぐため、整数の場合はイント型（16）に変換
+                            # 🌟 【ここが賢いポイント！】辞書の中を「テキスト名」で検索する！
+                            full_marks = 100 # 見つからなかった場合のデフォルト点数
+                            
+                            # quiz_master（マスター辞書）の中を一つずつ確認する
+                            for key_in_dict, data_in_dict in quiz_master.items():
+                                # もし辞書のキー（例: "英単語_1"）の中に、テキスト名（例: "英単語"）が含まれていたら
+                                if t_name in key_in_dict:
+                                    # その満点を取得して、探すのをやめる！
+                                    full_marks = data_in_dict.get("full_marks", 100)
+                                    break 
+                            
+                            # 16.0 などの表示を防ぐため、整数の場合はint型（16）に変換
                             if isinstance(full_marks, float) and full_marks.is_integer():
                                 full_marks = int(full_marks)
                                 
