@@ -171,7 +171,7 @@ def render_report_generation_tab(can_use_report):
                     if not student_quizzes.empty:
                         quiz_results_list = []
                         for _, row in student_quizzes.iterrows():
-                            t_name = row.get('テスト名', '不明')
+                            t_name = row.get('テキスト', '不明')
                             chap = row.get('単元', '不明')
                             score = row.get('点数', '不明')
                             
