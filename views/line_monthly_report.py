@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 
-# 🌟 必要な関数をインポート（get_all_logs を追加！）
+# 🌟 必要な関数をインポート
 from utils.g_sheets import (
     get_student_master,
     load_self_study_data,
@@ -45,14 +45,13 @@ def render_monthly_visual_report_tab():
         df_ss = cached_load_self_study()
         df_quiz = cached_load_quiz_records()
         quiz_master = cached_get_quiz_master()
-        df_logs = cached_get_all_logs() # 🌟 追加: 授業コマ数を数えるために取得
+        df_logs = cached_get_all_logs() 
 
     if df_students.empty:
         st.warning("生徒データが読み込めません。")
         return
 
     # --- データの事前処理（選択された月で絞り込み） ---
-    # 自習データ
     if not df_ss.empty and "APIエラー発生" not in df_ss.columns:
         df_ss['日付'] = pd.to_datetime(df_ss['日付'], errors='coerce')
         df_ss['年月'] = df_ss['日付'].dt.strftime('%Y年%m月')
@@ -60,7 +59,6 @@ def render_monthly_visual_report_tab():
     else:
         df_ss_month = pd.DataFrame()
 
-    # 小テストデータ
     if not df_quiz.empty and "APIエラー発生" not in df_quiz.columns:
         df_quiz['日時'] = pd.to_datetime(df_quiz['日時'], format='mixed', errors='coerce')
         df_quiz['年月'] = df_quiz['日時'].dt.strftime('%Y年%m月')
@@ -68,7 +66,6 @@ def render_monthly_visual_report_tab():
     else:
         df_quiz_month = pd.DataFrame()
 
-    # 授業記録データ（NEW!）
     if not df_logs.empty and "APIエラー発生" not in df_logs.columns:
         df_logs['日時'] = pd.to_datetime(df_logs['日時'], format='mixed', errors='coerce')
         df_logs['年月'] = df_logs['日時'].dt.strftime('%Y年%m月')
@@ -104,23 +101,29 @@ def render_monthly_visual_report_tab():
                 student_id = student_info.get(id_col, "未設定")
                 student_name = student_info.get(name_col, "不明")
 
-                # 目標・志望校の抽出（NEW!）
-                target_goal = ""
-                for key, value in student_info.items():
-                    if "志望校" in str(key) or "目的" in str(key) or "目標" in str(key):
-                        val_str = str(value).strip()
-                        if val_str and val_str.lower() != "nan":
-                            target_goal = val_str
-                            break
-
-                # ==========================================
-                # ① 授業コマ数の計算（NEW!）
-                # ==========================================
-                class_count = 0
+                s_logs = pd.DataFrame()
                 if not df_logs_month.empty:
                     log_name_col = '生徒名' if '生徒名' in df_logs_month.columns else '名前'
                     s_logs = df_logs_month[df_logs_month[log_name_col] == student_name]
-                    class_count = len(s_logs)
+
+                # ==========================================
+                # ① 授業コマ数の計算（1:1(Q)を分離）
+                # ==========================================
+                q_count = 0
+                normal_count = 0
+                if not s_logs.empty:
+                    for _, r in s_logs.iterrows():
+                        # 行のデータの中に「1:1(Q)」が含まれているかチェック
+                        row_str = str(r.to_dict().values()).replace(" ", "").replace(" ", "")
+                        if "1:1(Q)" in row_str or "1:1(Ｑ)" in row_str:
+                            q_count += 1
+                        else:
+                            normal_count += 1
+                
+                if q_count > 0:
+                    class_text = f"・通常コース： {normal_count} コマ\n・クオリティコース(1:1Q)： {q_count} コマ"
+                else:
+                    class_text = f"合計： {normal_count} コマ"
 
                 # ==========================================
                 # ② 自習時間の計算
@@ -137,15 +140,35 @@ def render_monthly_visual_report_tab():
                     ss_text = "0分"
 
                 # ==========================================
-                # ③ 小テスト結果のリスト化（順番整理版！）
+                # ③ 【代替案】宿題達成率の計算
+                # ==========================================
+                assigned = 0
+                done = 0
+                hw_rate = -1
+                if not s_logs.empty and '出した宿題P' in s_logs.columns and 'やった宿題P' in s_logs.columns:
+                    assigned = pd.to_numeric(s_logs['出した宿題P'], errors='coerce').fillna(0).sum()
+                    done = pd.to_numeric(s_logs['やった宿題P'], errors='coerce').fillna(0).sum()
+                
+                if assigned > 0:
+                    hw_rate = min(int((done / assigned) * 100), 100)
+                    hw_text = f"{hw_rate} %"
+                else:
+                    hw_text = "（今月の宿題記録はありません）"
+
+                # ==========================================
+                # ④ 小テスト結果のリスト化（単元の数字順ソート！）
                 # ==========================================
                 quiz_lines = []
                 if not df_quiz_month.empty:
                     s_quiz = df_quiz_month[df_quiz_month['名前'] == student_name].copy()
                     
-                    # 🌟 順番整理：テキスト名で並び替える（同じテキストが連続するようになります）
                     if not s_quiz.empty:
-                        s_quiz = s_quiz.sort_values(by=['テキスト', '日時'], ascending=[True, True])
+                        # 🌟 単元名から「数字」だけを抽出してソート用の列を作る
+                        s_quiz['単元_ソート用'] = s_quiz['単元'].astype(str).str.extract(r'(\d+)')[0]
+                        s_quiz['単元_ソート用'] = pd.to_numeric(s_quiz['単元_ソート用'], errors='coerce').fillna(9999)
+                        
+                        # テキスト名 ➡ 単元の数字 ➡ 日時の順に並び替え！
+                        s_quiz = s_quiz.sort_values(by=['テキスト', '単元_ソート用', '日時'], ascending=[True, True, True])
 
                     for _, row in s_quiz.iterrows():
                         t_name_raw = row.get('テキスト', '不明')
@@ -153,13 +176,11 @@ def render_monthly_visual_report_tab():
                         score = row.get('点数', '不明')
                         
                         t_name = str(t_name_raw).strip()
-                        
                         try:
                             chap = str(int(float(chap_raw)))
                         except Exception:
                             chap = str(chap_raw).strip()
-                            if chap.endswith('.0'):
-                                chap = chap[:-2]
+                            if chap.endswith('.0'): chap = chap[:-2]
                         
                         full_marks = 100 
                         for key_in_dict, data_in_dict in quiz_master.items():
@@ -175,35 +196,49 @@ def render_monthly_visual_report_tab():
                 quiz_result_text = "\n".join(quiz_lines) if quiz_lines else "今月の小テスト実施記録はありません。"
 
                 # ==========================================
-                # ④ メッセージ文面の組み立て（固定・自動化）
+                # ⑤ 自動褒め言葉（ルールベース）の生成
                 # ==========================================
-                # 目標がある場合とない場合で、文言を少し変える
-                target_msg = f"「{target_goal}」の目標達成に向けて、" if target_goal else "目標達成に向けて、"
+                dynamic_praise = ""
+                if hw_rate >= 90:
+                    dynamic_praise = "毎回の宿題も非常に高い達成率でこなせており、素晴らしい学習習慣が身についています！"
+                elif total_ss_minutes >= 600: # 月10時間以上
+                    dynamic_praise = "今月は自習にも積極的に取り組むことができ、素晴らしい努力の成果が出ています！"
+                elif quiz_lines:
+                    dynamic_praise = "小テストにもコツコツと取り組み、着実に基礎力を固めることができました！"
+                else:
+                    dynamic_praise = "日々の授業に真剣に取り組み、一歩ずつ着実に前進しています！"
 
+                # ==========================================
+                # ⑥ メッセージ文面の組み立て
+                # ==========================================
                 message = f"""保護者様
 
 いつもお世話になっております。
 【{selected_month}】の {student_name} さんの学習状況をご報告いたします。
 
 🏫 【今月の授業受講数】
-合計： {class_count} コマ
+{class_text}
 
 ⏱️ 【今月の自習時間（授業外）】
 合計： {ss_text}
+
+📝 【今月の宿題達成率】
+合計： {hw_text}
 
 💯 【今月の小テスト結果】
 {quiz_result_text}
 
 🗣️ 【教室長より】
 今月も塾での学習、大変お疲れ様でした！
-{target_msg}引き続きスタッフ一同、全力でサポートしてまいります。
+{dynamic_praise}
+引き続きスタッフ一同、全力でサポートしてまいります。
 ご自宅でもぜひ、今月の頑張りを褒めてあげてください！
 
 よろしくお願いいたします。
 槌屋"""
 
                 # ==========================================
-                # ⑤ 画面への出力（アコーディオン）
+                # ⑦ 画面への出力（アコーディオン）
                 # ==========================================
                 with st.expander(f"👤 {student_name}", expanded=False):
                     st.code(message, language="text")
