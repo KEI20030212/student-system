@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import datetime
 
-# 🌟 必要な関数をインポート
+# 🌟 必要な関数をインポート（get_all_logs を追加！）
 from utils.g_sheets import (
     get_student_master,
     load_self_study_data,
     load_quiz_records,
-    get_quiz_master_dict
+    get_quiz_master_dict,
+    get_all_logs
 )
 from utils.api_guard import robust_api_call
 
@@ -24,12 +25,15 @@ def cached_load_quiz_records():
 def cached_get_quiz_master():
     return robust_api_call(get_quiz_master_dict, fallback_value={})
 
+def cached_get_all_logs():
+    return robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
+
 # --- メイン描画関数 ---
 def render_monthly_visual_report_tab():
     st.write("保護者のLINEへ送付する「月間学習レポート（テキスト版）」を自動生成します。")
     st.caption("※対象の月を選ぶだけで、全員分のレポート文章が瞬時に作成されます。コピーしてLINEに貼り付けてください。")
     
-    # 🌟 UI: 月の選択（デフォルトは今月）
+    # UI: 月の選択（デフォルトは今月）
     today = datetime.date.today()
     month_options = [(today.replace(day=1) - pd.DateOffset(months=i)).strftime('%Y年%m月') for i in range(6)]
     selected_month = st.selectbox("📅 出力する月を選択", month_options, index=0)
@@ -41,6 +45,7 @@ def render_monthly_visual_report_tab():
         df_ss = cached_load_self_study()
         df_quiz = cached_load_quiz_records()
         quiz_master = cached_get_quiz_master()
+        df_logs = cached_get_all_logs() # 🌟 追加: 授業コマ数を数えるために取得
 
     if df_students.empty:
         st.warning("生徒データが読み込めません。")
@@ -63,6 +68,14 @@ def render_monthly_visual_report_tab():
     else:
         df_quiz_month = pd.DataFrame()
 
+    # 授業記録データ（NEW!）
+    if not df_logs.empty and "APIエラー発生" not in df_logs.columns:
+        df_logs['日時'] = pd.to_datetime(df_logs['日時'], format='mixed', errors='coerce')
+        df_logs['年月'] = df_logs['日時'].dt.strftime('%Y年%m月')
+        df_logs_month = df_logs[df_logs['年月'] == selected_month].copy()
+    else:
+        df_logs_month = pd.DataFrame()
+
     # --- 生徒の振り分け（校舎ごと） ---
     id_col = '生徒ID' if '生徒ID' in df_students.columns else None
     name_col = '生徒名' if '生徒名' in df_students.columns else '名前'
@@ -72,13 +85,11 @@ def render_monthly_visual_report_tab():
     
     for s in target_students:
         s_id = str(s.get(id_col, "")).lower()
-        # 退塾などのステータスがあればここで弾く処理を入れてもOKです
         if s_id == "trial": data_buckets["体験授業"].append(s)
         elif s_id.startswith('t'): data_buckets["田端新町校"].append(s)
         elif s_id.startswith('h'): data_buckets["東十条駅前校"].append(s)
         else: data_buckets["その他"].append(s)
 
-    # 空のタブは表示しない
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
     tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
 
@@ -93,8 +104,26 @@ def render_monthly_visual_report_tab():
                 student_id = student_info.get(id_col, "未設定")
                 student_name = student_info.get(name_col, "不明")
 
+                # 目標・志望校の抽出（NEW!）
+                target_goal = ""
+                for key, value in student_info.items():
+                    if "志望校" in str(key) or "目的" in str(key) or "目標" in str(key):
+                        val_str = str(value).strip()
+                        if val_str and val_str.lower() != "nan":
+                            target_goal = val_str
+                            break
+
                 # ==========================================
-                # ① 自習時間の計算
+                # ① 授業コマ数の計算（NEW!）
+                # ==========================================
+                class_count = 0
+                if not df_logs_month.empty:
+                    log_name_col = '生徒名' if '生徒名' in df_logs_month.columns else '名前'
+                    s_logs = df_logs_month[df_logs_month[log_name_col] == student_name]
+                    class_count = len(s_logs)
+
+                # ==========================================
+                # ② 自習時間の計算
                 # ==========================================
                 total_ss_minutes = 0
                 if not df_ss_month.empty:
@@ -108,11 +137,16 @@ def render_monthly_visual_report_tab():
                     ss_text = "0分"
 
                 # ==========================================
-                # ② 小テスト結果のリスト化（満点も計算）
+                # ③ 小テスト結果のリスト化（順番整理版！）
                 # ==========================================
                 quiz_lines = []
                 if not df_quiz_month.empty:
-                    s_quiz = df_quiz_month[df_quiz_month['名前'] == student_name]
+                    s_quiz = df_quiz_month[df_quiz_month['名前'] == student_name].copy()
+                    
+                    # 🌟 順番整理：テキスト名で並び替える（同じテキストが連続するようになります）
+                    if not s_quiz.empty:
+                        s_quiz = s_quiz.sort_values(by=['テキスト', '日時'], ascending=[True, True])
+
                     for _, row in s_quiz.iterrows():
                         t_name_raw = row.get('テキスト', '不明')
                         chap_raw = row.get('単元', '不明')
@@ -120,7 +154,6 @@ def render_monthly_visual_report_tab():
                         
                         t_name = str(t_name_raw).strip()
                         
-                        # 単元名のクリーニング
                         try:
                             chap = str(int(float(chap_raw)))
                         except Exception:
@@ -128,7 +161,6 @@ def render_monthly_visual_report_tab():
                             if chap.endswith('.0'):
                                 chap = chap[:-2]
                         
-                        # マスターから満点を探す（部分一致）
                         full_marks = 100 
                         for key_in_dict, data_in_dict in quiz_master.items():
                             if t_name in key_in_dict:
@@ -143,12 +175,18 @@ def render_monthly_visual_report_tab():
                 quiz_result_text = "\n".join(quiz_lines) if quiz_lines else "今月の小テスト実施記録はありません。"
 
                 # ==========================================
-                # ③ LINEメッセージの組み立て
+                # ④ メッセージ文面の組み立て（固定・自動化）
                 # ==========================================
+                # 目標がある場合とない場合で、文言を少し変える
+                target_msg = f"「{target_goal}」の目標達成に向けて、" if target_goal else "目標達成に向けて、"
+
                 message = f"""保護者様
 
 いつもお世話になっております。
 【{selected_month}】の {student_name} さんの学習状況をご報告いたします。
+
+🏫 【今月の授業受講数】
+合計： {class_count} コマ
 
 ⏱️ 【今月の自習時間（授業外）】
 合計： {ss_text}
@@ -157,14 +195,15 @@ def render_monthly_visual_report_tab():
 {quiz_result_text}
 
 🗣️ 【教室長より】
-（※ここに今月の頑張りに対するコメントを添えてください）
+今月も塾での学習、大変お疲れ様でした！
+{target_msg}引き続きスタッフ一同、全力でサポートしてまいります。
+ご自宅でもぜひ、今月の頑張りを褒めてあげてください！
 
-来月も引き続き、目標に向けてしっかりサポートしてまいります。
 よろしくお願いいたします。
 槌屋"""
 
                 # ==========================================
-                # ④ 画面への出力（アコーディオン）
+                # ⑤ 画面への出力（アコーディオン）
                 # ==========================================
                 with st.expander(f"👤 {student_name}", expanded=False):
                     st.code(message, language="text")
