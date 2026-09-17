@@ -113,7 +113,6 @@ def render_monthly_visual_report_tab():
                 normal_count = 0
                 if not s_logs.empty:
                     for _, r in s_logs.iterrows():
-                        # 行のデータの中に「1:1(Q)」が含まれているかチェック
                         row_str = str(r.to_dict().values()).replace(" ", "").replace(" ", "")
                         if "1:1(Q)" in row_str or "1:1(Ｑ)" in row_str:
                             q_count += 1
@@ -140,7 +139,7 @@ def render_monthly_visual_report_tab():
                     ss_text = "0分"
 
                 # ==========================================
-                # ③ 【代替案】宿題達成率の計算
+                # ③ 宿題達成率の計算（🌟 記録なしなら非表示）
                 # ==========================================
                 assigned = 0
                 done = 0
@@ -151,23 +150,21 @@ def render_monthly_visual_report_tab():
                 
                 if assigned > 0:
                     hw_rate = min(int((done / assigned) * 100), 100)
-                    hw_text = f"{hw_rate} %"
+                    hw_block = f"📝 【今月の宿題達成率】\n合計： {hw_rate} %\n\n"
                 else:
-                    hw_text = "（今月の宿題記録はありません）"
+                    # 🌟 宿題を出していない（記録がない）場合はブロックごと消す
+                    hw_block = ""
 
                 # ==========================================
-                # ④ 小テスト結果のリスト化（単元の数字順ソート！）
+                # ④ 小テスト結果のリスト化
                 # ==========================================
                 quiz_lines = []
                 if not df_quiz_month.empty:
                     s_quiz = df_quiz_month[df_quiz_month['名前'] == student_name].copy()
                     
                     if not s_quiz.empty:
-                        # 🌟 単元名から「数字」だけを抽出してソート用の列を作る
                         s_quiz['単元_ソート用'] = s_quiz['単元'].astype(str).str.extract(r'(\d+)')[0]
                         s_quiz['単元_ソート用'] = pd.to_numeric(s_quiz['単元_ソート用'], errors='coerce').fillna(9999)
-                        
-                        # テキスト名 ➡ 単元の数字 ➡ 日時の順に並び替え！
                         s_quiz = s_quiz.sort_values(by=['テキスト', '単元_ソート用', '日時'], ascending=[True, True, True])
 
                     for _, row in s_quiz.iterrows():
@@ -201,7 +198,7 @@ def render_monthly_visual_report_tab():
                 dynamic_praise = ""
                 if hw_rate >= 90:
                     dynamic_praise = "毎回の宿題も非常に高い達成率でこなせており、素晴らしい学習習慣が身についています！"
-                elif total_ss_minutes >= 600: # 月10時間以上
+                elif total_ss_minutes >= 600:
                     dynamic_praise = "今月は自習にも積極的に取り組むことができ、素晴らしい努力の成果が出ています！"
                 elif quiz_lines:
                     dynamic_praise = "小テストにもコツコツと取り組み、着実に基礎力を固めることができました！"
@@ -211,6 +208,7 @@ def render_monthly_visual_report_tab():
                 # ==========================================
                 # ⑥ メッセージ文面の組み立て
                 # ==========================================
+                # 🌟 {hw_block} を配置（空文字なら何も表示されない）
                 message = f"""保護者様
 
 いつもお世話になっております。
@@ -222,10 +220,7 @@ def render_monthly_visual_report_tab():
 ⏱️ 【今月の自習時間（授業外）】
 合計： {ss_text}
 
-📝 【今月の宿題達成率】
-合計： {hw_text}
-
-💯 【今月の小テスト結果】
+{hw_block}💯 【今月の小テスト結果】
 {quiz_result_text}
 
 🗣️ 【教室長より】
