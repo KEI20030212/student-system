@@ -2,13 +2,15 @@ import streamlit as st
 import pandas as pd
 import datetime
 
-# 🌟 必要な関数をインポート
+# 🌟 必要な関数をインポート（送信済みフラグ管理用の関数を追加！）
 from utils.g_sheets import (
     get_student_master,
     load_self_study_data,
     load_quiz_records,
     get_quiz_master_dict,
-    get_all_logs
+    get_all_logs,
+    get_sent_list,
+    update_sent_flag
 )
 from utils.api_guard import robust_api_call
 
@@ -46,7 +48,8 @@ def render_monthly_visual_report_tab():
         df_quiz = cached_load_quiz_records()
         quiz_master = cached_get_quiz_master()
         df_logs = cached_get_all_logs() 
-
+        monthly_sent_key = f"月報_{selected_month}"
+        sent_id_list = robust_api_call(get_sent_list, monthly_sent_key, fallback_value=[])
     if df_students.empty:
         st.warning("生徒データが読み込めません。")
         return
@@ -106,9 +109,7 @@ def render_monthly_visual_report_tab():
                     log_name_col = '生徒名' if '生徒名' in df_logs_month.columns else '名前'
                     s_logs = df_logs_month[df_logs_month[log_name_col] == student_name]
 
-                # ==========================================
-                # ① 授業コマ数の計算（1:1(Q)を分離）
-                # ==========================================
+                # ① 授業コマ数の計算
                 q_count = 0
                 normal_count = 0
                 if not s_logs.empty:
@@ -119,14 +120,13 @@ def render_monthly_visual_report_tab():
                         else:
                             normal_count += 1
                 
+                total_classes = normal_count + q_count
                 if q_count > 0:
                     class_text = f"・通常コース： {normal_count} コマ\n・クオリティコース(1:1Q)： {q_count} コマ"
                 else:
                     class_text = f"合計： {normal_count} コマ"
 
-                # ==========================================
                 # ② 自習時間の計算
-                # ==========================================
                 total_ss_minutes = 0
                 if not df_ss_month.empty:
                     s_ss = df_ss_month[df_ss_month['名前'] == student_name]
@@ -138,9 +138,7 @@ def render_monthly_visual_report_tab():
                 if total_ss_minutes == 0:
                     ss_text = "0分"
 
-                # ==========================================
-                # ③ 宿題達成率の計算（🌟 記録なしなら非表示）
-                # ==========================================
+                # ③ 宿題達成率の計算
                 assigned = 0
                 done = 0
                 hw_rate = -1
@@ -152,12 +150,9 @@ def render_monthly_visual_report_tab():
                     hw_rate = min(int((done / assigned) * 100), 100)
                     hw_block = f"📝 【今月の宿題達成率】\n合計： {hw_rate} %\n\n"
                 else:
-                    # 🌟 宿題を出していない（記録がない）場合はブロックごと消す
                     hw_block = ""
 
-                # ==========================================
                 # ④ 小テスト結果のリスト化
-                # ==========================================
                 quiz_lines = []
                 if not df_quiz_month.empty:
                     s_quiz = df_quiz_month[df_quiz_month['名前'] == student_name].copy()
@@ -192,9 +187,7 @@ def render_monthly_visual_report_tab():
                 
                 quiz_result_text = "\n".join(quiz_lines) if quiz_lines else "今月の小テスト実施記録はありません。"
 
-                # ==========================================
-                # ⑤ 自動褒め言葉（ルールベース）の生成
-                # ==========================================
+                # ⑤ 自動褒め言葉
                 dynamic_praise = ""
                 if hw_rate >= 90:
                     dynamic_praise = "毎回の宿題も非常に高い達成率でこなせており、素晴らしい学習習慣が身についています！"
@@ -205,10 +198,7 @@ def render_monthly_visual_report_tab():
                 else:
                     dynamic_praise = "日々の授業に真剣に取り組み、一歩ずつ着実に前進しています！"
 
-                # ==========================================
                 # ⑥ メッセージ文面の組み立て
-                # ==========================================
-                # 🌟 {hw_block} を配置（空文字なら何も表示されない）
                 message = f"""保護者様
 
 いつもお世話になっております。
@@ -233,8 +223,42 @@ def render_monthly_visual_report_tab():
 槌屋"""
 
                 # ==========================================
-                # ⑦ 画面への出力（アコーディオン）
+                # ⑦ 送信済みチェック＆要フォロー機能（🌟 NEW!）
                 # ==========================================
-                with st.expander(f"👤 {student_name}", expanded=False):
-                    st.code(message, language="text")
-                    st.caption("👆 右上のコピーボタンからコピーしてLINEに貼り付けてください")
+                # 🚨 要フォロー判定ロジック
+                needs_followup = False
+                followup_reasons = []
+                
+                # 授業を受けている（1コマ以上）のに自習時間が0分
+                if total_classes > 0 and total_ss_minutes == 0:
+                    needs_followup = True
+                    followup_reasons.append("今月の自習時間0分")
+                    
+                # 宿題達成率が50%未満（出されている場合）
+                if hw_rate != -1 and hw_rate < 50:
+                    needs_followup = True
+                    followup_reasons.append(f"宿題達成率が低い（{hw_rate}%）")
+
+                # UIの描画（日報と同じ仕組み）
+                checkbox_key = f"sent_{selected_month}_{student_id}"
+                is_already_sent = str(student_id) in sent_id_list
+                
+                c_check, c_exp = st.columns([1.5, 8.5])
+                check_val = c_check.checkbox("送済", value=is_already_sent, key=checkbox_key)
+                if check_val != is_already_sent:
+                    robust_api_call(update_sent_flag, monthly_sent_key, student_id, check_val)
+                    st.rerun()
+
+                # 送信済みの場合はアイコンを切り替える
+                label_suffix = " ［✅ 送信完了］" if check_val else ""
+                follow_badge = " 🚨 要フォロー" if needs_followup and not check_val else ""
+
+                with c_exp:
+                    with st.expander(f"👤 {student_name}{follow_badge}{label_suffix}", expanded=False):
+                        # 要フォローの生徒にだけ、警告メッセージを表示！
+                        if needs_followup and not check_val:
+                            reason_str = " / ".join(followup_reasons)
+                            st.error(f"🚨 **フォロー推奨**：{reason_str}\n\n定型文をそのまま送る前に、ご家庭への電話フォローやLINEへの一言追加をご検討ください。")
+                            
+                        st.code(message, language="text")
+                        st.caption("👆 右上のコピーボタンからコピーしてLINEに貼り付けてください")
