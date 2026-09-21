@@ -8,7 +8,8 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "sb_publishable_EoMQzOR1nA4YlxcNpg
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
+# ★ 1行目の引数末尾に clear_existing: bool = True を追加
+def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict, clear_existing: bool = True):
     """スプレッドシートのデータを整形してSupabaseへ流し込む共通関数"""
     
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
@@ -16,15 +17,17 @@ def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
         return
 
     st.write(f"📊 取得件数: {len(df)} 件")
-    
+
+    # 1. 移行前にSupabase側の既存データを全削除して上書き準備
     if clear_existing:
         try:
-            # id が 0 以上のレコードを全削除 (実質全件削除)
+            # id が -1 以外の全レコードを削除（実質全削除）
             supabase.table(table_name).delete().neq("id", -1).execute()
-            st.info("🗑️ 既存のデータをクリアしました")
+            st.info("🗑️ 既存のデータをクリアしました（上書きモード）")
         except Exception as e:
-            st.warning(f"⚠️ 既存データのクリア時に通知がありました（初回データなし等の可能性）: {e}")
-    # 列名の変換と絞り込み
+            st.warning(f"⚠️ 既存データのクリア時に通知がありました（データが空の可能性など）: {e}")
+
+    # 2. 列名の変換と絞り込み
     df_mapped = df.rename(columns=column_mapping)
     valid_columns = [col for col in column_mapping.values() if col in df_mapped.columns]
     df_final = df_mapped[valid_columns].copy()
@@ -45,20 +48,19 @@ def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
     for record in records:
         clean_record = {}
         for k, v in record.items():
-            # 1. NaN やハイフンなどの無効記号・文字列は None (NULL) に変換
+            # NaN やハイフンなどの無効記号・文字列は None (NULL) に変換
             if pd.isna(v) or str(v).strip() in null_values:
                 clean_record[k] = None
             else:
                 val_str = str(v).strip()
                 
-                # 2. 数値型カラムの場合は安全に int 変換（失敗時は None）
+                # 数値型カラムの場合は安全に int 変換（失敗時は None）
                 if k in integer_columns:
                     try:
                         clean_record[k] = int(float(val_str))
                     except (ValueError, TypeError):
                         clean_record[k] = None
                 else:
-                    # 3. その他のテキストカラム
                     if isinstance(v, float) and v.is_integer():
                         clean_record[k] = int(v)
                     else:
@@ -66,7 +68,7 @@ def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
 
         clean_records.append(clean_record)
 
-    # Supabaseへバッチ挿入
+    # 3. Supabaseへバッチ挿入
     batch_size = 100
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -85,4 +87,4 @@ def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
             break
 
     if not has_error:
-        st.success(f"🎉 {table_name} への移行処理が完了しました！")
+        st.success(f"🎉 {table_name} への移行（上書き更新）が完了しました！")
