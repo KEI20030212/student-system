@@ -1,12 +1,12 @@
 import streamlit as st
-from utils.g_sheets import get_textbook_master
+from utils.g_sheets import load_textbook_data
 from utils.migration_helper import execute_migration
 
 st.title("📦 テキスト情報 ➔ Supabase 移行")
 
 if st.button("🚀 テキスト情報の移行を開始", type="primary"):
     st.info("📥 データを取得中...")
-    df = get_textbook_master()
+    df = load_textbook_data()
     
     mapping = {
         "テキスト": "textbook_name",
