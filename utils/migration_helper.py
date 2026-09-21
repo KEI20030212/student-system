@@ -11,7 +11,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
     """スプレッドシートのデータを整形してSupabaseへ流し込む共通関数"""
     
-    # ★ df が None や DataFrame でない場合も安全にチェック
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         st.error("❌ 移行するデータが取得できませんでした。シート名（タブ名）や g_sheets.py の設定をご確認ください。")
         return
@@ -23,19 +22,41 @@ def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
     valid_columns = [col for col in column_mapping.values() if col in df_mapped.columns]
     df_final = df_mapped[valid_columns].copy()
 
-    # データクレンジング (NaN / 空文字 -> None, float -> int)
+    # 数値（整数）として扱うべきカラム一覧
+    integer_columns = {
+        "start_page", "end_page", "progress_pages", "homework_page", 
+        "homework_finish_page", "next_homework_pages", "late_time", 
+        "study_minutes", "break_minutes", "points", "student_id"
+    }
+
+    # 無視・NULL（None）変換対象の記号・文字列一覧
+    null_values = {"", "-", "‐", "―", "ー", "None", "none", "null", "NULL", "N/A", "NA", "なし"}
+
     records = df_final.to_dict(orient="records")
     clean_records = []
+
     for record in records:
         clean_record = {}
         for k, v in record.items():
-            if pd.isna(v) or v == "" or v == "None":
+            # 1. NaN やハイフンなどの無効記号・文字列は None (NULL) に変換
+            if pd.isna(v) or str(v).strip() in null_values:
                 clean_record[k] = None
             else:
-                if isinstance(v, float) and v.is_integer():
-                    clean_record[k] = int(v)
+                val_str = str(v).strip()
+                
+                # 2. 数値型カラムの場合は安全に int 変換（失敗時は None）
+                if k in integer_columns:
+                    try:
+                        clean_record[k] = int(float(val_str))
+                    except (ValueError, TypeError):
+                        clean_record[k] = None
                 else:
-                    clean_record[k] = v
+                    # 3. その他のテキストカラム
+                    if isinstance(v, float) and v.is_integer():
+                        clean_record[k] = int(v)
+                    else:
+                        clean_record[k] = val_str
+
         clean_records.append(clean_record)
 
     # Supabaseへバッチ挿入
