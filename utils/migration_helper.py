@@ -16,7 +16,14 @@ def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
         return
 
     st.write(f"📊 取得件数: {len(df)} 件")
-
+    
+    if clear_existing:
+        try:
+            # id が 0 以上のレコードを全削除 (実質全件削除)
+            supabase.table(table_name).delete().neq("id", -1).execute()
+            st.info("🗑️ 既存のデータをクリアしました")
+        except Exception as e:
+            st.warning(f"⚠️ 既存データのクリア時に通知がありました（初回データなし等の可能性）: {e}")
     # 列名の変換と絞り込み
     df_mapped = df.rename(columns=column_mapping)
     valid_columns = [col for col in column_mapping.values() if col in df_mapped.columns]
