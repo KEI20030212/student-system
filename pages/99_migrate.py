@@ -3,6 +3,7 @@ import pandas as pd
 from supabase import create_client
 import streamlit as st
 from utils.g_sheets import get_all_logs  # 必要に応じて自習用関数もインポート
+from utils.g_sheets import load_self_study_data
 
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "https://vxotfwlxkpouumviqxbe.supabase.co")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "sb_publishable_EoMQzOR1nA4YlxcNpg88Ug_mRBVsK4m")
