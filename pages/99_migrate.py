@@ -59,7 +59,7 @@ if st.button("🚀 データ移行を開始する", type="primary"):
             # 自習記録用シートを取得する関数を呼び出します
             # （g_sheets.py側で自習シート取得用関数名が異なる場合は置き換えてください）
             df = load_self_study_data()  
-            table_name = "study_logs"
+            table_name = "self_study_logs"
             column_mapping = {
                 "日付": "date",
                 "日時": "date",
