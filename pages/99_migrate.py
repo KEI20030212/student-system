@@ -84,15 +84,23 @@ if st.button("🚀 データ移行を開始する", type="primary"):
             ]
             df_final = df_mapped[valid_columns].copy()
 
-            # pandasでの空文字・空白・NaN の一括置換
-            df_final = df_final.replace(r"^\s*$", None, regex=True)
-            df_final = df_final.where(pd.notnull(df_final), None)
-
-            # dictのリストに変換後、空文字 "" を確実に None (NULL) に変換
+            # dictのリストに変換
             records = df_final.to_dict(orient="records")
             clean_records = []
+            
+            # 各値のNaN / 空文字判定と型変換
             for record in records:
-                clean_record = {k: (None if v == "" or v == "None" else v) for k, v in record.items()}
+                clean_record = {}
+                for k, v in record.items():
+                    # NaN, None, 空文字, "None" 文字列の判定
+                    if pd.isna(v) or v == "" or v == "None":
+                        clean_record[k] = None
+                    else:
+                        # 120.0 などの小数表記整数を整数（120）に変換
+                        if isinstance(v, float) and v.is_integer():
+                            clean_record[k] = int(v)
+                        else:
+                            clean_record[k] = v
                 clean_records.append(clean_record)
 
             batch_size = 100
