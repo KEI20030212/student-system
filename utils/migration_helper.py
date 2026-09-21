@@ -10,8 +10,10 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def execute_migration(df: pd.DataFrame, table_name: str, column_mapping: dict):
     """スプレッドシートのデータを整形してSupabaseへ流し込む共通関数"""
-    if df.empty:
-        st.error("❌ 移行するデータがありませんでした。シート名等をご確認ください。")
+    
+    # ★ df が None や DataFrame でない場合も安全にチェック
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        st.error("❌ 移行するデータが取得できませんでした。シート名（タブ名）や g_sheets.py の設定をご確認ください。")
         return
 
     st.write(f"📊 取得件数: {len(df)} 件")
