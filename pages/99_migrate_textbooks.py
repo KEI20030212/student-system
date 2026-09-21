@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.g_sheets import lget_textbook_master
+from utils.g_sheets import get_textbook_master
 from utils.migration_helper import execute_migration
 
 st.title("📦 テキスト情報 ➔ Supabase 移行")
