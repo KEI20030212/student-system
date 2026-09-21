@@ -11,3 +11,4 @@ plotly
 matplotlib
 google-generativeai
 xlsxwriter
+supabase
