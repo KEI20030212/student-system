@@ -7,6 +7,7 @@ st.title("📦 テキスト情報 ➔ Supabase 移行")
 if st.button("🚀 テキスト情報の移行を開始", type="primary"):
     st.info("📥 データを取得中...")
     df = get_textbook_master()
+    
     mapping = {
         "テキスト": "textbook_name",
         "章": "chapter", "単元名": "unit_name",
