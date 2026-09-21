@@ -1006,6 +1006,27 @@ def get_textbook_master():
         print(f"マスタ取得の裏側でエラー発生: {e}")
         return {}
 
+def load_textbook_data():
+    """テキスト情報一覧シートの全データを DataFrame で取得する（データ移行用）"""
+    import pandas as pd
+    import streamlit as st
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet("テキスト情報一覧") 
+        
+        # 数値の自動変換（01が1になる問題）を防いで全レコード取得
+        records = worksheet.get_all_records(numericise_ignore=["all"])
+        
+        # pandasのDataFrameに変換して返す
+        df = pd.DataFrame(records)
+        return df
+        
+    except Exception as e:
+        import pandas as pd
+        st.error(f"❌ テキスト情報シート読み込みエラー: {e}")
+        return pd.DataFrame()
+
 def update_student_homework_rate(student_name, *args):
     """
     統合ログから今月の宿題・小テストデータを集計し、
