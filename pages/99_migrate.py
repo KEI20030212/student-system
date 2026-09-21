@@ -2,8 +2,8 @@
 import pandas as pd
 from supabase import create_client
 import streamlit as st
-from utils.g_sheets import get_all_logs  # 必要に応じて自習用関数もインポート
-from utils.g_sheets import load_self_study_data
+
+from utils.g_sheets import get_all_logs, load_self_study_data
 
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "https://vxotfwlxkpouumviqxbe.supabase.co")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "sb_publishable_EoMQzOR1nA4YlxcNpg88Ug_mRBVsK4m")
@@ -12,16 +12,14 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.title("📦 スプレッドシート ➔ Supabase データ移行ツール")
 
-# 1. 移行対象データの選択機能
 target_data = st.radio(
     "移行するデータを選択してください",
-    ["授業記録 (lesson_logs)", "自習記録 (study_logs)"],
+    ["授業記録 (lesson_logs)", "自習記録 (self_study_logs)"],
     horizontal=True
 )
 
 if st.button("🚀 データ移行を開始する", type="primary"):
     try:
-        # 2. 選択されたデータに応じた処理の分岐
         if target_data == "授業記録 (lesson_logs)":
             st.info("📥 授業記録データを取得中...")
             df = get_all_logs()
@@ -56,8 +54,6 @@ if st.button("🚀 データ移行を開始する", type="primary"):
             }
         else:
             st.info("📥 自習記録データを取得中...")
-            # 自習記録用シートを取得する関数を呼び出します
-            # （g_sheets.py側で自習シート取得用関数名が異なる場合は置き換えてください）
             df = load_self_study_data()  
             table_name = "self_study_logs"
             column_mapping = {
@@ -83,33 +79,36 @@ if st.button("🚀 データ移行を開始する", type="primary"):
 
             # 存在する列だけ変換
             df_mapped = df.rename(columns=column_mapping)
-
-            # Supabase側で定義したカラムだけに絞り込み
             valid_columns = [
                 col for col in column_mapping.values() if col in df_mapped.columns
             ]
-            df_final = df_mapped[valid_columns]
+            df_final = df_mapped[valid_columns].copy()
 
-            # Pandasの NaN（空データ）を None (NULL) に置き換え
+            # pandasでの空文字・空白・NaN の一括置換
+            df_final = df_final.replace(r"^\s*$", None, regex=True)
             df_final = df_final.where(pd.notnull(df_final), None)
 
-            # dictのリストに変換
+            # dictのリストに変換後、空文字 "" を確実に None (NULL) に変換
             records = df_final.to_dict(orient="records")
+            clean_records = []
+            for record in records:
+                clean_record = {k: (None if v == "" or v == "None" else v) for k, v in record.items()}
+                clean_records.append(clean_record)
 
             batch_size = 100
             progress_bar = st.progress(0)
             status_text = st.empty()
             has_error = False
 
-            for i in range(0, len(records), batch_size):
-                batch = records[i : i + batch_size]
+            for i in range(0, len(clean_records), batch_size):
+                batch = clean_records[i : i + batch_size]
                 try:
                     supabase.table(table_name).insert(batch).execute()
-                    current_count = min(i + batch_size, len(records))
+                    current_count = min(i + batch_size, len(clean_records))
                     status_text.text(
-                        f"✅ {current_count} / {len(records)} 件を移行完了"
+                        f"✅ {current_count} / {len(clean_records)} 件を移行完了"
                     )
-                    progress_bar.progress(current_count / len(records))
+                    progress_bar.progress(current_count / len(clean_records))
                 except Exception as batch_error:
                     st.error(f"❌ エラー発生 ({i + 1}件目付近): {batch_error}")
                     has_error = True
