@@ -47,7 +47,7 @@ def render_quiz_list_page():
     
     # 🌟 生徒名から「所属校舎」と「学年」を特定する辞書を作成
     student_name_to_branch = {}
-    student_name_to_grade = {}  # 🌟 NEW: 学年用の辞書
+    student_name_to_grade = {} 
     
     id_col = '生徒ID' if '生徒ID' in df_students_raw.columns else None
     name_col = '生徒名' if '生徒名' in df_students_raw.columns else '名前'
@@ -55,7 +55,7 @@ def render_quiz_list_page():
     for _, row in df_students_raw.iterrows():
         s_name = str(row.get(name_col, "")).strip()
         s_id = str(row.get(id_col, "")).strip().lower()
-        grade = str(row.get('学年', '未設定')).strip() # 🌟 NEW: 学年を取得
+        grade = str(row.get('学年', '未設定')).strip() 
         
         if s_id == "trial": branch = "体験授業"
         elif s_id.startswith('t'): branch = "田端新町校"
@@ -63,7 +63,7 @@ def render_quiz_list_page():
         else: branch = "その他"
         
         student_name_to_branch[s_name] = branch
-        student_name_to_grade[s_name] = grade # 🌟 NEW: 学年を保存
+        student_name_to_grade[s_name] = grade 
 
     quiz_names = []
     for key in quiz_details.keys():
@@ -238,7 +238,7 @@ def render_quiz_list_page():
                                         st.dataframe(styled_df, use_container_width=True)
 
     # -----------------------------------------------------
-    # タブ2: 小テスト別 クラス全体マップ（校舎別 ＆ 🌟 学年順！）
+    # タブ2: 小テスト別 クラス全体マップ
     # -----------------------------------------------------
     with tab_quiz_all:
         st.write("特定の小テストを選択すると、それを解いた生徒の進捗マップを校舎ごとに確認できます✨")
@@ -284,10 +284,12 @@ def render_quiz_list_page():
                                     pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
                                     
                                     # ==========================================
-                                    # 🌟 NEW: 行（名前）を学年順 → 名前順 に並び替える
+                                    # 🌟 NEW: 「名前」と「学年」を別々の列に分けてマルチインデックス化！
                                     # ==========================================
+                                    pivot_all = pivot_all.reset_index()
+                                    pivot_all['学年'] = pivot_all['名前'].map(lambda x: student_name_to_grade.get(x, "未設定"))
+                                    
                                     def get_grade_rank(g_str):
-                                        # 学年を並び替えるための内部スコア付け（小1が1、高3が12）
                                         mapping = {
                                             "小1": 1, "小2": 2, "小3": 3, "小4": 4, "小5": 5, "小6": 6,
                                             "中1": 7, "中2": 8, "中3": 9, "中１": 7, "中２": 8, "中３": 9,
@@ -295,18 +297,16 @@ def render_quiz_list_page():
                                         }
                                         for k, v in mapping.items():
                                             if k in g_str: return v
-                                        return 99 # 謎の学年は一番下へ
+                                        return 99
                                         
-                                    # 学年スコアと名前の文字列で並び替える
-                                    sorted_names = sorted(
-                                        pivot_all.index.tolist(), 
-                                        key=lambda n: (get_grade_rank(student_name_to_grade.get(n, "")), n)
-                                    )
-                                    pivot_all = pivot_all.reindex(sorted_names)
+                                    pivot_all['学年_ソート'] = pivot_all['学年'].apply(get_grade_rank)
                                     
-                                    # さらに、行の先頭に [中3] などの学年をくっつけると超絶見やすい！
-                                    pivot_all.index = [f"[{student_name_to_grade.get(n, '未設定')}] {n}" for n in pivot_all.index]
-                                    pivot_all.index.name = None # 左上の項目名を消す
+                                    # 学年順 ➡ 名前順 に並び替え
+                                    pivot_all = pivot_all.sort_values(by=['学年_ソート', '名前'])
+                                    
+                                    # ソート列を消して、「学年」と「名前」をインデックス（左側の2列固定）にセット！
+                                    pivot_all = pivot_all.drop(columns=['学年_ソート'])
+                                    pivot_all = pivot_all.set_index(['学年', '名前'])
                                     
                                     st.markdown(f"### 📊 【{selected_quiz_for_map}】 {branch} マップ")
                                     
