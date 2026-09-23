@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import time
 import re 
-import io  # 🌟 NEW: Excelファイル生成のために追加！
+import io  # 🌟 Excelファイル生成のために追加
 
 from utils.g_sheets import (
     get_student_master, 
@@ -46,6 +46,22 @@ def render_quiz_list_page():
 
     student_options = (df_students_raw['生徒ID'].astype(str) + " - " + df_students_raw['生徒名']).tolist()
     
+    # 🌟 NEW: 生徒名から「所属校舎」を特定する辞書を作成
+    student_name_to_branch = {}
+    id_col = '生徒ID' if '生徒ID' in df_students_raw.columns else None
+    name_col = '生徒名' if '生徒名' in df_students_raw.columns else '名前'
+    
+    for _, row in df_students_raw.iterrows():
+        s_name = str(row.get(name_col, "")).strip()
+        s_id = str(row.get(id_col, "")).strip().lower()
+        
+        if s_id == "trial": branch = "体験授業"
+        elif s_id.startswith('t'): branch = "田端新町校"
+        elif s_id.startswith('h'): branch = "東十条駅前校"
+        else: branch = "その他"
+        
+        student_name_to_branch[s_name] = branch
+
     quiz_names = []
     for key in quiz_details.keys():
         if "_" in key:
@@ -81,7 +97,6 @@ def render_quiz_list_page():
                 full_m = int(pd.Series(matched_marks).mode()[0])
                     
             try:
-                # 🌟 数字（点数）ならアイコンを付ける。日付（例: 08/10）ならそのまま返す
                 v = float(val)
                 ratio = v / full_m if full_m > 0 else 0
                 if ratio >= 1.0: return f"👑 {int(v)}"
@@ -113,7 +128,7 @@ def render_quiz_list_page():
     tab_student, tab_quiz_all = st.tabs(["👤 生徒別データ ＆ 結果入力", "📊 小テスト別 クラス全体マップ"])
 
     # -----------------------------------------------------
-    # タブ1: 生徒別データ ＆ 結果入力（既存の機能）
+    # タブ1: 生徒別データ ＆ 結果入力
     # -----------------------------------------------------
     with tab_student:
         st.write("生徒を一人選択し、結果を入力したり過去の習熟度を確認します。")
@@ -176,7 +191,6 @@ def render_quiz_list_page():
 
             st.divider()
 
-            # --- 生徒別の習熟度マップ表示 ---
             if "APIエラー発生" in df_all_quizzes.columns:
                 st.error("データの取得中にエラーが発生しました。")
             else:
@@ -211,24 +225,20 @@ def render_quiz_list_page():
                             for i, q_name in enumerate(quiz_list):
                                 with s_tabs[i]: 
                                     df_display = latest_records[latest_records['小テスト名'] == q_name]
-                                    
-                                    # 🌟 行に「最新点数」「挑戦回数」「実施日」、列に「単元」が来るように変換（転置: T）
                                     pivot_df = df_display[['単元', '最新点数', '挑戦回数', '実施日']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
-                                        # 単元番号順に並べ替え
                                         pivot_df = pivot_df[sorted(pivot_df.columns.tolist(), key=sort_key)]
-                                        pivot_df.index.name = None # 左上の項目名を消してスッキリさせる
+                                        pivot_df.index.name = None 
                                         
-                                        # 🌟 共通スタイリング関数を適用（日付と回数には色が付きません）
                                         styled_df = style_pivot_dataframe(pivot_df, q_name)
                                         st.dataframe(styled_df, use_container_width=True)
 
     # -----------------------------------------------------
-    # タブ2: 小テスト別 クラス全体マップ ＆ 🌟 ダウンロード機能
+    # タブ2: 小テスト別 クラス全体マップ（🌟 校舎別に分割！）
     # -----------------------------------------------------
     with tab_quiz_all:
-        st.write("特定の小テストを選択すると、それを解いた生徒全員の進捗と最高点数を一覧で確認できます✨")
+        st.write("特定の小テストを選択すると、それを解いた生徒の進捗マップを校舎ごとに確認できます✨")
         
         if df_all_quizzes.empty or "APIエラー発生" in df_all_quizzes.columns:
             st.info("小テストの記録がまだありません。")
@@ -244,41 +254,55 @@ def render_quiz_list_page():
                 if df_q.empty:
                     st.info("有効な点数記録がありません。")
                 else:
-                    best_scores_all = df_q.groupby(['名前', '単元'])['点数'].max().reset_index()
-                    pivot_all = best_scores_all.pivot_table(
-                        index='名前',
-                        columns='単元',
-                        values='点数',
-                        aggfunc='max'
-                    )
+                    # 🌟 生徒名から「校舎」の情報を追加する
+                    df_q['校舎'] = df_q['名前'].map(lambda x: student_name_to_branch.get(x, "その他"))
                     
-                    if not pivot_all.empty:
-                        pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
-                        st.markdown(f"### 📊 【{selected_quiz_for_map}】 クラス全体マップ")
+                    # 存在する校舎だけをリストアップしてタブを作る（並び順を固定）
+                    branch_order = ["田端新町校", "東十条駅前校", "体験授業", "その他"]
+                    available_branches = [b for b in branch_order if b in df_q['校舎'].unique()]
+                    
+                    if not available_branches:
+                        st.info("表示できる校舎データがありません。")
+                    else:
+                        map_tabs = st.tabs([f"🏫 {b}" for b in available_branches])
                         
-                        styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
-                        st.dataframe(styled_all_df, use_container_width=True)
-                        
-                        # ==========================================
-                        # 🌟 NEW: Excelダウンロード機能
-                        # ==========================================
-                        excel_buffer = io.BytesIO()
-                        
-                        # xlsxwriter エンジンを使うと、スタイラーの背景色やフォント設定もそのままExcelに書き出されます！
-                        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                            styled_all_df.to_excel(writer, sheet_name="全体マップ")
-                        
-                        excel_data = excel_buffer.getvalue()
-                        
-                        # ファイル名から使えない記号を安全のために消去
-                        safe_file_name = re.sub(r'[\\/:*?"<>|]', '_', selected_quiz_for_map)
-                        
-                        st.write("") # 少し余白を空ける
-                        st.download_button(
-                            label="📥 このカラーマップをExcel形式でダウンロード",
-                            data=excel_data,
-                            file_name=f"{safe_file_name}_クラス全体マップ.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            type="primary",
-                            use_container_width=True
-                        )
+                        for idx, branch in enumerate(available_branches):
+                            with map_tabs[idx]:
+                                # その校舎のデータだけを抽出
+                                df_branch = df_q[df_q['校舎'] == branch].copy()
+                                
+                                best_scores_all = df_branch.groupby(['名前', '単元'])['点数'].max().reset_index()
+                                pivot_all = best_scores_all.pivot_table(
+                                    index='名前',
+                                    columns='単元',
+                                    values='点数',
+                                    aggfunc='max'
+                                )
+                                
+                                if not pivot_all.empty:
+                                    pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
+                                    st.markdown(f"### 📊 【{selected_quiz_for_map}】 {branch} マップ")
+                                    
+                                    styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
+                                    st.dataframe(styled_all_df, use_container_width=True)
+                                    
+                                    # 🌟 Excelダウンロード機能（校舎ごとにファイル名も分ける！）
+                                    excel_buffer = io.BytesIO()
+                                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                                        styled_all_df.to_excel(writer, sheet_name=branch)
+                                    
+                                    excel_data = excel_buffer.getvalue()
+                                    safe_file_name = re.sub(r'[\\/:*?"<>|]', '_', selected_quiz_for_map)
+                                    
+                                    st.write("") 
+                                    st.download_button(
+                                        label=f"📥 この {branch} のマップをExcelでダウンロード",
+                                        data=excel_data,
+                                        file_name=f"{safe_file_name}_{branch}_全体マップ.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        type="primary",
+                                        use_container_width=True,
+                                        key=f"dl_map_{branch}_{selected_quiz_for_map}" # 複数タブのボタンエラーを防ぐためのユニークキー
+                                    )
+                                else:
+                                    st.info(f"この小テストを受けた {branch} の生徒はいません。")
