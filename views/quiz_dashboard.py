@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import time
 import re 
-import io  # 🌟 Excelファイル生成のために追加
+import io  
 
 from utils.g_sheets import (
     get_student_master, 
@@ -33,7 +33,6 @@ def render_quiz_list_page():
     st.header("📝 小テスト進捗＆習熟度マップ")
     st.write("実施した小テストの結果入力と、習熟度の確認ができるページです🎨")
 
-    # 🌟 データを一括で読み込み
     with st.spinner("データベースから読み込み中...🚀"):
         df_students_raw = cached_get_student_master()
         df_all_quizzes = cached_load_all_quizzes()
@@ -46,14 +45,17 @@ def render_quiz_list_page():
 
     student_options = (df_students_raw['生徒ID'].astype(str) + " - " + df_students_raw['生徒名']).tolist()
     
-    # 🌟 NEW: 生徒名から「所属校舎」を特定する辞書を作成
+    # 🌟 生徒名から「所属校舎」と「学年」を特定する辞書を作成
     student_name_to_branch = {}
+    student_name_to_grade = {}  # 🌟 NEW: 学年用の辞書
+    
     id_col = '生徒ID' if '生徒ID' in df_students_raw.columns else None
     name_col = '生徒名' if '生徒名' in df_students_raw.columns else '名前'
     
     for _, row in df_students_raw.iterrows():
         s_name = str(row.get(name_col, "")).strip()
         s_id = str(row.get(id_col, "")).strip().lower()
+        grade = str(row.get('学年', '未設定')).strip() # 🌟 NEW: 学年を取得
         
         if s_id == "trial": branch = "体験授業"
         elif s_id.startswith('t'): branch = "田端新町校"
@@ -61,6 +63,7 @@ def render_quiz_list_page():
         else: branch = "その他"
         
         student_name_to_branch[s_name] = branch
+        student_name_to_grade[s_name] = grade # 🌟 NEW: 学年を保存
 
     quiz_names = []
     for key in quiz_details.keys():
@@ -69,7 +72,7 @@ def render_quiz_list_page():
             if q_name not in quiz_names:
                 quiz_names.append(q_name)
 
-    # 🌟 共通化：表を綺麗に装飾する関数
+    # 🌟 表を綺麗に装飾する関数群
     def sort_key(c):
         nums = re.findall(r'\d+', str(c))
         return int(nums[0]) if nums else 999
@@ -123,7 +126,7 @@ def render_quiz_list_page():
             return styled_display.style.map(color_bg)
 
     # ==========================================
-    # 🌟 メインの画面構成（タブで切り替え！）
+    # 🌟 メインの画面構成
     # ==========================================
     tab_student, tab_quiz_all = st.tabs(["👤 生徒別データ ＆ 結果入力", "📊 小テスト別 クラス全体マップ"])
 
@@ -235,7 +238,7 @@ def render_quiz_list_page():
                                         st.dataframe(styled_df, use_container_width=True)
 
     # -----------------------------------------------------
-    # タブ2: 小テスト別 クラス全体マップ（🌟 校舎別に分割！）
+    # タブ2: 小テスト別 クラス全体マップ（校舎別 ＆ 🌟 学年順！）
     # -----------------------------------------------------
     with tab_quiz_all:
         st.write("特定の小テストを選択すると、それを解いた生徒の進捗マップを校舎ごとに確認できます✨")
@@ -254,10 +257,8 @@ def render_quiz_list_page():
                 if df_q.empty:
                     st.info("有効な点数記録がありません。")
                 else:
-                    # 🌟 生徒名から「校舎」の情報を追加する
                     df_q['校舎'] = df_q['名前'].map(lambda x: student_name_to_branch.get(x, "その他"))
                     
-                    # 存在する校舎だけをリストアップしてタブを作る（並び順を固定）
                     branch_order = ["田端新町校", "東十条駅前校", "体験授業", "その他"]
                     available_branches = [b for b in branch_order if b in df_q['校舎'].unique()]
                     
@@ -268,7 +269,6 @@ def render_quiz_list_page():
                         
                         for idx, branch in enumerate(available_branches):
                             with map_tabs[idx]:
-                                # その校舎のデータだけを抽出
                                 df_branch = df_q[df_q['校舎'] == branch].copy()
                                 
                                 best_scores_all = df_branch.groupby(['名前', '単元'])['点数'].max().reset_index()
@@ -280,13 +280,40 @@ def render_quiz_list_page():
                                 )
                                 
                                 if not pivot_all.empty:
+                                    # 1. 列（単元）を順番に並べ替え
                                     pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
+                                    
+                                    # ==========================================
+                                    # 🌟 NEW: 行（名前）を学年順 → 名前順 に並び替える
+                                    # ==========================================
+                                    def get_grade_rank(g_str):
+                                        # 学年を並び替えるための内部スコア付け（小1が1、高3が12）
+                                        mapping = {
+                                            "小1": 1, "小2": 2, "小3": 3, "小4": 4, "小5": 5, "小6": 6,
+                                            "中1": 7, "中2": 8, "中3": 9, "中１": 7, "中２": 8, "中３": 9,
+                                            "高1": 10, "高2": 11, "高3": 12, "高１": 10, "高２": 11, "高３": 12
+                                        }
+                                        for k, v in mapping.items():
+                                            if k in g_str: return v
+                                        return 99 # 謎の学年は一番下へ
+                                        
+                                    # 学年スコアと名前の文字列で並び替える
+                                    sorted_names = sorted(
+                                        pivot_all.index.tolist(), 
+                                        key=lambda n: (get_grade_rank(student_name_to_grade.get(n, "")), n)
+                                    )
+                                    pivot_all = pivot_all.reindex(sorted_names)
+                                    
+                                    # さらに、行の先頭に [中3] などの学年をくっつけると超絶見やすい！
+                                    pivot_all.index = [f"[{student_name_to_grade.get(n, '未設定')}] {n}" for n in pivot_all.index]
+                                    pivot_all.index.name = None # 左上の項目名を消す
+                                    
                                     st.markdown(f"### 📊 【{selected_quiz_for_map}】 {branch} マップ")
                                     
                                     styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
                                     st.dataframe(styled_all_df, use_container_width=True)
                                     
-                                    # 🌟 Excelダウンロード機能（校舎ごとにファイル名も分ける！）
+                                    # Excelダウンロード
                                     excel_buffer = io.BytesIO()
                                     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                                         styled_all_df.to_excel(writer, sheet_name=branch)
@@ -302,7 +329,7 @@ def render_quiz_list_page():
                                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                         type="primary",
                                         use_container_width=True,
-                                        key=f"dl_map_{branch}_{selected_quiz_for_map}" # 複数タブのボタンエラーを防ぐためのユニークキー
+                                        key=f"dl_map_{branch}_{selected_quiz_for_map}"
                                     )
                                 else:
                                     st.info(f"この小テストを受けた {branch} の生徒はいません。")
