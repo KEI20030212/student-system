@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import time
 import re 
+import io  # 🌟 NEW: Excelファイル生成のために追加！
 
 from utils.g_sheets import (
     get_student_master, 
@@ -224,7 +225,7 @@ def render_quiz_list_page():
                                         st.dataframe(styled_df, use_container_width=True)
 
     # -----------------------------------------------------
-    # タブ2: 小テスト別 クラス全体マップ（既存の機能のまま変更なし）
+    # タブ2: 小テスト別 クラス全体マップ ＆ 🌟 ダウンロード機能
     # -----------------------------------------------------
     with tab_quiz_all:
         st.write("特定の小テストを選択すると、それを解いた生徒全員の進捗と最高点数を一覧で確認できます✨")
@@ -254,5 +255,30 @@ def render_quiz_list_page():
                     if not pivot_all.empty:
                         pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
                         st.markdown(f"### 📊 【{selected_quiz_for_map}】 クラス全体マップ")
+                        
                         styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
                         st.dataframe(styled_all_df, use_container_width=True)
+                        
+                        # ==========================================
+                        # 🌟 NEW: Excelダウンロード機能
+                        # ==========================================
+                        excel_buffer = io.BytesIO()
+                        
+                        # xlsxwriter エンジンを使うと、スタイラーの背景色やフォント設定もそのままExcelに書き出されます！
+                        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                            styled_all_df.to_excel(writer, sheet_name="全体マップ")
+                        
+                        excel_data = excel_buffer.getvalue()
+                        
+                        # ファイル名から使えない記号を安全のために消去
+                        safe_file_name = re.sub(r'[\\/:*?"<>|]', '_', selected_quiz_for_map)
+                        
+                        st.write("") # 少し余白を空ける
+                        st.download_button(
+                            label="📥 このカラーマップをExcel形式でダウンロード",
+                            data=excel_data,
+                            file_name=f"{safe_file_name}_クラス全体マップ.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            type="primary",
+                            use_container_width=True
+                        )
