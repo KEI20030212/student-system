@@ -147,3 +147,92 @@ def delete_file_from_drive(file_id):
         except Exception as e2:
             print(f"Drive画像ゴミ箱移動エラー: {e2}")
             return False
+        
+# ==========================================
+# 📚 新機能：クラウド教材書庫（Library）用 関数群
+# ==========================================
+import io
+from googleapiclient.http import MediaIoBaseUpload
+
+LIBRARY_ROOT_NAME = "00_教材クラウド書庫"
+
+def get_or_create_folder(service, parent_id, folder_name):
+    """指定した親フォルダの中に、特定の名前のフォルダがあるか探し、なければ作成する"""
+    query = f"'{parent_id}' in parents and name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    items = results.get('files', [])
+    
+    if items:
+        return items[0]['id']
+    
+    # なければ作成
+    folder_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id]
+    }
+    folder = service.files().create(body=folder_metadata, fields='id').execute()
+    return folder.get('id')
+
+def upload_library_file(category_name, sub_category_name, file_name, file_bytes, mime_type):
+    """
+    書庫にPDFを直接アップロードする（Pythonから直接実行）
+    構成: [MAIN_FOLDER] > 00_教材クラウド書庫 > [category_name(小テスト等)] > [sub_category_name(英単語等)] > PDF
+    """
+    try:
+        service = get_drive_service()
+        
+        # 1. 00_教材クラウド書庫 フォルダを取得/作成
+        root_lib_id = get_or_create_folder(service, MAIN_FOLDER_ID, LIBRARY_ROOT_NAME)
+        
+        # 2. 大カテゴリー（例：小テスト・確認テスト）フォルダを取得/作成
+        cat_id = get_or_create_folder(service, root_lib_id, category_name)
+        
+        # 3. 小カテゴリー（例：英単語ターゲット）フォルダを取得/作成
+        sub_cat_id = get_or_create_folder(service, cat_id, sub_category_name)
+        
+        # 4. ファイルをアップロード（Pythonから直接！）
+        file_metadata = {
+            'name': file_name,
+            'parents': [sub_cat_id]
+        }
+        
+        # バイトデータをアップロード用に変換
+        fh = io.BytesIO(file_bytes)
+        media = MediaIoBaseUpload(fh, mimetype=mime_type, resumable=True)
+        
+        file = service.files().create(
+            body=file_metadata, 
+            media_body=media,
+            fields='id, webViewLink'
+        ).execute()
+        
+        return True, file.get('webViewLink')
+        
+    except Exception as e:
+        print(f"書庫アップロードエラー: {e}")
+        return False, str(e)
+
+def list_library_files(category_name, sub_category_name):
+    """指定したカテゴリーのPDF一覧を取得する"""
+    try:
+        service = get_drive_service()
+        
+        # 階層をたどる
+        root_lib_id = get_or_create_folder(service, MAIN_FOLDER_ID, LIBRARY_ROOT_NAME)
+        cat_id = get_or_create_folder(service, root_lib_id, category_name)
+        sub_cat_id = get_or_create_folder(service, cat_id, sub_category_name)
+        
+        # ファイルを検索
+        query = f"'{sub_cat_id}' in parents and trashed=false"
+        results = service.files().list(
+            q=query, 
+            spaces='drive', 
+            fields='files(id, name, webViewLink, createdTime, thumbnailLink)',
+            orderBy='name' # 名前順で表示
+        ).execute()
+        
+        return results.get('files', [])
+    except Exception as e:
+        print(f"書庫ファイル取得エラー: {e}")
+        return []
