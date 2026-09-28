@@ -72,25 +72,30 @@ def render_test_score_input(selected_student):
                             st.error("通信エラーが発生しました。もう一度お試しください。")
 
         else:
-            with st.form("test_score_input_form"):
-                with st.expander("⚙️ 各教科の満点設定"):
-                    mc1, mc2, mc3, mc4, mc5 = st.columns(5)
-                    m_eng = mc1.number_input("英 満点", 0, 100, 100)
-                    m_math = mc2.number_input("数 満点", 0, 100, 100)
-                    m_jpn = mc3.number_input("国 満点", 0, 100, 100)
-                    m_sci = mc4.number_input("理 満点", 0, 100, 100)
-                    m_soc = mc5.number_input("社 満点", 0, 100, 100)
-                    
-                    m_pe, m_tech, m_home, m_art, m_mus = 50, 50, 50, 50, 50
-                    if test_type == "期末テスト":
-                        mc6, mc7, mc8, mc9, mc10 = st.columns(5)
-                        m_pe = mc6.number_input("保 満点", 0, 100, 50)
-                        m_tech = mc7.number_input("技 満点", 0, 100, 50)
-                        m_home = mc8.number_input("家 満点", 0, 100, 50)
-                        m_art = mc9.number_input("美 満点", 0, 100, 50)
-                        m_mus = mc10.number_input("音 満点", 0, 100, 50)
+            # ==========================================
+            # 🌟 修正：満点設定をフォーム（st.form）の外に出すことで、数値を変更した瞬間に下の入力欄に反映されるようにする！
+            # ==========================================
+            with st.expander("⚙️ 各教科の満点設定（変更するとすぐ下の入力欄に反映されます）"):
+                mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+                m_eng = mc1.number_input("英 満点", 0, 500, 100) # ※満点上限を念のため500に拡張
+                m_math = mc2.number_input("数 満点", 0, 500, 100)
+                m_jpn = mc3.number_input("国 満点", 0, 500, 100)
+                m_sci = mc4.number_input("理 満点", 0, 500, 100)
+                m_soc = mc5.number_input("社 満点", 0, 500, 100)
+                
+                m_pe, m_tech, m_home, m_art, m_mus = 50, 50, 50, 50, 50
+                if test_type == "期末テスト":
+                    mc6, mc7, mc8, mc9, mc10 = st.columns(5)
+                    m_pe = mc6.number_input("保 満点", 0, 500, 50)
+                    m_tech = mc7.number_input("技 満点", 0, 500, 50)
+                    m_home = mc8.number_input("家 満点", 0, 500, 50)
+                    m_art = mc9.number_input("美 満点", 0, 500, 50)
+                    m_mus = mc10.number_input("音 満点", 0, 500, 50)
 
+            # 🌟 点数の入力部分はフォームのまま残し、保存ボタンで一括送信させる
+            with st.form("test_score_input_form"):
                 sc1, sc2, sc3, sc4, sc5 = st.columns(5)
+                # 上で設定した満点（m_engなど）がリアルタイムに反映されます！
                 eng = sc1.number_input(f"英語 (/{m_eng})", 0, m_eng, value=None)
                 math_score = sc2.number_input(f"数学 (/{m_math})", 0, m_math, value=None)
                 jpn = sc3.number_input(f"国語 (/{m_jpn})", 0, m_jpn, value=None)
