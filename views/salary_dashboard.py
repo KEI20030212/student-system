@@ -77,7 +77,6 @@ def render_salary_dashboard_page():
         else:
             df_month = df_all[df_all['年月'] == selected_month].copy()
             
-            # 🌟 追加：生徒IDから「校舎」を自動判定する処理
             if '生徒ID' not in df_month.columns:
                 df_month['生徒ID'] = ""
                 
@@ -100,7 +99,6 @@ def render_salary_dashboard_page():
 
             valid_teachers = [t for t in df_month_exploded['担当講師'].unique() if t not in ["未入力", "", "nan", "None"]]
             
-            # 🌟 変更：校舎ごとにループを回して給与を独立計算する
             summary_list = []
             branches = ["田端新町校", "東十条駅前校"]
             
@@ -109,7 +107,7 @@ def render_salary_dashboard_page():
                 
                 for teacher in valid_teachers:
                     df_teacher = df_branch[df_branch['担当講師'] == teacher].copy()
-                    if df_teacher.empty: continue # その校舎で授業がない講師はスキップ
+                    if df_teacher.empty: continue
                     
                     df_teacher['日付'] = df_teacher['日時'].dt.date
                     df_teacher = df_teacher.drop_duplicates(subset=['日付', '授業コマ'])
@@ -134,12 +132,18 @@ def render_salary_dashboard_page():
 
                     total_koma = koma_11 + koma_12 + koma_13
                     koma_salary = (koma_11 * p11) + (koma_12 * p12) + (koma_13 * p13)
+                    
+                    # 🌟 修正ポイント：その「校舎」での出勤日数をカウントして交通費を計算
                     working_days = df_teacher['日付'].nunique()
                     transport_total = working_days * trans
+                    
+                    # ※役職手当は校舎ごとに二重で足されないよう、ここで調整が必要な場合は要検討ですが
+                    # 基本的にどちらかの校舎に寄せるか、合算時にまとめる形になります。
+                    # 今回は「各校舎ごとの明細」として出力するため、そのまま足しています。
                     final_salary = koma_salary + transport_total + allowance
 
                     summary_list.append({
-                        "🏫 校舎": branch,  # 🌟 ここに校舎情報を追加！
+                        "🏫 校舎": branch, 
                         "👨‍🏫 担当講師": teacher, 
                         "合計コマ数": total_koma,
                         "1:1コマ": koma_11, 
@@ -156,7 +160,6 @@ def render_salary_dashboard_page():
                 df_summary = pd.DataFrame(summary_list)
                 st.subheader(f"📊 {selected_month} の給与一覧")
                 
-                # 🌟 追加：校舎ごとにタブを分けて見やすく表示
                 b_tabs = st.tabs(["🏫 田端新町校", "🏫 東十条駅前校", "🏢 全体データ(合算)"])
                 with b_tabs[0]:
                     df_t = df_summary[df_summary["🏫 校舎"] == "田端新町校"]
@@ -165,17 +168,33 @@ def render_salary_dashboard_page():
                     df_h = df_summary[df_summary["🏫 校舎"] == "東十条駅前校"]
                     st.dataframe(df_h, hide_index=True, use_container_width=True)
                 with b_tabs[2]:
+                    # 🌟 全体合算時の役職手当の二重加算を防ぐための処理
                     df_total = df_summary.groupby("👨‍🏫 担当講師", as_index=False).agg({
                         "合計コマ数": "sum",
                         "1:1コマ": "sum", 
                         "1:2コマ": "sum", 
                         "1:3コマ": "sum", 
                         "授業給 (円)": "sum",
-                        "役職手当 (円)": "sum", 
-                        "出勤日数": "sum", 
+                        "出勤日数": "sum", # 田端と東十条の出勤日数の合計（同日掛け持ちの場合、2日扱いになる）
                         "交通費合計 (円)": "sum", 
                         "💰 最終支給額 (円)": "sum"
                     })
+                    
+                    # 役職手当はマスタから引き直して1回だけ足す
+                    allowance_dict = df_instructors.set_index("講師名")["役職手当"].to_dict()
+                    def get_allowance(name):
+                        try: return int(float(allowance_dict.get(name, 0)))
+                        except: return 0
+                        
+                    df_total["役職手当 (円)"] = df_total["👨‍🏫 担当講師"].apply(get_allowance)
+                    
+                    # 最終支給額を再計算（役職手当を1回だけ足した正しい金額）
+                    df_total["💰 最終支給額 (円)"] = df_total["授業給 (円)"] + df_total["交通費合計 (円)"] + df_total["役職手当 (円)"]
+
+                    # 列の並び順を整える
+                    cols_order = ["👨‍🏫 担当講師", "合計コマ数", "1:1コマ", "1:2コマ", "1:3コマ", "授業給 (円)", "役職手当 (円)", "出勤日数", "交通費合計 (円)", "💰 最終支給額 (円)"]
+                    df_total = df_total[cols_order]
+
                     st.dataframe(df_total, hide_index=True, use_container_width=True)
 
                 c1, c2 = st.columns(2)
@@ -185,7 +204,6 @@ def render_salary_dashboard_page():
                         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                             for row_data in summary_list:
                                 pdf_bytes = generate_payslip_pdf(row_data, selected_month)
-                                # 🌟 変更：ファイル名に校舎名が含まれるようにして混同を防止
                                 zip_file.writestr(f"給与明細_{selected_month}_{row_data['🏫 校舎']}_{row_data['👨‍🏫 担当講師']}.pdf", pdf_bytes)
                         st.download_button("📥 ZIPをダウンロード", zip_buffer.getvalue(), f"{selected_month}_給与明細.zip", "application/zip", type="primary", use_container_width=True)
                 
