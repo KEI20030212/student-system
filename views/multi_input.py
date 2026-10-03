@@ -7,18 +7,19 @@ import pandas as pd
 from utils.g_sheets import (
     get_student_master,
     get_all_teacher_names,
-    save_to_spreadsheet,              # 個別保存用（単発）
-    save_logs_to_spreadsheet,         # 🌟 追加：一括保存用（バルク）
+    save_to_spreadsheet,
+    save_logs_to_spreadsheet,
     update_student_homework_rate,
     add_new_textbook,        
     get_textbook_master,
-    save_quizzes_to_dedicated_sheet,  # 🌟 変更済み：小テストの一括保存用
+    save_quizzes_to_dedicated_sheet,
     get_quiz_master_dict,
     get_type_advice_dict,
     save_draft_to_sheet,
     load_draft_from_sheet,
     delete_draft_from_sheet,
-    get_all_logs 
+    get_all_logs,
+    save_school_work_progress_logs # 🌟 NEW: 学校ワークのログ保存関数を追加
 )
 from utils.calc_logic import (
     calculate_hw_rate, 
@@ -52,6 +53,7 @@ def cached_get_all_logs():
     df = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
     return df.copy() if not df.empty else df
 
+# 🌟 NEW: 学校ワーク用の接頭辞（sw_chk, sw_text, sw_s, sw_e）を下書きリストに追加
 DRAFT_PREFIXES = (
     "num_blocks", "class_date", "class_type", 
     "sb_", "sel_student", "new_name", "att", "late", "sub", "texts", "new_usage_text", 
@@ -59,8 +61,9 @@ DRAFT_PREFIXES = (
     "num_q", "q_name", "q_chap", "q_score", "w",
     "cont", "hw_forgot", "done_start", "done_end", "conc", "reac", "hw_texts", "new_hw_text", 
     "n_start", "n_end", "hw_unit", "advc", "p_msg", "next_h", "d_s", "d_e", "n_s", "n_e", "hw_ranges_num",
-    "hw_reason", "hw_fix", "bring"
+    "hw_reason", "hw_fix", "bring", "sw_chk", "sw_text", "sw_s", "sw_e"
 )
+
 REACTION_HINTS = {
     "原因を分析した": "💡 【ヒント】「なぜ間違えたか」を自分で気づけた姿勢を具体的に褒めると効果的です。",
     "悔しがった": "💡 【ヒント】その向上心を肯定し、次回の目標（リベンジ）にどう繋げたかを書くのがおすすめです。",
@@ -142,7 +145,7 @@ def render_multi_input_page():
         st.warning("🚨 **【重要】離席時の注意**\n\n一定時間でサーバーがスリープします。**入力途中で離席する際は必ず「☁️ 保存」を押してください！**")
 
     if last_saved_time:
-        st.error("⚠️ **前回中断した入力データがクラウドに残っています！** 続きから入力する場合は、左メニュー of 「📂 復元」を先に押してください。")
+        st.error("⚠️ **前回中断した入力データがクラウドに残っています！** 続きから入力する場合は、左メニューの「📂 復元」を先に押してください。")
 
     student_df = cached_get_student_master()
     if not student_df.empty:
@@ -278,7 +281,8 @@ def render_multi_input_page():
                                         "advice": "-", "parent_msg": "-", "next_handover": "-",
                                         "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
                                         "next_hw_text": "-", "next_hw_pages": "-", "is_trial": is_trial,
-                                        "hw_reason": "", "hw_fix": "", "next_bring": ""
+                                        "hw_reason": "", "hw_fix": "", "next_bring": "",
+                                        "sw_chk": False, "sw_text": "", "sw_start": 0, "sw_end": 0 # 🌟 NEW
                                     })
                                 else:
                                     subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], index=None, placeholder="科目を選択", key=f"sub_{b}_{i}")
@@ -570,7 +574,7 @@ def render_multi_input_page():
                                                                     
                                                                     if next_end >= next_start and next_end > 0:
                                                                         next_hw_pages_list.append(f"{hw_text}: P.{next_start}〜{next_end}")
-                                                                
+                                                        
                                                         next_hw_pages_str = "\n".join(next_hw_pages_list) if next_hw_pages_list else "-"
                                                         selected_hw_text_str = "、".join(selected_hw_texts)
                                                     else:
@@ -602,6 +606,27 @@ def render_multi_input_page():
                                                 parent_msg = st.text_area("👪 保護者への連絡事項", height=80, key=f"p_msg_{b}_{i}")
                                                 next_handover = st.text_area("🔄 次回への引継ぎ事項", height=80, key=f"next_h_{b}_{i}")
 
+                                        # ==========================================
+                                        # 🌟 NEW: 4. 学校ワークの進捗記録（超シンプル入力）
+                                        # ==========================================
+                                        with st.expander("🎒 4. 学校ワーク進捗の記録（任意）", expanded=False):
+                                            st.caption("授業中に学校のワーク等を進めた場合は、ページ数を記録してください。（アラートや判定は管理画面で行われます）")
+                                            sw_chk = st.checkbox("この生徒の学校ワーク進捗を記録する", key=f"sw_chk_{b}_{i}")
+                                            sw_text_val = ""
+                                            sw_start_val = 0
+                                            sw_end_val = 0
+                                            
+                                            if sw_chk:
+                                                sw_text_val = st.selectbox("対象のテキスト・ワーク", [""] + filtered_text_options, key=f"sw_text_{b}_{i}")
+                                                c_sw1, c_sw2 = st.columns(2)
+                                                with c_sw1:
+                                                    sw_start_val = st.number_input("開始ページ", min_value=0, value=0, key=f"sw_s_{b}_{i}")
+                                                with c_sw2:
+                                                    sw_end_val = st.number_input("終了ページ", min_value=0, value=0, key=f"sw_e_{b}_{i}")
+                                                
+                                                if sw_text_val and sw_end_val >= sw_start_val and sw_end_val > 0:
+                                                    st.success(f"📌 {sw_text_val} (P.{sw_start_val} 〜 P.{sw_end_val}) を記録予定です")
+
                                         input_data_list.append({
                                             "original_idx": i, 
                                             "student_id": student_id, "name": name, "subject": subject, "text_name": text_name_str,
@@ -616,7 +641,12 @@ def render_multi_input_page():
                                             "is_trial": is_trial,
                                             "hw_reason": hw_reason_val,
                                             "hw_fix": hw_fix_val,
-                                            "next_bring": next_bring_val
+                                            "next_bring": next_bring_val,
+                                            # 🌟 NEW: 学校ワーク用のデータをパッキング
+                                            "sw_chk": sw_chk,
+                                            "sw_text": sw_text_val,
+                                            "sw_start": sw_start_val,
+                                            "sw_end": sw_end_val
                                         })
 
                                         st.write("")
@@ -641,12 +671,17 @@ def render_multi_input_page():
                                                 )
 
                                                 if success: 
-                                                    # 小テストのバルク送信（1人分だけでも配列に入れてバルク関数を使う）
+                                                    # 🌟 NEW: 学校ワークの個別送信
+                                                    if sw_chk and sw_text_val and sw_end_val >= sw_start_val and sw_end_val > 0:
+                                                        sw_single_rows = [[
+                                                            date.strftime("%Y/%m/%d"), student_id, name, subject, sw_text_val, sw_start_val, sw_end_val, teacher_name
+                                                        ]]
+                                                        robust_api_call(save_school_work_progress_logs, sw_single_rows)
+
+                                                    # 小テストのバルク送信
                                                     if quiz_records and len(quiz_records) > 0:
                                                         single_quiz_rows = []
-                                                        # 🌟 修正：固定文字ではなく、授業コマから「1コマ目」などを抽出
                                                         slot_short = class_slot.split(" ")[0] if class_slot else "授業内"
-                                                        
                                                         for q in quiz_records:
                                                             single_quiz_rows.append([
                                                                 date.strftime("%Y/%m/%d"), name, q["quiz_name"], q["unit"], q["score"], "", slot_short
@@ -684,22 +719,20 @@ def render_multi_input_page():
                 if st.button(btn_label, type="primary", key=f"save_all_{b}", use_container_width=True):
                     with st.status("データを保存中...", expanded=True) as status:
                         
-                        # 🌟 メインログ用と小テスト用の「超巨大な箱」を用意
                         all_main_log_rows = []
                         all_class_quiz_rows = []
+                        all_school_work_rows = [] # 🌟 NEW: 学校ワーク用の箱
                         
                         date_str = date.strftime("%Y/%m/%d") if hasattr(date, 'strftime') else str(date)
                         
                         for data in input_data_list:
                             options_idx = data["original_idx"]
                             
-                            # 欠席者や保存済みの人はスキップ
                             if "欠席" in data.get("attendance", "") or st.session_state.get(f"saved_flag_{b}_{options_idx}", False):
                                 st.session_state[f"saved_flag_{b}_{options_idx}"] = True
                                 st.session_state[f"saved_att_{b}_{options_idx}"] = data.get("attendance", "")
                                 continue
 
-                            # 🌟 メインログデータを24列のリストに梱包して箱に入れる
                             all_main_log_rows.append([
                                 date_str, 
                                 data.get("student_id", ""), 
@@ -727,23 +760,21 @@ def render_multi_input_page():
                                 data.get("next_bring", "")
                             ])
 
-                            # 🌟 小テストデータも箱に入れる
+                            # 小テストデータ
                             if data.get("quiz_records") and len(data["quiz_records"]) > 0:
-                                # 🌟 修正：固定文字ではなく、授業コマから「1コマ目」などを抽出
                                 slot_short = class_slot.split(" ")[0] if class_slot else "授業内"
-                                
                                 for q in data["quiz_records"]:
                                     all_class_quiz_rows.append([
-                                        date_str,
-                                        data["name"],
-                                        q["quiz_name"],
-                                        q["unit"],
-                                        q["score"],
-                                        "",
-                                        slot_short
+                                        date_str, data["name"], q["quiz_name"], q["unit"], q["score"], "", slot_short
                                     ])
                                     
-                            # （※宿題達成率の更新は個別APIなのでここで回す）
+                            # 🌟 NEW: 学校ワークデータの収集
+                            if data.get("sw_chk") and data.get("sw_text") and data.get("sw_end", 0) >= data.get("sw_start", 0) and data.get("sw_end", 0) > 0:
+                                all_school_work_rows.append([
+                                    date_str, data["student_id"], data["name"], data["subject"], 
+                                    data["sw_text"], data["sw_start"], data["sw_end"], teacher_name
+                                ])
+                                    
                             if data["attendance"] != "欠席（振替なし）" and "欠席" not in data["attendance"] and not data.get("is_trial"):
                                 try:
                                     robust_api_call(update_student_homework_rate, data["name"], data["subject"], data["assigned_p"], data["completed_p"])
@@ -754,9 +785,7 @@ def render_multi_input_page():
                             st.session_state[f"saved_name_{b}_{options_idx}"] = data["name"]
                             st.session_state[f"saved_att_{b}_{options_idx}"] = data.get("attendance", "")
 
-                        # ==========================================
-                        # 📦 箱に溜まったデータを、それぞれ一発でGoogleに納品！
-                        # ==========================================
+                        # 📦 箱に溜まったデータを一発で送信！
                         all_success = True
                         
                         if all_main_log_rows:
@@ -769,6 +798,13 @@ def render_multi_input_page():
                             status.write("💯 全員の小テスト記録を一括送信中...")
                             success_q = robust_api_call(save_quizzes_to_dedicated_sheet, all_class_quiz_rows)
                             if not success_q:
+                                all_success = False
+                                
+                        # 🌟 NEW: 学校ワークの一括送信
+                        if all_success and all_school_work_rows:
+                            status.write("🎒 学校ワークの進捗を送信中...")
+                            success_sw = robust_api_call(save_school_work_progress_logs, all_school_work_rows)
+                            if not success_sw:
                                 all_success = False
 
                         if all_success:
@@ -798,7 +834,8 @@ def render_multi_input_page():
             "conc", "reac", "hw_texts", "new_hw_text", "hw_ranges_num", 
             "n_s", "n_e", "advc", "p_msg", "next_h", "d_s", "d_e",
             "saved_flag", "saved_name", "saved_att", "hw_reason", "hw_fix", "bring", "adv_unit", "hw_unit",
-            "adv_ranges_num", "adv_s", "adv_e"
+            "adv_ranges_num", "adv_s", "adv_e",
+            "sw_chk", "sw_text", "sw_s", "sw_e" # 🌟 NEW: 初期化リストに追加
         ]
         for i_idx in range(students_count):
             for key in list(st.session_state.keys()):
