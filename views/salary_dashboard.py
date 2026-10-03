@@ -23,7 +23,14 @@ def cached_get_all_logs():
 def fetch_instructor_master_cached():
     df = robust_api_call(load_instructor_master, fallback_value=pd.DataFrame())
     if df.empty or "講師名" not in df.columns:
-        return pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費", "役職手当"])
+        return pd.DataFrame(columns=["講師名", "1:1単価", "1:2単価", "1:3単価", "交通費_田端新町校", "交通費_東十条駅前校", "役職手当"])
+    
+    # 🌟 既存の「交通費」列しかない場合、新しい校舎別列を追加してデータを引き継ぐ（後方互換性）
+    if "交通費_田端新町校" not in df.columns:
+        df["交通費_田端新町校"] = df.get("交通費", 0)
+    if "交通費_東十条駅前校" not in df.columns:
+        df["交通費_東十条駅前校"] = df.get("交通費", 0)
+        
     return df
 
 def render_salary_dashboard_page():
@@ -123,7 +130,11 @@ def render_salary_dashboard_page():
                         p11 = safe_int(t_row.get('1:1単価', 1500), 1500)
                         p12 = safe_int(t_row.get('1:2単価', 1800), 1800)
                         p13 = safe_int(t_row.get('1:3単価', 2000), 2000)
-                        trans = safe_int(t_row.get('交通費', 0), 0)
+                        
+                        # 🌟 NEW: 計算中の校舎に応じた交通費を動的に取得する
+                        trans_key = f"交通費_{branch}"
+                        trans = safe_int(t_row.get(trans_key, t_row.get('交通費', 0)), 0)
+                        
                         allowance = safe_int(t_row.get('役職手当', 0), 0)
 
                     koma_11 = len(df_teacher[df_teacher['授業形態'] == '1:1'])
@@ -133,13 +144,8 @@ def render_salary_dashboard_page():
                     total_koma = koma_11 + koma_12 + koma_13
                     koma_salary = (koma_11 * p11) + (koma_12 * p12) + (koma_13 * p13)
                     
-                    # 🌟 修正ポイント：その「校舎」での出勤日数をカウントして交通費を計算
                     working_days = df_teacher['日付'].nunique()
                     transport_total = working_days * trans
-                    
-                    # ※役職手当は校舎ごとに二重で足されないよう、ここで調整が必要な場合は要検討ですが
-                    # 基本的にどちらかの校舎に寄せるか、合算時にまとめる形になります。
-                    # 今回は「各校舎ごとの明細」として出力するため、そのまま足しています。
                     final_salary = koma_salary + transport_total + allowance
 
                     summary_list.append({
@@ -168,30 +174,26 @@ def render_salary_dashboard_page():
                     df_h = df_summary[df_summary["🏫 校舎"] == "東十条駅前校"]
                     st.dataframe(df_h, hide_index=True, use_container_width=True)
                 with b_tabs[2]:
-                    # 🌟 全体合算時の役職手当の二重加算を防ぐための処理
                     df_total = df_summary.groupby("👨‍🏫 担当講師", as_index=False).agg({
                         "合計コマ数": "sum",
                         "1:1コマ": "sum", 
                         "1:2コマ": "sum", 
                         "1:3コマ": "sum", 
                         "授業給 (円)": "sum",
-                        "出勤日数": "sum", # 田端と東十条の出勤日数の合計（同日掛け持ちの場合、2日扱いになる）
+                        "出勤日数": "sum",
                         "交通費合計 (円)": "sum", 
                         "💰 最終支給額 (円)": "sum"
                     })
                     
-                    # 役職手当はマスタから引き直して1回だけ足す
+                    # 役職手当はマスタから引き直して1回だけ足す（二重加算防止）
                     allowance_dict = df_instructors.set_index("講師名")["役職手当"].to_dict()
                     def get_allowance(name):
                         try: return int(float(allowance_dict.get(name, 0)))
                         except: return 0
                         
                     df_total["役職手当 (円)"] = df_total["👨‍🏫 担当講師"].apply(get_allowance)
-                    
-                    # 最終支給額を再計算（役職手当を1回だけ足した正しい金額）
                     df_total["💰 最終支給額 (円)"] = df_total["授業給 (円)"] + df_total["交通費合計 (円)"] + df_total["役職手当 (円)"]
 
-                    # 列の並び順を整える
                     cols_order = ["👨‍🏫 担当講師", "合計コマ数", "1:1コマ", "1:2コマ", "1:3コマ", "授業給 (円)", "役職手当 (円)", "出勤日数", "交通費合計 (円)", "💰 最終支給額 (円)"]
                     df_total = df_total[cols_order]
 
@@ -229,19 +231,22 @@ def render_salary_dashboard_page():
             with st.form("individual_edit_form"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    new_11 = st.number_input("1:1 単価", value=int(current_vals['1:1単価']), step=100)
-                    new_12 = st.number_input("1:2 単価", value=int(current_vals['1:2単価']), step=100)
-                    new_13 = st.number_input("1:3 単価", value=int(current_vals['1:3単価']), step=100)
+                    new_11 = st.number_input("1:1 単価", value=int(current_vals.get('1:1単価', 1500)), step=100)
+                    new_12 = st.number_input("1:2 単価", value=int(current_vals.get('1:2単価', 1800)), step=100)
+                    new_13 = st.number_input("1:3 単価", value=int(current_vals.get('1:3単価', 2000)), step=100)
                 with col2:
-                    new_trans = st.number_input("1日あたりの交通費", value=int(current_vals['交通費']), step=10)
-                    new_allowance = st.number_input("役職手当", value=int(current_vals['役職手当']), step=1000)
+                    # 🌟 NEW: 交通費の入力欄を校舎ごとに分割
+                    new_trans_t = st.number_input("田端新町校 交通費/日", value=int(current_vals.get('交通費_田端新町校', current_vals.get('交通費', 0))), step=10)
+                    new_trans_h = st.number_input("東十条駅前校 交通費/日", value=int(current_vals.get('交通費_東十条駅前校', current_vals.get('交通費', 0))), step=10)
+                    new_allowance = st.number_input("役職手当", value=int(current_vals.get('役職手当', 0)), step=1000)
                 
                 if st.form_submit_button("✅ この内容で保存する", type="primary"):
                     idx = df_instructors.index[df_instructors["講師名"] == target_teacher][0]
                     df_instructors.at[idx, '1:1単価'] = new_11
                     df_instructors.at[idx, '1:2単価'] = new_12
                     df_instructors.at[idx, '1:3単価'] = new_13
-                    df_instructors.at[idx, '交通費'] = new_trans
+                    df_instructors.at[idx, '交通費_田端新町校'] = new_trans_t
+                    df_instructors.at[idx, '交通費_東十条駅前校'] = new_trans_h
                     df_instructors.at[idx, '役職手当'] = new_allowance
                     
                     with st.spinner("☁️ 保存中..."):
