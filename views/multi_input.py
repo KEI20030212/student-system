@@ -425,7 +425,7 @@ def render_multi_input_page():
                                         # ==========================================
                                         # 🎒 NEW: 2. 学校ワーク進捗の記録（ここに移動！）
                                         # ==========================================
-                                        with st.expander("🎒 2. 学校ワーク進捗の記録（任意）", expanded=False):
+                                        with st.expander("🎒 2. 学校ワーク進捗の記録（任意）", expanded=True):
                                             st.caption("授業中に学校のワーク等を進めた場合は、ページ数を記録してください。（アラートや判定は管理画面で行われます）")
                                             sw_chk = st.checkbox("この生徒の学校ワーク進捗を記録する", key=f"sw_chk_{b}_{i}")
                                             sw_text_val = ""
