@@ -423,7 +423,7 @@ def render_multi_input_page():
                                         # ==========================================
                                         # 🌟 NEW: 2. 学校ワークの進捗記録（複数登録対応！）
                                         # ==========================================
-                                        with st.expander("🎒 2. 学校ワーク進捗の記録（任意）", expanded=False):
+                                        with st.expander("🎒 2. 学校ワーク進捗の記録（任意）", expanded=True):
                                             st.caption("授業中に学校のワーク等を進めた場合は、ページ数を記録してください。（アラートや判定は管理画面で行われます）")
                                             
                                             num_sw = st.number_input("登録するワークの数", min_value=0, max_value=5, value=0, step=1, key=f"num_sw_{b}_{i}")
