@@ -53,6 +53,7 @@ def cached_get_all_logs():
     df = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
     return df.copy() if not df.empty else df
 
+# 🌟 NEW: 学校ワーク複数入力用のプレフィックス(num_sw, sw_text, sw_s, sw_e)を追加
 DRAFT_PREFIXES = (
     "num_blocks", "class_date", "class_type", 
     "sb_", "sel_student", "new_name", "att", "late", "sub", "texts", "new_usage_text", 
@@ -60,7 +61,7 @@ DRAFT_PREFIXES = (
     "num_q", "q_name", "q_chap", "q_score", "w",
     "cont", "hw_forgot", "done_start", "done_end", "conc", "reac", "hw_texts", "new_hw_text", 
     "n_start", "n_end", "hw_unit", "advc", "p_msg", "next_h", "d_s", "d_e", "n_s", "n_e", "hw_ranges_num",
-    "hw_reason", "hw_fix", "bring", "sw_chk", "sw_text", "sw_s", "sw_e"
+    "hw_reason", "hw_fix", "bring", "num_sw", "sw_text", "sw_s", "sw_e"
 )
 
 REACTION_HINTS = {
@@ -96,7 +97,7 @@ def render_multi_input_page():
             st.caption("最終保存日時: 未取得（またはデータなし）")
             
         c1, c2 = st.columns(2)
-        if c1.button("☁️ 保存", use_container_width=True):
+        if c1.button("☁️️ 保存", use_container_width=True):
             draft = {}
             for k, v in st.session_state.items():
                 if any(k.startswith(p) for p in DRAFT_PREFIXES):
@@ -281,7 +282,7 @@ def render_multi_input_page():
                                         "assigned_p": 0, "completed_p": 0, "motivation_rank": 0, 
                                         "next_hw_text": "-", "next_hw_pages": "-", "is_trial": is_trial,
                                         "hw_reason": "", "hw_fix": "", "next_bring": "",
-                                        "sw_chk": False, "sw_text": "", "sw_start": 0, "sw_end": 0 
+                                        "sw_records": [] # 🌟 NEW
                                     })
                                 else:
                                     subject = st.selectbox("科目", ["英語", "数学", "国語", "理科", "社会"], index=None, placeholder="科目を選択", key=f"sub_{b}_{i}")
@@ -301,9 +302,6 @@ def render_multi_input_page():
                                             else:
                                                 filtered_text_options.append(t)
                                         
-                                        # ==========================================
-                                        # 🔍 1. 前回データ確認 ＆ 宿題チェック
-                                        # ==========================================
                                         with st.expander("🔍 1. 前回データ確認 ＆ 宿題チェック", expanded=not is_trial):
                                             if is_trial:
                                                 st.info("🔰 体験生モード：前回の引き継ぎ・宿題確認はスキップされます。")
@@ -423,29 +421,34 @@ def render_multi_input_page():
                                                             hw_fix_val = fix_sel
 
                                         # ==========================================
-                                        # 🎒 NEW: 2. 学校ワーク進捗の記録（ここに移動！）
+                                        # 🌟 NEW: 2. 学校ワークの進捗記録（複数登録対応！）
                                         # ==========================================
-                                        with st.expander("🎒 2. 学校ワーク進捗の記録（任意）", expanded=True):
+                                        with st.expander("🎒 2. 学校ワーク進捗の記録（任意）", expanded=False):
                                             st.caption("授業中に学校のワーク等を進めた場合は、ページ数を記録してください。（アラートや判定は管理画面で行われます）")
-                                            sw_chk = st.checkbox("この生徒の学校ワーク進捗を記録する", key=f"sw_chk_{b}_{i}")
-                                            sw_text_val = ""
-                                            sw_start_val = 0
-                                            sw_end_val = 0
                                             
-                                            if sw_chk:
-                                                sw_text_val = st.selectbox("対象のテキスト・ワーク", [""] + filtered_text_options, key=f"sw_text_{b}_{i}")
-                                                c_sw1, c_sw2 = st.columns(2)
-                                                with c_sw1:
-                                                    sw_start_val = st.number_input("開始ページ", min_value=0, value=0, key=f"sw_s_{b}_{i}")
-                                                with c_sw2:
-                                                    sw_end_val = st.number_input("終了ページ", min_value=0, value=0, key=f"sw_e_{b}_{i}")
-                                                
-                                                if sw_text_val and sw_end_val >= sw_start_val and sw_end_val > 0:
-                                                    st.success(f"📌 {sw_text_val} (P.{sw_start_val} 〜 P.{sw_end_val}) を記録予定です")
+                                            num_sw = st.number_input("登録するワークの数", min_value=0, max_value=5, value=0, step=1, key=f"num_sw_{b}_{i}")
+                                            sw_records = []
+                                            
+                                            if num_sw > 0:
+                                                for sw_idx in range(num_sw):
+                                                    st.write(f"**【ワーク {sw_idx + 1}】**")
+                                                    sw_text_val = st.selectbox("対象のテキスト・ワーク", [""] + filtered_text_options, key=f"sw_text_{b}_{i}_{sw_idx}")
+                                                    
+                                                    c_sw1, c_sw2 = st.columns(2)
+                                                    with c_sw1:
+                                                        sw_start_val = st.number_input("開始ページ", min_value=0, value=0, key=f"sw_s_{b}_{i}_{sw_idx}")
+                                                    with c_sw2:
+                                                        sw_end_val = st.number_input("終了ページ", min_value=0, value=0, key=f"sw_e_{b}_{i}_{sw_idx}")
+                                                    
+                                                    if sw_text_val and sw_end_val >= sw_start_val and sw_end_val > 0:
+                                                        st.success(f"📌 {sw_text_val} (P.{sw_start_val} 〜 P.{sw_end_val}) を記録予定です")
+                                                        sw_records.append({
+                                                            "text": sw_text_val,
+                                                            "start": sw_start_val,
+                                                            "end": sw_end_val
+                                                        })
+                                                    st.write("")
 
-                                        # ==========================================
-                                        # 📚 3. 今回の授業進捗 ＆ 💯 小テスト
-                                        # ==========================================
                                         with st.expander("📚 3. 今回の授業進捗 ＆ 💯 小テスト", expanded=True):
                                             st.write("📚 **使用テキストと進捗**")
                                             usage_text_options = ["🆕 新規テキスト入力"] + filtered_text_options
@@ -546,9 +549,6 @@ def render_multi_input_page():
                                             today_hw_rate = calculate_hw_rate(assigned_p, completed_p)
                                             motivation_rank = calculate_motivation_rank(today_hw_rate, current_quiz_pts, 0)
 
-                                        # ==========================================
-                                        # 🧠 4. 授業の様子 ＆ 🚀 次回の宿題・コメント
-                                        # ==========================================
                                         with st.expander("🧠 4. 授業の様子 ＆ 🚀 次回の宿題・コメント", expanded=True):
                                             st.write("🧠 **授業中の様子・評価**")
                                             col_eval1, col_eval2 = st.columns(2)
@@ -635,6 +635,7 @@ def render_multi_input_page():
                                                 parent_msg = st.text_area("👪 保護者への連絡事項", height=80, key=f"p_msg_{b}_{i}")
                                                 next_handover = st.text_area("🔄 次回への引継ぎ事項", height=80, key=f"next_h_{b}_{i}")
 
+
                                         input_data_list.append({
                                             "original_idx": i, 
                                             "student_id": student_id, "name": name, "subject": subject, "text_name": text_name_str,
@@ -650,10 +651,7 @@ def render_multi_input_page():
                                             "hw_reason": hw_reason_val,
                                             "hw_fix": hw_fix_val,
                                             "next_bring": next_bring_val,
-                                            "sw_chk": sw_chk,
-                                            "sw_text": sw_text_val,
-                                            "sw_start": sw_start_val,
-                                            "sw_end": sw_end_val
+                                            "sw_records": sw_records # 🌟 NEW: 学校ワーク（複数）のデータをパッキング
                                         })
 
                                         st.write("")
@@ -678,12 +676,16 @@ def render_multi_input_page():
                                                 )
 
                                                 if success: 
-                                                    if sw_chk and sw_text_val and sw_end_val >= sw_start_val and sw_end_val > 0:
-                                                        sw_single_rows = [[
-                                                            date.strftime("%Y/%m/%d"), student_id, name, subject, sw_text_val, sw_start_val, sw_end_val, teacher_name
-                                                        ]]
+                                                    # 🌟 NEW: 学校ワークの個別送信（複数対応）
+                                                    if sw_records:
+                                                        sw_single_rows = []
+                                                        for sw_rec in sw_records:
+                                                            sw_single_rows.append([
+                                                                date.strftime("%Y/%m/%d"), student_id, name, subject, sw_rec["text"], sw_rec["start"], sw_rec["end"], teacher_name
+                                                            ])
                                                         robust_api_call(save_school_work_progress_logs, sw_single_rows)
 
+                                                    # 小テストのバルク送信
                                                     if quiz_records and len(quiz_records) > 0:
                                                         single_quiz_rows = []
                                                         slot_short = class_slot.split(" ")[0] if class_slot else "授業内"
@@ -726,7 +728,7 @@ def render_multi_input_page():
                         
                         all_main_log_rows = []
                         all_class_quiz_rows = []
-                        all_school_work_rows = []
+                        all_school_work_rows = [] # 🌟 NEW: 学校ワーク用の箱
                         
                         date_str = date.strftime("%Y/%m/%d") if hasattr(date, 'strftime') else str(date)
                         
@@ -772,11 +774,13 @@ def render_multi_input_page():
                                         date_str, data["name"], q["quiz_name"], q["unit"], q["score"], "", slot_short
                                     ])
                                     
-                            if data.get("sw_chk") and data.get("sw_text") and data.get("sw_end", 0) >= data.get("sw_start", 0) and data.get("sw_end", 0) > 0:
-                                all_school_work_rows.append([
-                                    date_str, data["student_id"], data["name"], data["subject"], 
-                                    data["sw_text"], data["sw_start"], data["sw_end"], teacher_name
-                                ])
+                            # 🌟 NEW: 学校ワークデータの収集（複数登録対応）
+                            if data.get("sw_records"):
+                                for sw_rec in data["sw_records"]:
+                                    all_school_work_rows.append([
+                                        date_str, data["student_id"], data["name"], data["subject"], 
+                                        sw_rec["text"], sw_rec["start"], sw_rec["end"], teacher_name
+                                    ])
                                     
                             if data["attendance"] != "欠席（振替なし）" and "欠席" not in data["attendance"] and not data.get("is_trial"):
                                 try:
@@ -802,6 +806,7 @@ def render_multi_input_page():
                             if not success_q:
                                 all_success = False
                                 
+                        # 🌟 NEW: 学校ワークの一括送信
                         if all_success and all_school_work_rows:
                             status.write("🎒 学校ワークの進捗を送信中...")
                             success_sw = robust_api_call(save_school_work_progress_logs, all_school_work_rows)
@@ -836,7 +841,7 @@ def render_multi_input_page():
             "n_s", "n_e", "advc", "p_msg", "next_h", "d_s", "d_e",
             "saved_flag", "saved_name", "saved_att", "hw_reason", "hw_fix", "bring", "adv_unit", "hw_unit",
             "adv_ranges_num", "adv_s", "adv_e",
-            "sw_chk", "sw_text", "sw_s", "sw_e"
+            "num_sw", "sw_text", "sw_s", "sw_e" # 🌟 NEW: 初期化リストに複数対応分を追加
         ]
         for i_idx in range(students_count):
             for key in list(st.session_state.keys()):
