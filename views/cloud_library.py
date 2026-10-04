@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import os
+import requests
 from utils.g_sheets import get_quiz_master_dict
 from utils.g_drive import (
     upload_library_file, 
@@ -29,19 +30,43 @@ def cached_list_library_folders(cat, sub_cat):
 def cached_list_library_files(cat, sub_cat, chap):
     return robust_api_call(list_library_files, cat, sub_cat, chap, fallback_value=[])
 
+# ==========================================
+# 🧠 ウィルススキャン警告を突破して本物のファイルを取得する関数
+# ==========================================
+def download_gdrive_file_safely(file_id):
+    url = "https://drive.google.com/uc?export=download"
+    session = requests.Session()
+    res = session.get(url, params={'id': file_id}, stream=True)
+    
+    token = None
+    for key, value in res.cookies.items():
+        if key.startswith('download_warning'):
+            token = value
+            break
+    
+    if token:
+        res = session.get(url, params={'id': file_id, 'confirm': token}, stream=True)
+        
+    return res.content
+
+
 def render_cloud_library_page():
     st.header("📚 教材クラウド書庫")
     st.write("塾の公式プリント（小テスト、過去問など）を検索・閲覧・保存できる共有書庫です。")
     
-    st.info("💡 **【スマホ・PC共通のご利用方法】**\n"
-            "「📖 プレビュー・保存を開く」ボタンを押すと、この画面の中に直接PDFが表示されます。\n"
-            "表示されたPDFの右上にある **「ポップアウト（四角から矢印のアイコン）」** または **「ダウンロード（↓のアイコン）」** から、いつでも保存・印刷が可能です！")
+    st.info("💡 **【ご利用方法】**\n"
+            "「📖 プレビューを開く」で内容を確認できます。\n"
+            "保存する場合は、必ずその下にある **「📥 取得する」 ➡ 「💾 保存する」** ボタンを使用してください。")
     
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
     is_admin = user_role in ['admin', 'owner', 'am']
     
     if 'lib_upload_key' not in st.session_state:
         st.session_state.lib_upload_key = 0
+        
+    # 🌟 NEW: ダウンロード用のデータを保持する箱
+    if 'prepared_files' not in st.session_state:
+        st.session_state.prepared_files = {}
     
     with st.spinner("書庫のインデックスを読み込み中..."):
         quiz_details = cached_get_quiz_master()
@@ -74,23 +99,52 @@ def render_cloud_library_page():
             
             with st.container(border=True):
                 if is_admin:
-                    c1, c2, c3 = st.columns([6, 2, 2])
+                    c1, c2, c3 = st.columns([5, 3, 2])
                 else:
-                    c1, c2 = st.columns([8, 2])
+                    c1, c2 = st.columns([7, 3])
                 
                 c1.markdown(f"📄 **{file_name}**")
                 
-                # 🌟 変更ポイント：外部のタブや別ウィンドウに飛ばすのをやめ、
-                # アプリ内にGoogle公式ビューアを埋め込むトグル（expander）に変更
                 if file_id:
-                    with st.expander("📖 プレビュー・保存を開く"):
-                        # Googleドライブ公式の埋め込み用プレビュー画面をiframeで安全に表示
+                    with st.expander("📖 プレビューを開く"):
                         embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
                         st.markdown(
-                            f'<iframe src="{embed_url}" width="100%" height="500" style="border: none; border-radius: 8px;"></iframe>',
+                            f'<iframe src="{embed_url}" width="100%" height="400" style="border: none; border-radius: 8px;"></iframe>',
                             unsafe_allow_html=True
                         )
-                        st.caption("※上手く表示されない場合は、上のプレビュー枠内にある右上のアイコン（ポップアウト）から開いてください。")
+                        st.caption("※上の画面内のボタンはログインしていないと使えない場合があります。保存は下のボタンから行ってください。")
+                    
+                    # 🌟 究極のダウンロードボタン！システム経由で本物のPDFを渡す
+                    if file_id in st.session_state.prepared_files:
+                        file_bytes = st.session_state.prepared_files[file_id]
+                        
+                        ext = os.path.splitext(file_name)[1].lower()
+                        safe_file_name = file_name + ".pdf" if not ext else file_name
+                        
+                        # システムから渡すため、ログイン不要で誰でもダウンロードできます！
+                        c2.download_button(
+                            label="💾 保存する", 
+                            data=file_bytes, 
+                            file_name=safe_file_name, 
+                            mime="application/pdf", 
+                            type="primary",
+                            use_container_width=True,
+                            key=f"dl_{file_id}"
+                        )
+                    else:
+                        if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
+                            with st.spinner("ダウンロード準備中..."):
+                                try:
+                                    # システムが代わりにGoogleドライブからデータを引っこ抜く
+                                    file_bytes = download_gdrive_file_safely(file_id)
+                                    
+                                    if not file_bytes.startswith(b'<!DOCTYPE html>') and not file_bytes.startswith(b'<html'):
+                                        st.session_state.prepared_files[file_id] = file_bytes
+                                        st.rerun() 
+                                    else:
+                                        st.error("⚠️ 権限エラー：共有設定が「リンクを知っている全員（閲覧者）」になっていない可能性があります。")
+                                except Exception as e:
+                                    st.error(f"取得エラー: {e}")
                 else:
                     c2.caption("⚠️ リンク無効")
                 
@@ -163,7 +217,7 @@ def render_cloud_library_page():
                 
                 if st.button("🚀 この設定で教材を一括登録する", type="primary", use_container_width=True):
                     if not u_sub_cat:
-                        st.error("⚠️ テキスト名 または 学校名 を入力してください。")
+                        st.error("⚠️️ テキスト名 または 学校名 を入力してください。")
                     else:
                         progress_bar = st.progress(0)
                         status_text = st.empty()
@@ -184,7 +238,7 @@ def render_cloud_library_page():
                             st.session_state.lib_upload_key += 1 
                             st.rerun()
                         elif success_count > 0:
-                            st.warning(f"⚠️️ {success_count}件 登録完了（一部失敗）")
+                            st.warning(f"⚠️ {success_count}件 登録完了（一部失敗）")
                             for err in error_messages: st.error(err)
                         else:
                             st.error("アップロード失敗")
