@@ -62,11 +62,10 @@ def render_cloud_library_page():
                 c1.markdown(f"📄 **{file_name}**")
                 
                 # ==========================================
-                # 🌟 スマホ対応：直接ダウンロード用のURLを生成する
+                # 🌟 スマホ対応（検問バイパス）：&confirm=t を追加して即ダウンロードさせる！
                 # ==========================================
                 if file_id:
-                    # Googleドライブの強制ダウンロード用URLフォーマット
-                    download_link = f"https://drive.google.com/uc?export=download&id={file_id}"
+                    download_link = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
                     c2.link_button("📥 ダウンロード", download_link, use_container_width=True)
                 else:
                     c2.caption("⚠️ リンク無効")
