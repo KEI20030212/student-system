@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import time
 import os
-import requests
 from utils.g_sheets import get_quiz_master_dict
 from utils.g_drive import (
     upload_library_file, 
@@ -16,7 +15,7 @@ CAT_QUIZ = "小テスト・確認テスト"
 CAT_EXAM = "定期テスト過去問"
 
 # ==========================================
-# 🚀 超高速化 ＆ Safariブロック対策のキャッシュ関数
+# 🚀 超高速化のためのキャッシュ関数
 # ==========================================
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_get_quiz_master():
@@ -30,21 +29,20 @@ def cached_list_library_folders(cat, sub_cat):
 def cached_list_library_files(cat, sub_cat, chap):
     return robust_api_call(list_library_files, cat, sub_cat, chap, fallback_value=[])
 
-
 def render_cloud_library_page():
     st.header("📚 教材クラウド書庫")
     st.write("塾の公式プリント（小テスト、過去問など）を1秒で検索・ダウンロードできる共有書庫です。")
     
-    st.info("💡 **【スマホで保存できない場合】**\nLINE等のアプリ内から開いていると保存できない場合があります。その際はメニュー（︙等）から **「Safariで開く」** または **「ブラウザで開く」** を選んでご利用ください。")
+    # 🌟 NEW: スマホ向けの「確実な保存手順」をデカデカとアナウンス！
+    st.info("💡 **【スマホ（iPhone等）で保存・印刷する方法】**\n"
+            "「👁️ 開く」ボタンを押すとPDFが表示されます。そのまま画面下部にある **Safariの「共有ボタン（四角から↑が飛び出たマーク）」** を押し、**「ファイルに保存」** または **「プリント」** を選択してください！\n\n"
+            "※画面上のGoogleドライブの「↓（ダウンロード）」ボタンは、スマホの仕様でエラーになるため押さないでください。")
     
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
     is_admin = user_role in ['admin', 'owner', 'am']
     
     if 'lib_upload_key' not in st.session_state:
         st.session_state.lib_upload_key = 0
-        
-    if 'prepared_files' not in st.session_state:
-        st.session_state.prepared_files = {}
     
     with st.spinner("書庫のインデックスを読み込み中..."):
         quiz_details = cached_get_quiz_master()
@@ -62,25 +60,6 @@ def render_cloud_library_page():
     st.divider()
 
     # ==========================================
-    # 🧠 ウィルススキャン警告を突破して本物のファイルを取得する関数
-    # ==========================================
-    def download_gdrive_file_safely(file_id):
-        url = "https://drive.google.com/uc?export=download"
-        session = requests.Session()
-        res = session.get(url, params={'id': file_id}, stream=True)
-        
-        token = None
-        for key, value in res.cookies.items():
-            if key.startswith('download_warning'):
-                token = value
-                break
-        
-        if token:
-            res = session.get(url, params={'id': file_id, 'confirm': token}, stream=True)
-            
-        return res.content
-
-    # ==========================================
     # 🌟 共通のファイル表示＆削除処理関数
     # ==========================================
     def display_files(files_list):
@@ -96,55 +75,28 @@ def render_cloud_library_page():
             
             with st.container(border=True):
                 if is_admin:
-                    c1, c2, c3 = st.columns([5, 3, 2])
+                    c1, c2, c3 = st.columns([6, 2, 2])
                 else:
-                    c1, c2 = st.columns([7, 3])
+                    c1, c2 = st.columns([8, 2])
                 
                 c1.markdown(f"📄 **{file_name}**")
                 
                 if file_id:
-                    if file_id in st.session_state.prepared_files:
-                        file_bytes = st.session_state.prepared_files[file_id]
-                        
-                        ext = os.path.splitext(file_name)[1].lower()
-                        safe_file_name = file_name + ".pdf" if not ext else file_name
-                        
-                        # キャッシュ化により待ち時間がゼロになったため、
-                        # 純正ボタンでSafariがブロックすることなく即座に「ダウンロードしますか？」が出ます！
-                        c2.download_button(
-                            label="💾 保存する", 
-                            data=file_bytes, 
-                            file_name=safe_file_name, 
-                            mime="application/pdf", 
-                            type="primary",
-                            use_container_width=True,
-                            key=f"dl_{file_id}"
-                        )
-                        
-                    else:
-                        if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
-                            with st.spinner("システム経由で本物のファイルを抽出中..."):
-                                try:
-                                    file_bytes = download_gdrive_file_safely(file_id)
-                                    
-                                    if not file_bytes.startswith(b'<!DOCTYPE html>') and not file_bytes.startswith(b'<html'):
-                                        st.session_state.prepared_files[file_id] = file_bytes
-                                        st.rerun() 
-                                    else:
-                                        st.error("⚠️ 権限エラー：共有設定が「リンクを知っている全員」になっていない可能性があります。")
-                                except Exception as e:
-                                    st.error(f"取得エラー: {e}")
+                    # 🌟 究極の突破口：「export=view」パラメータを使用。
+                    # これにより、Googleドライブのプレビュー画面ではなく、純粋なPDFファイルそのものが表示されます。
+                    # SafariがPDFと認識するため、共有ボタンからの「保存」や「印刷」が完璧に動作します！
+                    safe_link = f"https://drive.google.com/uc?export=view&id={file_id}"
+                    c2.link_button("👁️ 開く", safe_link, use_container_width=True)
                 else:
                     c2.caption("⚠️ リンク無効")
                 
                 if is_admin:
-                    if c3.button("🗑️ 削除", key=f"del_{file_id}", type="secondary", use_container_width=True):
+                    if c3.button("🗑️️ 削除", key=f"del_{file_id}", type="secondary", use_container_width=True):
                         with st.spinner(f"「{file_name}」を削除中..."):
                             success, msg = robust_api_call(delete_library_file, file_id, fallback_value=(False, "エラー"))
                             if success:
                                 st.success("✅ 削除しました。")
-                                # 削除時はキャッシュをクリアして最新状態を反映させる
-                                st.cache_data.clear()
+                                st.cache_data.clear() # 削除時はキャッシュをクリアして最新状態を反映させる
                                 time.sleep(1)
                                 st.rerun() 
                             else:
@@ -162,13 +114,11 @@ def render_cloud_library_page():
         else:
             selected_quiz = st.selectbox("📚 テキスト・テスト名を選択", ["-- 選択してください --"] + quiz_names, key="sel_q_txt")
             if selected_quiz != "-- 選択してください --":
-                # キャッシュから一瞬で取得
                 chapter_folders = cached_list_library_folders(CAT_QUIZ, selected_quiz)
                 selected_chapter = None
                 if chapter_folders:
                     selected_chapter = st.selectbox("📖 単元・章を選択", ["-- 選択してください --", "-- 直下のファイル --"] + chapter_folders, key="sel_q_chap")
                 if not chapter_folders or (chapter_folders and selected_chapter and selected_chapter != "-- 選択してください --"):
-                    # キャッシュから一瞬で取得
                     files = cached_list_library_files(CAT_QUIZ, selected_quiz, selected_chapter)
                     display_files(files) 
 
@@ -225,7 +175,7 @@ def render_cloud_library_page():
                         status_text.empty()
                         if success_count == len(file_settings):
                             st.success(f"🎉 【{u_sub_cat}】に {success_count}件 登録しました！")
-                            st.cache_data.clear() # アップロード後も最新を反映させるためキャッシュクリア
+                            st.cache_data.clear() 
                             time.sleep(2)
                             st.session_state.lib_upload_key += 1 
                             st.rerun()
