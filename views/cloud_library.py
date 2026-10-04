@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import os
+import requests # 🌟 NEW: サーバー経由で取得するために追加
 from utils.g_sheets import get_quiz_master_dict
 from utils.g_drive import (
     upload_library_file, 
@@ -23,6 +24,10 @@ def render_cloud_library_page():
     
     if 'lib_upload_key' not in st.session_state:
         st.session_state.lib_upload_key = 0
+        
+    # 🌟 NEW: ダウンロード用に取得したファイルデータを一時保存する箱
+    if 'prepared_files' not in st.session_state:
+        st.session_state.prepared_files = {}
     
     with st.spinner("書庫のインデックスを読み込み中..."):
         quiz_details = robust_api_call(get_quiz_master_dict, fallback_value={})
@@ -62,12 +67,38 @@ def render_cloud_library_page():
                 c1.markdown(f"📄 **{file_name}**")
                 
                 # ==========================================
-                # 🌟 スマホ対応の究極系： preview 形式で開かせる
+                # 🌟 スマホ完全対応：サーバー経由の2段階ダウンロード
                 # ==========================================
                 if file_id:
-                    # view ではなく preview を使うことで、純粋なPDFだけが画面に表示されます
-                    safe_link = f"https://drive.google.com/file/d/{file_id}/preview"
-                    c2.link_button("👁️ 開く (ここから保存)", safe_link, use_container_width=True)
+                    # すでにサーバーがデータを取得済みの場合
+                    if file_id in st.session_state.prepared_files:
+                        file_bytes = st.session_state.prepared_files[file_id]
+                        c2.download_button(
+                            label="💾 スマホに保存", 
+                            data=file_bytes, 
+                            file_name=file_name, 
+                            # 拡張子からMIMEタイプを簡易判定
+                            mime="application/pdf" if file_name.lower().endswith(".pdf") else "image/jpeg",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"dl_{file_id}"
+                        )
+                    # まだデータを取得していない場合
+                    else:
+                        if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
+                            with st.spinner("システム経由でファイルを取得中..."):
+                                try:
+                                    # Google Drive から直接バイナリデータを取得
+                                    res = requests.get(f"https://drive.google.com/uc?export=download&id={file_id}", timeout=15)
+                                    
+                                    # HTML（ログイン画面や警告画面）ではなく、本物のファイルが取れたかチェック
+                                    if res.status_code == 200 and "text/html" not in res.headers.get("Content-Type", ""):
+                                        st.session_state.prepared_files[file_id] = res.content
+                                        st.rerun() # 取得に成功したら画面をリロードして「保存ボタン」に切り替える
+                                    else:
+                                        st.error("⚠️ 権限エラー：システムからファイルを取得できませんでした。")
+                                except Exception as e:
+                                    st.error(f"取得エラー: {e}")
                 else:
                     c2.caption("⚠️ リンク無効")
                 
@@ -139,7 +170,7 @@ def render_cloud_library_page():
             reset_k = st.session_state.lib_upload_key
             
             u_cat = st.selectbox("📂 登録するカテゴリー", [CAT_QUIZ, CAT_EXAM], key=f"u_cat_{reset_k}")
-            u_sub_cat = st.text_input("🏷️️ テキスト名 または 学校名（必須）", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_{reset_k}")
+            u_sub_cat = st.text_input("🏷 テキスト名 または 学校名（必須）", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_{reset_k}")
             
             uploaded_files = st.file_uploader(
                 "📄 アップロードするPDF（複数選択できます！）", 
