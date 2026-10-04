@@ -31,12 +31,11 @@ def cached_list_library_files(cat, sub_cat, chap):
 
 def render_cloud_library_page():
     st.header("📚 教材クラウド書庫")
-    st.write("塾の公式プリント（小テスト、過去問など）を1秒で検索・ダウンロードできる共有書庫です。")
+    st.write("塾の公式プリント（小テスト、過去問など）を検索・閲覧・保存できる共有書庫です。")
     
-    # 🌟 NEW: スマホ向けの「確実な保存手順」をデカデカとアナウンス！
-    st.info("💡 **【スマホ（iPhone等）で保存・印刷する方法】**\n"
-            "「👁️ 開く」ボタンを押すとPDFが表示されます。そのまま画面下部にある **Safariの「共有ボタン（四角から↑が飛び出たマーク）」** を押し、**「ファイルに保存」** または **「プリント」** を選択してください！\n\n"
-            "※画面上のGoogleドライブの「↓（ダウンロード）」ボタンは、スマホの仕様でエラーになるため押さないでください。")
+    st.info("💡 **【スマホ・PC共通のご利用方法】**\n"
+            "「📖 プレビュー・保存を開く」ボタンを押すと、この画面の中に直接PDFが表示されます。\n"
+            "表示されたPDFの右上にある **「ポップアウト（四角から矢印のアイコン）」** または **「ダウンロード（↓のアイコン）」** から、いつでも保存・印刷が可能です！")
     
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
     is_admin = user_role in ['admin', 'owner', 'am']
@@ -81,22 +80,27 @@ def render_cloud_library_page():
                 
                 c1.markdown(f"📄 **{file_name}**")
                 
+                # 🌟 変更ポイント：外部のタブや別ウィンドウに飛ばすのをやめ、
+                # アプリ内にGoogle公式ビューアを埋め込むトグル（expander）に変更
                 if file_id:
-                    # 🌟 究極の突破口：「export=view」パラメータを使用。
-                    # これにより、Googleドライブのプレビュー画面ではなく、純粋なPDFファイルそのものが表示されます。
-                    # SafariがPDFと認識するため、共有ボタンからの「保存」や「印刷」が完璧に動作します！
-                    safe_link = f"https://drive.google.com/uc?export=view&id={file_id}"
-                    c2.link_button("👁️ 開く", safe_link, use_container_width=True)
+                    with st.expander("📖 プレビュー・保存を開く"):
+                        # Googleドライブ公式の埋め込み用プレビュー画面をiframeで安全に表示
+                        embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
+                        st.markdown(
+                            f'<iframe src="{embed_url}" width="100%" height="500" style="border: none; border-radius: 8px;"></iframe>',
+                            unsafe_allow_html=True
+                        )
+                        st.caption("※上手く表示されない場合は、上のプレビュー枠内にある右上のアイコン（ポップアウト）から開いてください。")
                 else:
                     c2.caption("⚠️ リンク無効")
                 
                 if is_admin:
-                    if c3.button("🗑️️ 削除", key=f"del_{file_id}", type="secondary", use_container_width=True):
+                    if c3.button("🗑️ 削除", key=f"del_{file_id}", type="secondary", use_container_width=True):
                         with st.spinner(f"「{file_name}」を削除中..."):
                             success, msg = robust_api_call(delete_library_file, file_id, fallback_value=(False, "エラー"))
                             if success:
                                 st.success("✅ 削除しました。")
-                                st.cache_data.clear() # 削除時はキャッシュをクリアして最新状態を反映させる
+                                st.cache_data.clear() 
                                 time.sleep(1)
                                 st.rerun() 
                             else:
@@ -180,7 +184,7 @@ def render_cloud_library_page():
                             st.session_state.lib_upload_key += 1 
                             st.rerun()
                         elif success_count > 0:
-                            st.warning(f"⚠️ {success_count}件 登録完了（一部失敗）")
+                            st.warning(f"⚠️️ {success_count}件 登録完了（一部失敗）")
                             for err in error_messages: st.error(err)
                         else:
                             st.error("アップロード失敗")
