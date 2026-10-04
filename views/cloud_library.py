@@ -15,11 +15,27 @@ from utils.api_guard import robust_api_call
 CAT_QUIZ = "小テスト・確認テスト"
 CAT_EXAM = "定期テスト過去問"
 
+# ==========================================
+# 🚀 超高速化 ＆ Safariブロック対策のキャッシュ関数
+# ==========================================
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_get_quiz_master():
+    return robust_api_call(get_quiz_master_dict, fallback_value={})
+
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_list_library_folders(cat, sub_cat):
+    return robust_api_call(list_library_folders, cat, sub_cat, fallback_value=[])
+
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_list_library_files(cat, sub_cat, chap):
+    return robust_api_call(list_library_files, cat, sub_cat, chap, fallback_value=[])
+
+
 def render_cloud_library_page():
     st.header("📚 教材クラウド書庫")
     st.write("塾の公式プリント（小テスト、過去問など）を1秒で検索・ダウンロードできる共有書庫です。")
     
-    st.info("💡 **【スマホで保存できない場合】**\nLINE等のアプリ内から開いていると、スマホの仕様で保存ボタンが反応しません。画面右下（または右上）のメニューボタン（︙など）から **「Safariで開く」** または **「ブラウザで開く」** を選んでからご利用ください。")
+    st.info("💡 **【スマホで保存できない場合】**\nLINE等のアプリ内から開いていると保存できない場合があります。その際はメニュー（︙等）から **「Safariで開く」** または **「ブラウザで開く」** を選んでご利用ください。")
     
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
     is_admin = user_role in ['admin', 'owner', 'am']
@@ -31,7 +47,7 @@ def render_cloud_library_page():
         st.session_state.prepared_files = {}
     
     with st.spinner("書庫のインデックスを読み込み中..."):
-        quiz_details = robust_api_call(get_quiz_master_dict, fallback_value={})
+        quiz_details = cached_get_quiz_master()
         quiz_names = []
         for key in quiz_details.keys():
             if "_" in key:
@@ -93,13 +109,13 @@ def render_cloud_library_page():
                         ext = os.path.splitext(file_name)[1].lower()
                         safe_file_name = file_name + ".pdf" if not ext else file_name
                         
-                        # 🌟 究極の修正ポイント：Safariのプレビュー機能によるクラッシュを回避するため、
-                        # 意図的に「何かわからないファイル（octet-stream）」として渡し、強制ダウンロードさせる
+                        # キャッシュ化により待ち時間がゼロになったため、
+                        # 純正ボタンでSafariがブロックすることなく即座に「ダウンロードしますか？」が出ます！
                         c2.download_button(
                             label="💾 保存する", 
                             data=file_bytes, 
                             file_name=safe_file_name, 
-                            mime="application/octet-stream", # ここが魔法の呪文です！
+                            mime="application/pdf", 
                             type="primary",
                             use_container_width=True,
                             key=f"dl_{file_id}"
@@ -127,6 +143,8 @@ def render_cloud_library_page():
                             success, msg = robust_api_call(delete_library_file, file_id, fallback_value=(False, "エラー"))
                             if success:
                                 st.success("✅ 削除しました。")
+                                # 削除時はキャッシュをクリアして最新状態を反映させる
+                                st.cache_data.clear()
                                 time.sleep(1)
                                 st.rerun() 
                             else:
@@ -144,28 +162,26 @@ def render_cloud_library_page():
         else:
             selected_quiz = st.selectbox("📚 テキスト・テスト名を選択", ["-- 選択してください --"] + quiz_names, key="sel_q_txt")
             if selected_quiz != "-- 選択してください --":
-                with st.spinner("単元・章のフォルダを探しています..."):
-                    chapter_folders = robust_api_call(list_library_folders, CAT_QUIZ, selected_quiz, fallback_value=[])
+                # キャッシュから一瞬で取得
+                chapter_folders = cached_list_library_folders(CAT_QUIZ, selected_quiz)
                 selected_chapter = None
                 if chapter_folders:
                     selected_chapter = st.selectbox("📖 単元・章を選択", ["-- 選択してください --", "-- 直下のファイル --"] + chapter_folders, key="sel_q_chap")
                 if not chapter_folders or (chapter_folders and selected_chapter and selected_chapter != "-- 選択してください --"):
-                    with st.spinner("書庫からPDFを探しています...🔍"):
-                        files = robust_api_call(list_library_files, CAT_QUIZ, selected_quiz, selected_chapter, fallback_value=[])
+                    # キャッシュから一瞬で取得
+                    files = cached_list_library_files(CAT_QUIZ, selected_quiz, selected_chapter)
                     display_files(files) 
 
     with tab_exam:
         st.subheader("🏫 定期テストの過去問を探す")
         selected_school = st.selectbox("🏫 学校名を選択", ["-- 選択してください --"] + school_names, key="sel_e_sch")
         if selected_school != "-- 選択してください --":
-            with st.spinner("年度・学期のフォルダを探しています..."):
-                exam_folders = robust_api_call(list_library_folders, CAT_EXAM, selected_school, fallback_value=[])
+            exam_folders = cached_list_library_folders(CAT_EXAM, selected_school)
             selected_exam_chap = None
             if exam_folders:
                 selected_exam_chap = st.selectbox("📅 年度・テスト時期を選択", ["-- 選択してください --", "-- 直下のファイル --"] + exam_folders, key="sel_e_chap")
             if not exam_folders or (exam_folders and selected_exam_chap and selected_exam_chap != "-- 選択してください --"):
-                with st.spinner("書庫からPDFを探しています...🔍"):
-                    files = robust_api_call(list_library_files, CAT_EXAM, selected_school, selected_exam_chap, fallback_value=[])
+                files = cached_list_library_files(CAT_EXAM, selected_school, selected_exam_chap)
                 display_files(files) 
 
     # ==========================================
@@ -209,6 +225,7 @@ def render_cloud_library_page():
                         status_text.empty()
                         if success_count == len(file_settings):
                             st.success(f"🎉 【{u_sub_cat}】に {success_count}件 登録しました！")
+                            st.cache_data.clear() # アップロード後も最新を反映させるためキャッシュクリア
                             time.sleep(2)
                             st.session_state.lib_upload_key += 1 
                             st.rerun()
