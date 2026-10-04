@@ -62,13 +62,12 @@ def render_cloud_library_page():
                 c1.markdown(f"📄 **{file_name}**")
                 
                 # ==========================================
-                # 🌟 スマホ対応：Googleの最新仕様に準拠した最も安全なURL形式
+                # 🌟 スマホ対応の究極系： preview 形式で開かせる
                 # ==========================================
                 if file_id:
-                    # 以前の直接ダウンロード形式はセキュリティブロックの対象になるため、
-                    # 正規のファイルプレビュー＆ダウンロードページへ遷移させます。
-                    safe_link = f"https://drive.google.com/file/d/{file_id}/view"
-                    c2.link_button("👁️ 開く・ダウンロード", safe_link, use_container_width=True)
+                    # view ではなく preview を使うことで、純粋なPDFだけが画面に表示されます
+                    safe_link = f"https://drive.google.com/file/d/{file_id}/preview"
+                    c2.link_button("👁️ 開く (ここから保存)", safe_link, use_container_width=True)
                 else:
                     c2.caption("⚠️ リンク無効")
                 
@@ -140,7 +139,7 @@ def render_cloud_library_page():
             reset_k = st.session_state.lib_upload_key
             
             u_cat = st.selectbox("📂 登録するカテゴリー", [CAT_QUIZ, CAT_EXAM], key=f"u_cat_{reset_k}")
-            u_sub_cat = st.text_input("🏷️ テキスト名 または 学校名（必須）", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_{reset_k}")
+            u_sub_cat = st.text_input("🏷️️ テキスト名 または 学校名（必須）", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_{reset_k}")
             
             uploaded_files = st.file_uploader(
                 "📄 アップロードするPDF（複数選択できます！）", 
