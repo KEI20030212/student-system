@@ -62,11 +62,13 @@ def render_cloud_library_page():
                 c1.markdown(f"📄 **{file_name}**")
                 
                 # ==========================================
-                # 🌟 スマホ対応（検問バイパス）：&confirm=t を追加して即ダウンロードさせる！
+                # 🌟 スマホ対応：Googleの最新仕様に準拠した最も安全なURL形式
                 # ==========================================
                 if file_id:
-                    download_link = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
-                    c2.link_button("📥 ダウンロード", download_link, use_container_width=True)
+                    # 以前の直接ダウンロード形式はセキュリティブロックの対象になるため、
+                    # 正規のファイルプレビュー＆ダウンロードページへ遷移させます。
+                    safe_link = f"https://drive.google.com/file/d/{file_id}/view"
+                    c2.link_button("👁️ 開く・ダウンロード", safe_link, use_container_width=True)
                 else:
                     c2.caption("⚠️ リンク無効")
                 
