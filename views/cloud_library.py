@@ -19,7 +19,6 @@ def render_cloud_library_page():
     st.header("📚 教材クラウド書庫")
     st.write("塾の公式プリント（小テスト、過去問など）を1秒で検索・ダウンロードできる共有書庫です。")
     
-    # 🌟 NEW: スマホのアプリ内ブラウザ対策のアナウンス
     st.info("💡 **【スマホで保存できない場合】**\nLINE等のアプリ内から開いていると、スマホの仕様で保存ボタンが反応しません。画面右下（または右上）のメニューボタン（︙など）から **「Safariで開く」** または **「ブラウザで開く」** を選んでからご利用ください。")
     
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
@@ -88,31 +87,24 @@ def render_cloud_library_page():
                 c1.markdown(f"📄 **{file_name}**")
                 
                 if file_id:
-                    # すでにサーバーが本物のデータを取得済みの場合
                     if file_id in st.session_state.prepared_files:
                         file_bytes = st.session_state.prepared_files[file_id]
                         
-                        # 🌟 修正ポイント：スマホがダウンロードを無視しないように、強制的に拡張子をつける
                         ext = os.path.splitext(file_name)[1].lower()
-                        if not ext:
-                            safe_file_name = file_name + ".pdf"
-                            mime_type = "application/pdf"
-                        else:
-                            safe_file_name = file_name
-                            mime_type = "application/pdf" if ext == ".pdf" else "image/jpeg"
+                        safe_file_name = file_name + ".pdf" if not ext else file_name
                         
-                        # 純正のダウンロードボタン。拡張子が保証されているのでスマホでも正常に反応します！
+                        # 🌟 究極の修正ポイント：Safariのプレビュー機能によるクラッシュを回避するため、
+                        # 意図的に「何かわからないファイル（octet-stream）」として渡し、強制ダウンロードさせる
                         c2.download_button(
                             label="💾 保存する", 
                             data=file_bytes, 
                             file_name=safe_file_name, 
-                            mime=mime_type,
+                            mime="application/octet-stream", # ここが魔法の呪文です！
                             type="primary",
                             use_container_width=True,
                             key=f"dl_{file_id}"
                         )
                         
-                    # まだデータを取得していない場合
                     else:
                         if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
                             with st.spinner("システム経由で本物のファイルを抽出中..."):
