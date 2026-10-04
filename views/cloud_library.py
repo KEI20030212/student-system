@@ -3,7 +3,6 @@ import pandas as pd
 import time
 import os
 import requests
-import base64
 from utils.g_sheets import get_quiz_master_dict
 from utils.g_drive import (
     upload_library_file, 
@@ -52,14 +51,12 @@ def render_cloud_library_page():
         session = requests.Session()
         res = session.get(url, params={'id': file_id}, stream=True)
         
-        # Googleが警告画面を出してきた場合、突破用の「トークン」を取得する
         token = None
         for key, value in res.cookies.items():
             if key.startswith('download_warning'):
                 token = value
                 break
         
-        # トークンを使って「はい、ダウンロードします」という意思表示付きで再リクエスト
         if token:
             res = session.get(url, params={'id': file_id, 'confirm': token}, stream=True)
             
@@ -93,38 +90,24 @@ def render_cloud_library_page():
                         file_bytes = st.session_state.prepared_files[file_id]
                         mime_type = "application/pdf" if file_name.lower().endswith(".pdf") else "image/jpeg"
                         
-                        # ① パソコン向けの標準ダウンロードボタン
+                        # 🌟 修正ポイント：フリーズする裏技HTMLをやめ、超安定する純正ダウンロードボタンに統一
                         c2.download_button(
-                            label="💻 PCで保存", 
+                            label="💾 ファイルを保存", 
                             data=file_bytes, 
                             file_name=file_name, 
                             mime=mime_type,
-                            type="secondary",
+                            type="primary", # 目立つ色に
                             use_container_width=True,
                             key=f"dl_{file_id}"
                         )
                         
-                        # ② スマホ向けに、データを直接HTMLに埋め込んだ「絶対に開ける」リンクボタン
-                        b64 = base64.b64encode(file_bytes).decode()
-                        href = f'''
-                        <a href="data:{mime_type};base64,{b64}" download="{file_name}" target="_blank" 
-                           style="display: block; width: 100%; padding: 0.5rem 0; 
-                                  background-color: #FF4B4B; color: white; text-align: center; 
-                                  text-decoration: none; border-radius: 0.5rem; font-weight: bold;
-                                  font-family: sans-serif; font-size: 14px; margin-top: 5px;">
-                            📱 スマホで開く
-                        </a>
-                        '''
-                        c2.markdown(href, unsafe_allow_html=True)
-                        
                     # まだデータを取得していない場合
                     else:
-                        if c2.button("📥 取得する", key=f"prep_{file_id}", type="primary", use_container_width=True):
+                        if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
                             with st.spinner("システム経由で本物のファイルを抽出中..."):
                                 try:
                                     file_bytes = download_gdrive_file_safely(file_id)
                                     
-                                    # 先頭の数バイトをチェックして、まだHTMLが返ってきていないか念のため確認
                                     if not file_bytes.startswith(b'<!DOCTYPE html>') and not file_bytes.startswith(b'<html'):
                                         st.session_state.prepared_files[file_id] = file_bytes
                                         st.rerun() 
