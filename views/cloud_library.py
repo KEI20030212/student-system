@@ -40,7 +40,7 @@ def render_cloud_library_page():
     st.divider()
 
     # ==========================================
-    # 🌟 共通のファイル表示＆削除処理関数（安全ガード付き！）
+    # 🌟 共通のファイル表示＆削除処理関数
     # ==========================================
     def display_files(files_list):
         if not files_list:
@@ -61,10 +61,13 @@ def render_cloud_library_page():
                 
                 c1.markdown(f"📄 **{file_name}**")
                 
-                # 🌟 修正ポイント：webViewLink が正しく存在するか安全にチェックする
-                link = file.get('webViewLink')
-                if link and isinstance(link, str) and link.startswith("http"):
-                    c2.link_button("👁️ 開く・印刷", link, use_container_width=True)
+                # ==========================================
+                # 🌟 スマホ対応：直接ダウンロード用のURLを生成する
+                # ==========================================
+                if file_id:
+                    # Googleドライブの強制ダウンロード用URLフォーマット
+                    download_link = f"https://drive.google.com/uc?export=download&id={file_id}"
+                    c2.link_button("📥 ダウンロード", download_link, use_container_width=True)
                 else:
                     c2.caption("⚠️ リンク無効")
                 
