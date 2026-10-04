@@ -3,7 +3,6 @@ import pandas as pd
 import time
 import os
 import requests
-import base64
 from utils.g_sheets import get_quiz_master_dict
 from utils.g_drive import (
     upload_library_file, 
@@ -91,37 +90,26 @@ def render_cloud_library_page():
                         file_bytes = st.session_state.prepared_files[file_id]
                         mime_type = "application/pdf" if file_name.lower().endswith(".pdf") else "image/jpeg"
                         
-                        # ① パソコン向けの標準ダウンロードボタン
+                        # 🌟 修正：フリーズの原因だった赤いボタンを削除し、純正ボタン1つに統一！
+                        # （中身が本物のPDFになっているため、スマホからでも問題なく動作します）
                         c2.download_button(
-                            label="💻 PC用保存", 
+                            label="💾 ダウンロード", 
                             data=file_bytes, 
                             file_name=file_name, 
                             mime=mime_type,
-                            type="secondary",
+                            type="primary", # 目立つ色に
                             use_container_width=True,
                             key=f"dl_{file_id}"
                         )
                         
-                        # ② スマホ向け：データを直接HTMLに埋め込んだ「絶対に開ける」魔法のリンクボタン
-                        b64 = base64.b64encode(file_bytes).decode()
-                        href = f'''
-                        <a href="data:{mime_type};base64,{b64}" download="{file_name}" target="_blank" 
-                           style="display: block; width: 100%; padding: 0.5rem 0; 
-                                  background-color: #FF4B4B; color: white; text-align: center; 
-                                  text-decoration: none; border-radius: 0.5rem; font-weight: bold;
-                                  font-family: sans-serif; font-size: 14px; margin-top: -10px;">
-                            📱 スマホで開く
-                        </a>
-                        '''
-                        c2.markdown(href, unsafe_allow_html=True)
-                        
                     # まだデータを取得していない場合
                     else:
-                        if c2.button("📥 取得する", key=f"prep_{file_id}", type="primary", use_container_width=True):
+                        if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
                             with st.spinner("システム経由で本物のファイルを抽出中..."):
                                 try:
                                     file_bytes = download_gdrive_file_safely(file_id)
                                     
+                                    # 念のため、Googleのログイン画面や警告画面（HTML）でないかをチェック
                                     if not file_bytes.startswith(b'<!DOCTYPE html>') and not file_bytes.startswith(b'<html'):
                                         st.session_state.prepared_files[file_id] = file_bytes
                                         st.rerun() 
