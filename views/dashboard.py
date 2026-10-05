@@ -7,6 +7,7 @@ import re
 
 from utils.api_guard import robust_api_call 
 
+# 🌟 必要なインポート
 from utils.g_sheets import (
     get_student_master,
     get_all_logs,
@@ -20,8 +21,7 @@ from utils.calc_logic import (
     calculate_quiz_points,
     calculate_ability_rank,
     calculate_motivation_rank,
-    calc_pages_from_text,
-    calculate_score_ratio # 🌟 小テスト計算用にインポート
+    calc_pages_from_text
 )
 
 def render_dashboard_page():
@@ -145,14 +145,10 @@ def render_dashboard_page():
             summary_data = []
             matrix_data = []
             todo_praise, todo_encourage, todo_warn, todo_contact = [], [], [], []
-            
-            # 🌟 NEW: 定期テスト表示用に、この校舎の生徒名リストを作成
-            student_names_in_bucket = []
 
             for student in students:
                 s_id = str(student.get(id_col, "未設定"))
                 s_name = str(student.get(name_col, "不明"))
-                student_names_in_bucket.append(s_name)
 
                 # 【データ抽出】当月 ＆ 前月
                 logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['名前' if '名前' in df_all_logs.columns else '生徒名'] == s_name)] if not df_all_logs.empty else pd.DataFrame()
@@ -193,7 +189,7 @@ def render_dashboard_page():
                         try: quiz_pts_curr += calculate_quiz_points(score, t_name_raw, quiz_master_dict)
                         except: pass
 
-                        # 🌟 正答率（割合）の計算
+                        # 🌟 正答率（割合）の計算（マスターから満点を探す）
                         full_marks = 100 
                         for key_in_dict, data_in_dict in quiz_master_dict.items():
                             if t_name_raw in key_in_dict:
@@ -255,7 +251,7 @@ def render_dashboard_page():
                 elif hw_diff >= 20:
                     todo_praise.append(f"**{s_name}**：宿題達成率が前月比 +{hw_diff}%改善しています！")
 
-                # 🟡 励ます
+                # 🟡 励ます (🌟小テストの正答率で判定！)
                 if hw_rate_curr >= 80 and quiz_avg_ratio >= 0 and quiz_avg_ratio < 60:
                     todo_encourage.append(f"**{s_name}**：宿題は{hw_rate_curr}%やっていますが、小テスト正答率が{int(quiz_avg_ratio)}%です。勉強のやり方の面談が必要です。")
 
@@ -303,64 +299,6 @@ def render_dashboard_page():
                     for msg in todo_contact: st.markdown(f"📞 {msg}")
                     if not todo_warn and not todo_contact: st.write("（現在対象者はいません）")
                 st.divider()
-
-            # 🌟 NEW: 定期テスト・模試結果一覧表 
-            st.markdown(f"### 📝 {bucket_name} 定期テスト・成績一覧")
-            st.caption("直近の定期テストや模試の点数を一覧で確認できます。")
-            
-            if not df_all_tests.empty and '生徒名' in df_all_tests.columns:
-                # この校舎の生徒だけに絞り込む
-                df_tests_bucket = df_all_tests[df_all_tests['生徒名'].isin(student_names_in_bucket)].copy()
-                
-                if not df_tests_bucket.empty:
-                    # フィルタリング用のUI
-                    c_t1, c_t2 = st.columns(2)
-                    with c_t1:
-                        test_types = ["すべて"] + list(df_tests_bucket['テスト種別'].dropna().unique())
-                        selected_test_type = st.selectbox("テスト種別を選択", test_types, key=f"tt_{t_idx}")
-                    with c_t2:
-                        test_names = ["すべて"] + list(df_tests_bucket['テスト名'].dropna().unique())
-                        selected_test_name = st.selectbox("テスト名を選択", test_names, key=f"tn_{t_idx}")
-
-                    # 絞り込み実行
-                    df_tests_disp = df_tests_bucket.copy()
-                    if selected_test_type != "すべて":
-                        df_tests_disp = df_tests_disp[df_tests_disp['テスト種別'] == selected_test_type]
-                    if selected_test_name != "すべて":
-                        df_tests_disp = df_tests_disp[df_tests_disp['テスト名'] == selected_test_name]
-                        
-                    if not df_tests_disp.empty:
-                        # 表示用に列を整理（生徒名、テスト名、5教科の点数・偏差値など）
-                        disp_cols = ['生徒名', '学年', '実施日', 'テスト種別', 'テスト名', '英語 点数', '数学 点数', '国語 点数', '理科 点数', '社会 点数', '5科合計 点数', '5科合計 偏差値']
-                        available_disp_cols = [col for col in disp_cols if col in df_tests_disp.columns]
-                        
-                        df_tests_disp = df_tests_disp[available_disp_cols].sort_values(by='実施日', ascending=False)
-                        
-                        st.dataframe(df_tests_disp, use_container_width=True, hide_index=True)
-                        
-                        # Excelダウンロード機能
-                        excel_buffer_test = io.BytesIO()
-                        with pd.ExcelWriter(excel_buffer_test, engine='xlsxwriter') as writer:
-                            df_tests_disp.to_excel(writer, index=False, sheet_name='成績一覧')
-                        
-                        safe_filename = re.sub(r'[\\/:*?"<>|]', '_', f"{bucket_name}_{selected_test_type}_{selected_test_name}_成績一覧")
-                        st.download_button(
-                            label=f"📥 {bucket_name} の成績一覧をExcelでダウンロード",
-                            data=excel_buffer_test.getvalue(),
-                            file_name=f"{safe_filename}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            type="secondary",
-                            use_container_width=True,
-                            key=f"dl_test_{t_idx}"
-                        )
-                    else:
-                        st.info("選択された条件のテストデータはありません。")
-                else:
-                    st.info("この校舎の生徒のテストデータはまだ登録されていません。")
-            else:
-                st.info("テストデータがありません。")
-
-            st.divider()
 
             # 🌟 柱2: 4象限マトリクス
             st.markdown(f"### 🗺️ 俯瞰マトリクス")
@@ -416,6 +354,7 @@ def render_dashboard_page():
                     st.markdown(f"### 🏆 {bucket_name} ポイントランキング")
                     st.caption("累計ポイントのランキングです。この表はダウンロードして掲示用に使えます！")
                     
+                    # 🌟 変更: ランキングに「小テスト正答率(%)」を表示
                     df_ranking = df_summary[['生徒名', '今月の獲得pt', '小テスト正答率(%)']].sort_values(by="今月の獲得pt", ascending=False).reset_index(drop=True)
                     df_ranking.index = df_ranking.index + 1
                     df_ranking.reset_index(inplace=True)
@@ -423,6 +362,7 @@ def render_dashboard_page():
                     
                     st.dataframe(df_ranking, hide_index=True, use_container_width=True)
                     
+                    # 🌟 変更: ダウンロードファイル名に校舎名（bucket_name）を入れる
                     excel_buffer = io.BytesIO()
                     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                         df_ranking.to_excel(writer, index=False, sheet_name='ポイントランキング')
