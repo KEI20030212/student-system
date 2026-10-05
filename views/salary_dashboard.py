@@ -33,9 +33,6 @@ def render_salary_dashboard_page():
 
     df_instructors = fetch_instructor_master_cached().copy()
 
-    # --------------------------------------------------------
-    # 操作パネル（一括データ取得＆ゆらぎ吸収）
-    # --------------------------------------------------------
     if 'toast_msg' in st.session_state:
         st.toast(st.session_state['toast_msg'], icon="✨")
         del st.session_state['toast_msg']
@@ -87,6 +84,18 @@ def render_salary_dashboard_page():
                     lambda x: unicodedata.normalize('NFKC', x).replace(' ', '')
                 )
 
+            # 🌟 NEW: PDFの内訳表示用に、生徒IDから校舎を判定する列を追加
+            def get_branch_from_sid(sid):
+                sid = str(sid).lower()
+                if sid.startswith('t'): return "田端新町校"
+                elif sid.startswith('h'): return "東十条駅前校"
+                else: return "その他・体験"
+
+            if '生徒ID' in df_month_exploded.columns:
+                df_month_exploded['校舎'] = df_month_exploded['生徒ID'].apply(get_branch_from_sid)
+            else:
+                df_month_exploded['校舎'] = "不明"
+
             valid_teachers = [t for t in df_month_exploded['担当講師'].unique() if t not in ["未入力", "", "nan", "None"]]
             
             if f"allowances_{selected_month}" not in st.session_state:
@@ -123,48 +132,13 @@ def render_salary_dashboard_page():
             st.divider()
 
             # --------------------------------------------------------
-            # 🌟 最終的な給与計算ロジック（校舎別のコマ数集計を追加）
+            # 最終的な給与計算ロジック
             # --------------------------------------------------------
             summary_list = []
             for teacher in valid_teachers:
                 df_teacher = df_month_exploded[df_month_exploded['担当講師'] == teacher].copy()
                 df_teacher['日付'] = df_teacher['日時'].dt.date
-                
-                # 🌟 校舎判定ロジック（生徒IDの頭文字から判定）
-                def get_branch(sid):
-                    sid = str(sid).lower()
-                    if sid.startswith('t'): return '田端新町校'
-                    elif sid.startswith('h'): return '東十条駅前校'
-                    else: return 'その他'
-
-                if '生徒ID' in df_teacher.columns:
-                    df_teacher['校舎'] = df_teacher['生徒ID'].apply(get_branch)
-                else:
-                    df_teacher['校舎'] = '不明'
-
-                # 日付とコマで重複排除（1回の授業を1コマとしてカウント）
-                df_teacher_unique = df_teacher.drop_duplicates(subset=['日付', '授業コマ'])
-
-                # 🌟 校舎別のコマ数カウント用の箱
-                koma_branch = {
-                    '田端新町校': {'1:1': 0, '1:2': 0, '1:3': 0},
-                    '東十条駅前校': {'1:1': 0, '1:2': 0, '1:3': 0},
-                    'その他': {'1:1': 0, '1:2': 0, '1:3': 0}
-                }
-
-                for _, r in df_teacher_unique.iterrows():
-                    b = r.get('校舎', 'その他')
-                    if b not in koma_branch: b = 'その他'
-                    jt = str(r.get('授業形態', ''))
-                    
-                    if '1:1' in jt: koma_branch[b]['1:1'] += 1
-                    elif '1:2' in jt: koma_branch[b]['1:2'] += 1
-                    elif '1:3' in jt: koma_branch[b]['1:3'] += 1
-
-                # 全体の合計コマ数を計算
-                koma_11 = sum(koma_branch[b]['1:1'] for b in koma_branch)
-                koma_12 = sum(koma_branch[b]['1:2'] for b in koma_branch)
-                koma_13 = sum(koma_branch[b]['1:3'] for b in koma_branch)
+                df_teacher = df_teacher.drop_duplicates(subset=['日付', '授業コマ'])
 
                 t_row_df = df_instructors[df_instructors["講師名"] == teacher]
                 if t_row_df.empty:
@@ -180,6 +154,19 @@ def render_salary_dashboard_page():
                     trans = safe_int(t_row.get('交通費', 0), 0)
 
                 current_allowance = st.session_state[f"allowances_{selected_month}"].get(teacher, 0)
+
+                # 🌟 校舎別にコマ数をカウント（PDF用）
+                df_tabata = df_teacher[df_teacher['校舎'] == "田端新町校"]
+                df_higashi = df_teacher[df_teacher['校舎'] == "東十条駅前校"]
+                df_other = df_teacher[~df_teacher['校舎'].isin(["田端新町校", "東十条駅前校"])]
+
+                k_t11 = len(df_tabata[df_tabata['授業形態'] == '1:1']); k_t12 = len(df_tabata[df_tabata['授業形態'] == '1:2']); k_t13 = len(df_tabata[df_tabata['授業形態'] == '1:3'])
+                k_h11 = len(df_higashi[df_higashi['授業形態'] == '1:1']); k_h12 = len(df_higashi[df_higashi['授業形態'] == '1:2']); k_h13 = len(df_higashi[df_higashi['授業形態'] == '1:3'])
+                k_o11 = len(df_other[df_other['授業形態'] == '1:1']); k_o12 = len(df_other[df_other['授業形態'] == '1:2']); k_o13 = len(df_other[df_other['授業形態'] == '1:3'])
+
+                koma_11 = k_t11 + k_h11 + k_o11
+                koma_12 = k_t12 + k_h12 + k_o12
+                koma_13 = k_t13 + k_h13 + k_o13
 
                 total_koma = koma_11 + koma_12 + koma_13
                 koma_salary = (koma_11 * p11) + (koma_12 * p12) + (koma_13 * p13)
@@ -199,24 +186,19 @@ def render_salary_dashboard_page():
                     "出勤日数": working_days, 
                     "交通費合計 (円)": int(transport_total), 
                     "💰 最終支給額 (円)": int(final_salary),
-                    
-                    # 🌟 PDF明細へ渡すための詳細データ
-                    "田端_1:1": koma_branch['田端新町校']['1:1'],
-                    "田端_1:2": koma_branch['田端新町校']['1:2'],
-                    "田端_1:3": koma_branch['田端新町校']['1:3'],
-                    "東十条_1:1": koma_branch['東十条駅前校']['1:1'],
-                    "東十条_1:2": koma_branch['東十条駅前校']['1:2'],
-                    "東十条_1:3": koma_branch['東十条駅前校']['1:3'],
-                    "単価_1:1": p11,
-                    "単価_1:2": p12,
-                    "単価_1:3": p13,
-                    "単価_交通費": trans
+                    # 🌟 PDFに渡すための詳細データ（画面には出しません）
+                    "単価_11": p11, "単価_12": p12, "単価_13": p13, "単価_交通費": trans,
+                    "田端_11": k_t11, "田端_12": k_t12, "田端_13": k_t13,
+                    "東十条_11": k_h11, "東十条_12": k_h12, "東十条_13": k_h13,
+                    "その他_11": k_o11, "その他_12": k_o12, "その他_13": k_o13
                 })
 
             if summary_list:
                 df_summary = pd.DataFrame(summary_list)
-                # 表示用には主要な列だけを見せる
-                display_cols = ["👨‍🏫 担当講師", "合計コマ数", "1:1コマ", "1:2コマ", "1:3コマ", "授業給 (円)", "役職手当 (円)", "出勤日数", "交通費合計 (円)", "💰 最終支給額 (円)"]
+                
+                # 画面表示用に、PDF用の「裏データ」を非表示にする
+                display_cols = [c for c in df_summary.columns if "単価_" not in c and "田端_" not in c and "東十条_" not in c and "その他_" not in c]
+                
                 st.subheader(f"📊 {selected_month} の給与一覧（計算結果）")
                 st.dataframe(df_summary[display_cols], hide_index=True, use_container_width=True)
 
@@ -233,8 +215,9 @@ def render_salary_dashboard_page():
                 with c2:
                     if st.button(f"🚀 {selected_month} の給与を公開する", use_container_width=True):
                         with st.spinner("送信中..."):
+                            # 公開用データからも裏データを消す
                             success = robust_api_call(publish_salary_data, selected_month, df_summary[display_cols], fallback_value=False)
-                            if success: st.success("✅ 公開・保存しました！")
+                            if success: st.success("✅ 公開しました！")
                             else: st.error("⚠️ 送信に失敗しました。")
 
     # ==========================================
@@ -243,7 +226,7 @@ def render_salary_dashboard_page():
     with tab_master:
         st.subheader("⚙️ 講師マスタの設定変更")
         
-        st.markdown("##### 👤 講師ごとの個別設定（基本給・基本手当）")
+        st.markdown("##### 👤 講師ごとの個別設定")
         target_teacher = st.selectbox("設定を変更する講師を選択してください", ["選択してください"] + df_instructors["講師名"].tolist())
         
         if target_teacher != "選択してください":
@@ -257,7 +240,7 @@ def render_salary_dashboard_page():
                     new_13 = st.number_input("1:3 単価", value=int(current_vals.get('1:3単価', 2000)), step=100)
                 with col2:
                     new_trans = st.number_input("1日あたりの交通費", value=int(current_vals.get('交通費', 0)), step=10)
-                    new_allowance = st.number_input("基本の役職手当（毎月の初期値）", value=int(current_vals.get('役職手当', 0)), step=1000)
+                    new_allowance = st.number_input("基本の役職手当", value=int(current_vals.get('役職手当', 0)), step=1000)
                 
                 if st.form_submit_button("✅ この内容で保存する", type="primary"):
                     idx = df_instructors.index[df_instructors["講師名"] == target_teacher][0]
@@ -270,9 +253,13 @@ def render_salary_dashboard_page():
                     with st.spinner("☁️ 保存中..."):
                         if robust_api_call(update_instructor_master, df_instructors, fallback_value=False):
                             st.cache_data.clear() 
-                            st.session_state['toast_msg'] = f"✅ {target_teacher} 先生の基本給設定を更新しました！"
+                            st.session_state['toast_msg'] = f"✅ {target_teacher} 先生の給料・手当設定を更新しました！"
                             st.rerun()
         
         st.divider()
+        
         st.markdown("##### 📋 講師設定一覧（確認用）")
         st.dataframe(df_instructors, hide_index=True, use_container_width=True)
+        
+        with st.expander("➕ 新しい講師を登録する（アカウント連動）"):
+            st.info("💡 **一元管理へのアップデート**\n\n新しい講師の登録は左メニューの **「⚙️ アカウント・システム設定」** から行ってください。\nそちらでアカウントを作成すると、自動的にこの講師マスタにも連動して初期設定枠が生成されます！")
