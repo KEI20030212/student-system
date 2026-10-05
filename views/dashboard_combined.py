@@ -2,7 +2,7 @@ import streamlit as st
 
 from views.dashboard import render_dashboard_page
 from views.self_study_dashboard import render_self_study_dashboard
-from views.test_scores_list import render_test_scores_list_page
+from views.test_score_list import render_test_scores_list_page
 
 def render_combined_dashboard_page():
     st.header("🏫 教室・学習状況ダッシュボード")
