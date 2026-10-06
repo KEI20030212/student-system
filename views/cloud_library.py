@@ -16,7 +16,7 @@ CAT_QUIZ = "小テスト・確認テスト"
 CAT_EXAM = "定期テスト過去問"
 
 # ==========================================
-# 🚀 超高速化のためのキャッシュ関数
+# 🚀 超高速化のためのキャッシュ関数（Safariブロック対策）
 # ==========================================
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_get_quiz_master():
@@ -49,14 +49,13 @@ def download_gdrive_file_safely(file_id):
         
     return res.content
 
-
 def render_cloud_library_page():
     st.header("📚 教材クラウド書庫")
     st.write("塾の公式プリント（小テスト、過去問など）を検索・閲覧・保存できる共有書庫です。")
     
-    st.info("💡 **【ご利用方法】**\n"
+    st.info("💡 **【スマホ・PC共通のご利用方法】**\n"
             "「📖 プレビューを開く」で内容を確認できます。\n"
-            "保存する場合は、必ずその下にある **「📥 取得する」 ➡ 「💾 保存する」** ボタンを使用してください。")
+            "保存・印刷する場合は、必ずファイルの横にある **「📥 取得する」 ➡ 「💾 保存する」** ボタンを使用してください。（※Googleにログインしていなくても保存できます！）")
     
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
     is_admin = user_role in ['admin', 'owner', 'am']
@@ -112,7 +111,7 @@ def render_cloud_library_page():
                             f'<iframe src="{embed_url}" width="100%" height="400" style="border: none; border-radius: 8px;"></iframe>',
                             unsafe_allow_html=True
                         )
-                        st.caption("※上の画面内のボタンはログインしていないと使えない場合があります。保存は下のボタンから行ってください。")
+                        st.caption("⚠️ プレビュー画面内のダウンロードボタンは、ログインしていないと白紙になります。保存は下の青いボタンから行ってください。")
                     
                     # 🌟 究極のダウンロードボタン！システム経由で本物のPDFを渡す
                     if file_id in st.session_state.prepared_files:
@@ -133,7 +132,7 @@ def render_cloud_library_page():
                         )
                     else:
                         if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
-                            with st.spinner("ダウンロード準備中..."):
+                            with st.spinner("システム経由でファイルを抽出中..."):
                                 try:
                                     # システムが代わりにGoogleドライブからデータを引っこ抜く
                                     file_bytes = download_gdrive_file_safely(file_id)
@@ -142,7 +141,7 @@ def render_cloud_library_page():
                                         st.session_state.prepared_files[file_id] = file_bytes
                                         st.rerun() 
                                     else:
-                                        st.error("⚠️ 権限エラー：共有設定が「リンクを知っている全員（閲覧者）」になっていない可能性があります。")
+                                        st.error("⚠️ 権限エラー：Googleドライブの共有設定が「リンクを知っている全員（閲覧者）」になっていない可能性があります。")
                                 except Exception as e:
                                     st.error(f"取得エラー: {e}")
                 else:
@@ -172,11 +171,13 @@ def render_cloud_library_page():
         else:
             selected_quiz = st.selectbox("📚 テキスト・テスト名を選択", ["-- 選択してください --"] + quiz_names, key="sel_q_txt")
             if selected_quiz != "-- 選択してください --":
+                # キャッシュから一瞬で取得
                 chapter_folders = cached_list_library_folders(CAT_QUIZ, selected_quiz)
                 selected_chapter = None
                 if chapter_folders:
                     selected_chapter = st.selectbox("📖 単元・章を選択", ["-- 選択してください --", "-- 直下のファイル --"] + chapter_folders, key="sel_q_chap")
                 if not chapter_folders or (chapter_folders and selected_chapter and selected_chapter != "-- 選択してください --"):
+                    # キャッシュから一瞬で取得
                     files = cached_list_library_files(CAT_QUIZ, selected_quiz, selected_chapter)
                     display_files(files) 
 
@@ -217,7 +218,7 @@ def render_cloud_library_page():
                 
                 if st.button("🚀 この設定で教材を一括登録する", type="primary", use_container_width=True):
                     if not u_sub_cat:
-                        st.error("⚠️️ テキスト名 または 学校名 を入力してください。")
+                        st.error("⚠️ テキスト名 または 学校名 を入力してください。")
                     else:
                         progress_bar = st.progress(0)
                         status_text = st.empty()
