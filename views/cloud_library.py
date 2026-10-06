@@ -3,6 +3,7 @@ import pandas as pd
 import time
 import os
 import requests
+import base64
 from utils.g_sheets import get_quiz_master_dict
 from utils.g_drive import (
     upload_library_file, 
@@ -82,6 +83,26 @@ def render_cloud_library_page():
     st.divider()
 
     # ==========================================
+    # 🌟 画面遷移を完全に防ぐ魔法のダウンロードボタン描画関数
+    # ==========================================
+    def display_safe_download_link(pdf_bytes, filename, color="#FF4B4B"):
+        """
+        Streamlitの純正ボタン(st.download_button)を使わず、
+        HTMLのリンクとして埋め込むことで画面のリロードを完全に防ぐ。
+        """
+        b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+        html_button = f'''
+        <a href="data:application/octet-stream;base64,{b64_pdf}" download="{filename}" 
+           style="display: block; text-align: center; padding: 8px 12px; background-color: {color}; 
+                  color: white; text-decoration: none; border-radius: 8px; font-weight: bold; 
+                  font-family: sans-serif; font-size: 14px; margin-top: 5px; transition: 0.3s;
+                  border: 1px solid #ff3333;">
+            💾 本体に保存する
+        </a>
+        '''
+        st.markdown(html_button, unsafe_allow_html=True)
+
+    # ==========================================
     # 🌟 共通のファイル表示＆削除処理関数
     # ==========================================
     def display_files(files_list):
@@ -110,7 +131,7 @@ def render_cloud_library_page():
                             f'<iframe src="{embed_url}" width="100%" height="400" style="border: none; border-radius: 8px;"></iframe>',
                             unsafe_allow_html=True
                         )
-                        st.caption("⚠️ プレビュー画面内のダウンロードボタンは、ログインしていないと白紙になります。保存は下の青いボタンから行ってください。")
+                        st.caption("⚠️ プレビュー画面内のダウンロードボタンは、ログインしていないと白紙になります。保存は下の赤いボタンから行ってください。")
                     
                     if file_id in st.session_state.prepared_files:
                         file_bytes = st.session_state.prepared_files[file_id]
@@ -118,17 +139,10 @@ def render_cloud_library_page():
                         ext = os.path.splitext(file_name)[1].lower()
                         safe_file_name = file_name + ".pdf" if not ext else file_name
                         
-                        # 🌟 究極の魔法：application/octet-stream に変更！
-                        # これにより、Safariが同じタブで開こうとするお節介をやめ、純粋にスマホ本体に保存されます。
-                        c2.download_button(
-                            label="💾 本体に保存する", 
-                            data=file_bytes, 
-                            file_name=safe_file_name, 
-                            mime="application/octet-stream", 
-                            type="primary",
-                            use_container_width=True,
-                            key=f"dl_{file_id}"
-                        )
+                        # 🌟 修正ポイント：純正ボタンをやめ、ご提示いただいたコードと同じ手法（HTMLリンク化）に変更
+                        # これで、ダウンロードを押しても絶対に画面がリロード（初期化）されなくなります！
+                        with c2:
+                            display_safe_download_link(file_bytes, safe_file_name)
                     else:
                         if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
                             with st.spinner("システム経由でファイルを抽出中..."):
@@ -143,7 +157,7 @@ def render_cloud_library_page():
                                 except Exception as e:
                                     st.error(f"取得エラー: {e}")
                 else:
-                    c2.caption("⚠️️ リンク無効")
+                    c2.caption("⚠️ リンク無効")
                 
                 if is_admin:
                     if c3.button("🗑️ 削除", key=f"del_{file_id}", type="secondary", use_container_width=True):
