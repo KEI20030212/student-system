@@ -50,12 +50,12 @@ def download_gdrive_file_safely(file_id):
     return res.content
 
 def render_cloud_library_page():
-    st.header("📚 教材書庫")
+    st.header("📚 教材クラウド書庫")
     st.write("塾の公式プリント（小テスト、過去問など）を検索・閲覧・保存できる共有書庫です。")
     
     st.info("💡 **【スマホ・PC共通のご利用方法】**\n"
             "「📖 プレビューを開く」で内容を確認できます。\n"
-            "保存・印刷する場合は、必ずファイルの横にある **「📥 取得する」 ➡ 「💾 保存する」** ボタンを使用してください。（※Googleにログインしていなくても保存できます！）")
+            "保存・印刷する場合は、必ずファイルの横にある **「📥 取得する」 ➡ 「💾 本体に保存する」** ボタンを使用してください。（※Googleにログインしていなくても保存できます！）")
     
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
     is_admin = user_role in ['admin', 'owner', 'am']
@@ -63,7 +63,6 @@ def render_cloud_library_page():
     if 'lib_upload_key' not in st.session_state:
         st.session_state.lib_upload_key = 0
         
-    # 🌟 NEW: ダウンロード用のデータを保持する箱
     if 'prepared_files' not in st.session_state:
         st.session_state.prepared_files = {}
     
@@ -113,19 +112,19 @@ def render_cloud_library_page():
                         )
                         st.caption("⚠️ プレビュー画面内のダウンロードボタンは、ログインしていないと白紙になります。保存は下の青いボタンから行ってください。")
                     
-                    # 🌟 究極のダウンロードボタン！システム経由で本物のPDFを渡す
                     if file_id in st.session_state.prepared_files:
                         file_bytes = st.session_state.prepared_files[file_id]
                         
                         ext = os.path.splitext(file_name)[1].lower()
                         safe_file_name = file_name + ".pdf" if not ext else file_name
                         
-                        # システムから渡すため、ログイン不要で誰でもダウンロードできます！
+                        # 🌟 究極の魔法：application/octet-stream に変更！
+                        # これにより、Safariが同じタブで開こうとするお節介をやめ、純粋にスマホ本体に保存されます。
                         c2.download_button(
-                            label="💾 保存する", 
+                            label="💾 本体に保存する", 
                             data=file_bytes, 
                             file_name=safe_file_name, 
-                            mime="application/pdf", 
+                            mime="application/octet-stream", 
                             type="primary",
                             use_container_width=True,
                             key=f"dl_{file_id}"
@@ -134,7 +133,6 @@ def render_cloud_library_page():
                         if c2.button("📥 取得する", key=f"prep_{file_id}", use_container_width=True):
                             with st.spinner("システム経由でファイルを抽出中..."):
                                 try:
-                                    # システムが代わりにGoogleドライブからデータを引っこ抜く
                                     file_bytes = download_gdrive_file_safely(file_id)
                                     
                                     if not file_bytes.startswith(b'<!DOCTYPE html>') and not file_bytes.startswith(b'<html'):
@@ -145,7 +143,7 @@ def render_cloud_library_page():
                                 except Exception as e:
                                     st.error(f"取得エラー: {e}")
                 else:
-                    c2.caption("⚠️ リンク無効")
+                    c2.caption("⚠️️ リンク無効")
                 
                 if is_admin:
                     if c3.button("🗑️ 削除", key=f"del_{file_id}", type="secondary", use_container_width=True):
@@ -171,13 +169,11 @@ def render_cloud_library_page():
         else:
             selected_quiz = st.selectbox("📚 テキスト・テスト名を選択", ["-- 選択してください --"] + quiz_names, key="sel_q_txt")
             if selected_quiz != "-- 選択してください --":
-                # キャッシュから一瞬で取得
                 chapter_folders = cached_list_library_folders(CAT_QUIZ, selected_quiz)
                 selected_chapter = None
                 if chapter_folders:
                     selected_chapter = st.selectbox("📖 単元・章を選択", ["-- 選択してください --", "-- 直下のファイル --"] + chapter_folders, key="sel_q_chap")
                 if not chapter_folders or (chapter_folders and selected_chapter and selected_chapter != "-- 選択してください --"):
-                    # キャッシュから一瞬で取得
                     files = cached_list_library_files(CAT_QUIZ, selected_quiz, selected_chapter)
                     display_files(files) 
 
