@@ -5,6 +5,7 @@ import pandas as pd
 import datetime
 import io
 import re
+import time
 from utils.api_guard import robust_api_call
 
 # データ取得用関数をインポート
@@ -13,7 +14,8 @@ from utils.g_sheets import (
     get_student_master,
     get_quiz_master_dict,                
     load_quiz_records,
-    get_textbook_master
+    get_textbook_master,
+    update_quiz_master_defaults  # 🌟 NEW: 追加した関数をインポート
 )
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -199,29 +201,39 @@ def render_test_scores_list_page():
         else:
             taken_quizzes = [q for q in df_all_quizzes['テキスト'].dropna().unique().tolist() if q]
             
-            # ==========================================
-            # 🌟 NEW: get_quiz_master_dictのフラグから、デフォルト表示のテスト名を抽出
-            # ==========================================
+            # 🌟 シートの「E列」から現在のデフォルト候補を抽出
             default_candidates = set()
             for key, data in quiz_details.items():
                 if data.get("is_default", False):
-                    # keyは「テスト名_単元」になっているので、前半分（テスト名）だけを取り出す
                     if "_" in key:
                         quiz_name = key.split("_", 1)[0]
                         default_candidates.add(quiz_name)
             
-            # 実際に実施記録が存在し、かつ「デフォルトON」になっているテストだけを抽出
             valid_defaults = [q for q in default_candidates if q in taken_quizzes]
             
-            st.info("💡 **【管理メモ】** 最初に表示されるテストは、スプレッドシートの「設定_小テスト一覧」のE列に文字を入力することで設定できます。")
-
-            st.write("▼ **表示したいテストを選択してください（複数選択可）**")
-            selected_quizzes_for_map = st.multiselect(
-                "📚 マップを表示する小テストを選択", 
-                taken_quizzes, 
-                default=valid_defaults,
-                placeholder="-- 小テストを選択 --"
-            )
+            # 🌟 アプリ画面からのデフォルト保存エリア
+            c_sel, c_save = st.columns([4, 1.5], vertical_alignment="bottom")
+            with c_sel:
+                selected_quizzes_for_map = st.multiselect(
+                    "📚 表示する小テストを選択（複数選択可）", 
+                    taken_quizzes, 
+                    default=valid_defaults,
+                    placeholder="-- 小テストを選択 --",
+                    key="active_quizzes_selection"
+                )
+            with c_save:
+                # 権限がある管理者なら誰でも保存可能
+                user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
+                if user_role in ['admin', 'owner', 'am']:
+                    if st.button("💾 この選択をデフォルト保存", use_container_width=True, help="次回開いた時もこのテストが自動表示されます"):
+                        with st.spinner("設定シートを更新中..."):
+                            success = robust_api_call(update_quiz_master_defaults, selected_quizzes_for_map, fallback_value=False)
+                            if success:
+                                st.success("✅ デフォルト表示を更新しました！")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ 更新に失敗しました。")
             
             if not selected_quizzes_for_map:
                 st.info("👆 表示したい小テストを選択してください。")
