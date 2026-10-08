@@ -1407,6 +1407,41 @@ def load_test_scores():
     ws = sh.worksheet("成績_定期テスト")
     return pd.DataFrame(ws.get_all_records())
 
+def update_quiz_master_defaults(selected_quiz_names):
+    """
+    「設定_小テスト一覧」シートのE列（デフォルト表示フラグ）を
+    選択されたテスト名に合わせて一括更新する
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("設定_小テスト一覧")
+        
+        all_values = ws.get_all_values()
+        if not all_values:
+            return False
+            
+        # 1行目はヘッダー
+        new_e_col = [["デフォルト"]]
+        
+        # 2行目以降の各テスト名を見て、選択されているものは「ON」、それ以外は空欄にする
+        for row in all_values[1:]:
+            t_name = str(row[0]).strip() if len(row) > 0 else ""
+            if t_name in selected_quiz_names:
+                new_e_col.append(["ON"])
+            else:
+                new_e_col.append([""])
+                
+        # E1からE列の末尾までを一瞬で一括更新（API消費も1回で爆速）
+        end_row = len(all_values)
+        ws.update(f"E1:E{end_row}", new_e_col)
+        
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        print(f"デフォルト設定の更新エラー: {e}")
+        return False
+
 #self_study_dashboard.py
 def load_self_study_data():
     """自習記録シートから全データを取得してシステム用の表（データフレーム）にして返す"""
