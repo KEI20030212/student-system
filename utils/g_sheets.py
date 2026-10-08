@@ -1597,7 +1597,8 @@ def move_student_to_inactive_sheet(student_id):
 #quiz_dashboard.py
 def get_quiz_master_dict():
     """
-    「設定_小テスト一覧」シートから、テスト名と満点・用紙サイズの対応表を取得する
+    「設定_小テスト一覧」シートから、テスト名と満点・用紙サイズ、
+    および「ダッシュボードのデフォルト表示フラグ」の対応表を取得する
     """
     try:
         gc = get_gc_client()
@@ -1609,26 +1610,28 @@ def get_quiz_master_dict():
         
         for row in all_records[1:]:
             if len(row) >= 3:
-                # 記録シート側の quiz_name と合わせるため「テキスト_単元」をキーにする
                 quiz_key = f"{row[0]}_{row[1]}"
                 
-                # C列（満点）の取得
                 try:
                     full_marks = float(row[2])
                 except ValueError:
-                    full_marks = 100 # 数字でない場合はデフォルト100点
+                    full_marks = 100 
                     
-                # 🌟 【ここを追加！】D列（用紙サイズ）の取得
-                # 行のデータが4つ以上ある ＆ 空欄じゃない場合はそのサイズを使い、それ以外は「A4」にする安全策
                 if len(row) >= 4 and row[3].strip() != "":
                     paper_size = row[3].strip()
                 else:
                     paper_size = "A4"
+
+                # 🌟 NEW: E列（5列目）をチェックして、デフォルト表示するか判定する
+                # 「ON」「★」「表示」など、何かしら文字が入っていれば True とする
+                is_default = False
+                if len(row) >= 5 and str(row[4]).strip() != "":
+                    is_default = True
                 
-                # 🌟 【ここを変更！】辞書の中に "サイズ" も一緒に保存する
                 master_dict[quiz_key] = {
                     "full_marks": full_marks,
-                    "サイズ": paper_size
+                    "サイズ": paper_size,
+                    "is_default": is_default # 🌟 辞書にフラグを追加！
                 }
                 
         return master_dict
