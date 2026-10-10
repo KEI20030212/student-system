@@ -6,10 +6,8 @@ import altair as alt
 import datetime 
 import io
 import re
-import zipfile
 
 from utils.api_guard import robust_api_call 
-from utils.pdf_generator import generate_growth_report_pdf 
 
 # 🌟 必要なインポート
 from utils.g_sheets import (
@@ -115,7 +113,6 @@ def render_dashboard_page():
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
     
-    # 🌟 必要なデータすべてを一括取得
     with st.spinner('☁️ 授業ログ・自習・小テスト・模試データを一括集計中...'):
         df_all_logs = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
         if not df_all_logs.empty and '日時' in df_all_logs.columns:
@@ -167,17 +164,14 @@ def render_dashboard_page():
                 quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
                 quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty and prev_period else pd.DataFrame()
                 
-                # 🌟 前月以前のすべての小テスト記録（新規挑戦テストかどうかの判定用 ＆ 前回の点数取得用）
                 quiz_past_all = df_all_quizzes[(df_all_quizzes['日時'] < pd.to_datetime(f"{selected_period[:4]}-{selected_period[5:7]}-01")) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
                 
-                # 過去のテストの「最高得点」を記憶しておく辞書
                 past_test_scores = {}
                 if not quiz_past_all.empty and 'テキスト' in quiz_past_all.columns and '単元' in quiz_past_all.columns and '点数' in quiz_past_all.columns:
                     for _, r in quiz_past_all.iterrows():
                         key = f"{r.get('テキスト', '')}_{r.get('単元', '')}"
                         try:
                             score = float(r.get('点数', 0))
-                            # 同じテストを複数回受けている場合は最新（一番下）のものを「前回」とみなす
                             past_test_scores[key] = score
                         except ValueError:
                             pass
@@ -226,7 +220,6 @@ def render_dashboard_page():
                             current_key = f"{t_name_raw}_{t_chapter}"
                             is_new = current_key not in past_test_scores
                             
-                            # 🌟 NEW: 前回の正答率を計算してレポートデータに含める
                             prev_ratio = 0
                             if not is_new:
                                 prev_raw_score = past_test_scores[current_key]
@@ -244,8 +237,18 @@ def render_dashboard_page():
                             
                             if is_new:
                                 new_challenge_count += 1
-                                # 1ヶ月の中で同じ新規テストを2回受けた場合の対策
                                 past_test_scores[current_key] = score
+
+                # 🌟 NEW: レポートの表示順を「テキスト名」➡「単元の数字」で並び替え
+                def extract_chapter_num(c_str):
+                    nums = re.findall(r'\d+', str(c_str))
+                    return int(nums[0]) if nums else 999
+                    
+                detailed_tests_curr.sort(key=lambda x: (
+                    str(x.get("テキスト", "")), 
+                    extract_chapter_num(x.get("単元", "")),
+                    str(x.get("単元", ""))
+                ))
 
                 quiz_avg_ratio_curr = int(sum(quiz_ratios_curr) / len(quiz_ratios_curr)) if quiz_ratios_curr else -1
 
@@ -270,7 +273,7 @@ def render_dashboard_page():
                 quiz_avg_ratio_prev = int(sum(quiz_ratios_prev) / len(quiz_ratios_prev)) if quiz_ratios_prev else -1
                 quiz_ratio_diff = (quiz_avg_ratio_curr - quiz_avg_ratio_prev) if (quiz_avg_ratio_curr != -1 and quiz_avg_ratio_prev != -1) else 0
 
-                # 🌟 レポートデータの保存
+                # レポートデータの保存
                 if quiz_avg_ratio_curr != -1 or quiz_avg_ratio_prev != -1:
                     growth_report_data.append({
                         "生徒名": s_name,
@@ -418,27 +421,88 @@ def render_dashboard_page():
                     )
             
             # ==========================================
-            # 🌟 個別成績アップ・ダウンレポートの出力エリア
+            # 🌟 NEW: 個別成績アップ・ダウンレポートの出力エリア（Excel形式）
             # ==========================================
             st.divider()
-            st.markdown(f"### 📄 生徒ごとの「成績成長レポート」出力")
-            st.write(f"小テストの平均正答率を先月（{prev_period if prev_period else 'データなし'}）と比較し、生徒1人1枚のPDFレポートとして作成します。面談や保護者配布用にご利用ください。")
+            st.markdown(f"### 📄 生徒ごとの「成績成長レポート」出力 (Excel版)")
+            st.write(f"小テストの平均正答率を先月と比較し、1つのExcelファイルの中に「生徒ごとのシート（タブ）」を分けて作成します。テスト名と単元順に綺麗に整理されています。")
             
             if not growth_report_data:
                 st.info("今月または先月の小テスト記録がないため、レポートを出力できません。")
             else:
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                excel_buffer_growth = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer_growth, engine='xlsxwriter') as writer:
+                    
+                    # 1. 全体サマリーシートを作成
+                    summary_rows = []
                     for rep in growth_report_data:
-                        pdf_bytes = generate_growth_report_pdf(rep, selected_period, prev_period if prev_period else "過去")
-                        zip_file.writestr(f"成績成長レポート_{selected_period}_{rep['生徒名']}.pdf", pdf_bytes)
+                        summary_rows.append({
+                            "生徒名": rep["生徒名"],
+                            "今月平均正答率(%)": rep["今月正答率(%)"],
+                            "前月平均正答率(%)": rep["前月正答率(%)"],
+                            "成績増減(%)": rep["成績増減(%)"],
+                            "新規挑戦テスト数": rep["新規受験数"]
+                        })
+                    df_sum = pd.DataFrame(summary_rows)
+                    df_sum.to_excel(writer, index=False, sheet_name="全体サマリー")
+                    
+                    # 2. 生徒ごとの個別シートを作成
+                    workbook = writer.book
+                    header_format = workbook.add_format({'bold': True, 'font_size': 14})
+                    
+                    for rep in growth_report_data:
+                        # シート名の文字数制限（31文字）と禁止文字を回避
+                        sheet_name = str(rep["生徒名"]).replace("/", "_").replace("\\", "_").replace("?", "").replace("*", "")[:31] 
+                        
+                        details = []
+                        for t in rep["今月のテスト一覧"]:
+                            status = ""
+                            if t.get("is_new"):
+                                status = "🆕 初挑戦"
+                            else:
+                                diff = t.get("diff_score", 0)
+                                prev = t.get("prev_score", "-")
+                                if diff > 0: status = f"🚀 +{diff}% UP! (前回 {prev}%)"
+                                elif diff < 0: status = f"⚠️ {diff}% (前回 {prev}%)"
+                                else: status = f"±0% (前回 {prev}%)"
+                            
+                            details.append({
+                                "日付": t.get("日付", ""),
+                                "テキスト": t.get("テキスト", ""),
+                                "単元": t.get("単元", ""),
+                                "今月正答率(%)": t.get("正答率", ""),
+                                "前回比較": status
+                            })
+                        
+                        df_details = pd.DataFrame(details)
+                        # 詳細データは5行目から書き込む（上部はサマリー用）
+                        df_details.to_excel(writer, index=False, startrow=5, sheet_name=sheet_name)
+                        
+                        # 上部のサマリー情報を書き込み
+                        worksheet = writer.sheets[sheet_name]
+                        worksheet.write('A1', f"■ {rep['生徒名']} さん 成績成長レポート ({selected_period})", header_format)
+                        worksheet.write('A3', f"今月平均: {rep['今月正答率(%)']}%")
+                        worksheet.write('B3', f"前月平均: {rep['前月正答率(%)']}%")
+                        
+                        diff_val = rep['成績増減(%)']
+                        if diff_val > 0: worksheet.write('C3', f"増減: +{diff_val}% UP! ✨")
+                        elif diff_val < 0: worksheet.write('C3', f"増減: {diff_val}%")
+                        else: worksheet.write('C3', f"増減: ±0%")
+                        
+                        worksheet.write('D3', f"新規挑戦: {rep['新規受験数']}件")
+                        
+                        # 列幅を少し調整して見やすく
+                        worksheet.set_column('A:A', 12)
+                        worksheet.set_column('B:B', 30)
+                        worksheet.set_column('C:C', 10)
+                        worksheet.set_column('E:E', 30)
                         
                 st.download_button(
-                    label=f"📦 {bucket_name}の生徒全員分をZIPで一括ダウンロード", 
-                    data=zip_buffer.getvalue(), 
-                    file_name=f"{selected_period}_{bucket_name}_成績成長レポート一式.zip", 
-                    mime="application/zip", 
+                    label=f"📦 {bucket_name}の生徒全員分をExcelで一括ダウンロード", 
+                    data=excel_buffer_growth.getvalue(), 
+                    file_name=f"{selected_period}_{bucket_name}_成績成長レポート.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                     type="primary", 
                     use_container_width=True,
-                    key=f"dl_zip_growth_direct_{t_idx}" 
+                    key=f"dl_excel_growth_{t_idx}" 
                 )
