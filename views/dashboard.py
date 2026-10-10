@@ -141,23 +141,6 @@ def render_dashboard_page():
         df_all_tests = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
 
     # ==========================================
-    # 🐛 デバッグ用データ表示エリア（管理者限定）
-    # ==========================================
-    if has_manager_access:
-        with st.expander("🛠️ 【デバッグ用】スプレッドシートから読み込んだ生データを確認"):
-            st.write("▼ 小テスト記録（df_all_quizzes）の最初の5件")
-            if not df_all_quizzes.empty:
-                st.dataframe(df_all_quizzes.head(5), use_container_width=True)
-            else:
-                st.info("データがありません")
-            
-            st.write("▼ 授業記録（df_all_logs）の最初の5件")
-            if not df_all_logs.empty:
-                st.dataframe(df_all_logs.head(5), use_container_width=True)
-            else:
-                st.info("データがありません")
-
-    # ==========================================
     # 🌟 校舎ごとのタブを描画
     # ==========================================
     tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
@@ -394,7 +377,7 @@ def render_dashboard_page():
                     )
             
             # ==========================================
-            # 🌟 NEW: 個別成績アップ・ダウンレポートの出力エリア
+            # 🌟 個別成績アップ・ダウンレポートの出力エリア
             # ==========================================
             st.divider()
             st.markdown(f"### 📄 生徒ごとの「成績成長レポート」出力")
@@ -403,7 +386,6 @@ def render_dashboard_page():
             if not growth_report_data:
                 st.info("今月または先月の小テスト記録がないため、レポートを出力できません。")
             else:
-                # 🌟 修正ポイント：裏側で最初からZIPを作っておき、1クリックでダウンロードできるようにした
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                     for rep in growth_report_data:
@@ -417,5 +399,5 @@ def render_dashboard_page():
                     mime="application/zip", 
                     type="primary", 
                     use_container_width=True,
-                    key=f"dl_zip_growth_direct_{t_idx}" # キーを変更してリセットを防ぐ
+                    key=f"dl_zip_growth_direct_{t_idx}" 
                 )
