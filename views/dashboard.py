@@ -167,6 +167,13 @@ def render_dashboard_page():
                 quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
                 quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty and prev_period else pd.DataFrame()
                 
+                # 🌟 NEW: 先月以前のすべての小テスト記録（新規挑戦テストかどうかの判定用）
+                quiz_past_all = df_all_quizzes[(df_all_quizzes['日時'] < pd.to_datetime(f"{selected_period[:4]}-{selected_period[5:7]}-01")) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
+                past_test_keys = set()
+                if not quiz_past_all.empty and 'テキスト' in quiz_past_all.columns and '単元' in quiz_past_all.columns:
+                    for _, r in quiz_past_all.iterrows():
+                        past_test_keys.add(f"{r.get('テキスト', '')}_{r.get('単元', '')}")
+
                 ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty else pd.DataFrame()
                 ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty and prev_period else pd.DataFrame()
 
@@ -178,14 +185,16 @@ def render_dashboard_page():
 
                 ss_min_curr = pd.to_numeric(ss_curr['自習時間(分)'], errors='coerce').sum() if not ss_curr.empty else 0
                 
-                # --- 今月の計算 ---
+                # --- 今月の小テスト計算 ---
                 quiz_pts_curr = 0
                 quiz_ratios_curr = []
                 detailed_tests_curr = [] 
+                new_challenge_count = 0 # 🌟 新規受験数
                 
                 if not quiz_curr.empty and '点数' in quiz_curr.columns:
                     for _, r in quiz_curr.iterrows():
                         t_name_raw = str(r.get('テキスト', '不明')).strip()
+                        t_chapter = str(r.get('単元', '不明')).strip() # 🌟 単元を取得
                         score_val = r.get('点数', '')
                         test_date = r.get('日時').strftime('%m/%d') if pd.notna(r.get('日時')) else '不明'
                         
@@ -205,11 +214,22 @@ def render_dashboard_page():
                         if full_marks > 0:
                             ratio = int((score / full_marks) * 100)
                             quiz_ratios_curr.append(ratio)
-                            detailed_tests_curr.append({"日付": test_date, "テキスト": t_name_raw, "正答率": ratio})
+                            detailed_tests_curr.append({
+                                "日付": test_date, 
+                                "テキスト": t_name_raw, 
+                                "単元": t_chapter, # 🌟 単元をレポート用に保存
+                                "正答率": ratio
+                            })
+                            
+                            # 🌟 過去に解いたことがないテストなら新規カウント
+                            current_key = f"{t_name_raw}_{t_chapter}"
+                            if current_key not in past_test_keys:
+                                new_challenge_count += 1
+                                past_test_keys.add(current_key) # 同月に同じものを2回解いた場合は1回とカウントするため追加
 
                 quiz_avg_ratio_curr = int(sum(quiz_ratios_curr) / len(quiz_ratios_curr)) if quiz_ratios_curr else -1
 
-                # --- 前月の計算 ---
+                # --- 前月の小テスト計算 ---
                 quiz_ratios_prev = []
                 if not quiz_prev.empty and '点数' in quiz_prev.columns:
                     for _, r in quiz_prev.iterrows():
@@ -230,13 +250,14 @@ def render_dashboard_page():
                 quiz_avg_ratio_prev = int(sum(quiz_ratios_prev) / len(quiz_ratios_prev)) if quiz_ratios_prev else -1
                 quiz_ratio_diff = (quiz_avg_ratio_curr - quiz_avg_ratio_prev) if (quiz_avg_ratio_curr != -1 and quiz_avg_ratio_prev != -1) else 0
 
-                # レポートデータの保存
+                # 🌟 レポートデータの保存（新規受験数を追加）
                 if quiz_avg_ratio_curr != -1 or quiz_avg_ratio_prev != -1:
                     growth_report_data.append({
                         "生徒名": s_name,
                         "今月正答率(%)": quiz_avg_ratio_curr if quiz_avg_ratio_curr != -1 else "-",
                         "前月正答率(%)": quiz_avg_ratio_prev if quiz_avg_ratio_prev != -1 else "-",
                         "成績増減(%)": quiz_ratio_diff,
+                        "新規受験数": new_challenge_count, 
                         "今月のテスト一覧": detailed_tests_curr
                     })
 
