@@ -411,7 +411,9 @@ def render_dashboard_page():
             # ==========================================
             st.divider()
             st.markdown(f"### 📄 生徒ごとの「成績成長レポート」出力")
-            st.write(f"小テストの平均正答率を先月（{prev_month_str if prev_month_str else 'データなし'}）と比較し、生徒1人1枚のPDFレポートとして作成します。面談や保護者配布用にご利用ください。")
+            
+            # 👇 修正：prev_month_str を prev_period に直しました！
+            st.write(f"小テストの平均正答率を先月（{prev_period if prev_period else 'データなし'}）と比較し、生徒1人1枚のPDFレポートとして作成します。面談や保護者配布用にご利用ください。")
             
             if not growth_report_data:
                 st.info("今月または先月の小テスト記録がないため、レポートを出力できません。")
@@ -421,7 +423,8 @@ def render_dashboard_page():
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                         for rep in growth_report_data:
                             # 1人1枚のPDFを生成
-                            pdf_bytes = generate_growth_report_pdf(rep, selected_period, prev_month_str if prev_month_str else "過去")
+                            # 👇 修正：ここも prev_period に直しました！
+                            pdf_bytes = generate_growth_report_pdf(rep, selected_period, prev_period if prev_period else "過去")
                             zip_file.writestr(f"成績成長レポート_{selected_period}_{rep['生徒名']}.pdf", pdf_bytes)
                             
                     st.download_button(
