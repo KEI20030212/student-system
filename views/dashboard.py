@@ -239,7 +239,6 @@ def render_dashboard_page():
                                 new_challenge_count += 1
                                 past_test_scores[current_key] = score
 
-                # 🌟 NEW: レポートの表示順を「テキスト名」➡「単元の数字」で並び替え
                 def extract_chapter_num(c_str):
                     nums = re.findall(r'\d+', str(c_str))
                     return int(nums[0]) if nums else 999
@@ -421,7 +420,7 @@ def render_dashboard_page():
                     )
             
             # ==========================================
-            # 🌟 NEW: 個別成績アップ・ダウンレポートの出力エリア（Excel形式）
+            # 🌟 個別成績アップ・ダウンレポートの出力エリア（Excel形式）
             # ==========================================
             st.divider()
             st.markdown(f"### 📄 生徒ごとの「成績成長レポート」出力 (Excel版)")
@@ -449,6 +448,7 @@ def render_dashboard_page():
                     # 2. 生徒ごとの個別シートを作成
                     workbook = writer.book
                     header_format = workbook.add_format({'bold': True, 'font_size': 14})
+                    msg_format = workbook.add_format({'bold': True, 'font_size': 11, 'color': '#0066cc'})
                     
                     for rep in growth_report_data:
                         # シート名の文字数制限（31文字）と禁止文字を回避
@@ -475,21 +475,38 @@ def render_dashboard_page():
                             })
                         
                         df_details = pd.DataFrame(details)
-                        # 詳細データは5行目から書き込む（上部はサマリー用）
-                        df_details.to_excel(writer, index=False, startrow=5, sheet_name=sheet_name)
+                        # 詳細データは7行目から書き込む
+                        df_details.to_excel(writer, index=False, startrow=7, sheet_name=sheet_name)
                         
                         # 上部のサマリー情報を書き込み
                         worksheet = writer.sheets[sheet_name]
                         worksheet.write('A1', f"■ {rep['生徒名']} さん 成績成長レポート ({selected_period})", header_format)
-                        worksheet.write('A3', f"今月平均: {rep['今月正答率(%)']}%")
-                        worksheet.write('B3', f"前月平均: {rep['前月正答率(%)']}%")
                         
                         diff_val = rep['成績増減(%)']
-                        if diff_val > 0: worksheet.write('C3', f"増減: +{diff_val}% UP! ✨")
-                        elif diff_val < 0: worksheet.write('C3', f"増減: {diff_val}%")
-                        else: worksheet.write('C3', f"増減: ±0%")
+                        new_count = rep['新規受験数']
                         
-                        worksheet.write('D3', f"新規挑戦: {rep['新規受験数']}件")
+                        # 🌟 NEW: やる気を引き出すコメントの自動生成
+                        cheer_msg = ""
+                        if diff_val > 0:
+                            cheer_msg = f"✨【先生より】素晴らしい！先月よりも全体の正答率が {diff_val}% もアップしました！日々の努力の成果がしっかり数字に表れています。この調子でガンガン進めよう！"
+                        elif diff_val < 0 and new_count > 0:
+                            cheer_msg = f"🔥【先生より】今月は新しい範囲に {new_count}回 も果敢に挑戦しましたね！最初は点数が下がっても当たり前。しっかり復習して自分のモノにしていきましょう！"
+                        elif diff_val < 0:
+                            cheer_msg = f"💪【先生より】惜しい！先月よりも少しだけ正答率が下がっています。解きっぱなしになっていないか、ノートの使い方や復習のタイミングをもう一度見直してみよう！"
+                        else:
+                            cheer_msg = f"🌟【先生より】正答率をしっかりキープできています！基礎が固まってきた証拠拠です。次は自己ベスト更新を目指して、もう一段階レベルアップしよう！"
+                            
+                        # コメントを書き込み
+                        worksheet.write('A3', cheer_msg, msg_format)
+                        
+                        worksheet.write('A5', f"今月平均: {rep['今月正答率(%)']}%")
+                        worksheet.write('B5', f"前月平均: {rep['前月正答率(%)']}%")
+                        
+                        if diff_val > 0: worksheet.write('C5', f"増減: +{diff_val}% UP! ✨")
+                        elif diff_val < 0: worksheet.write('C5', f"増減: {diff_val}%")
+                        else: worksheet.write('C5', f"増減: ±0%")
+                        
+                        worksheet.write('D5', f"新規挑戦: {new_count}件")
                         
                         # 列幅を少し調整して見やすく
                         worksheet.set_column('A:A', 12)
