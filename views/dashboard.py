@@ -115,7 +115,7 @@ def render_dashboard_page():
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
     
-    # 🌟 必要なデータすべてを一括取得しつつ、「検索用の名前」を生成（全角・半角スペース揺れを吸収）
+    # 🌟 必要なデータすべてを一括取得
     with st.spinner('☁️ 授業ログ・自習・小テスト・模試データを一括集計中...'):
         df_all_logs = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
         if not df_all_logs.empty and '日時' in df_all_logs.columns:
@@ -153,7 +153,7 @@ def render_dashboard_page():
 
             summary_data = []
             matrix_data = []
-            growth_report_data = [] # 🌟 レポート出力用のリスト
+            growth_report_data = [] 
             todo_praise, todo_encourage, todo_warn, todo_contact = [], [], [], []
 
             for student in students:
@@ -167,12 +167,20 @@ def render_dashboard_page():
                 quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
                 quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty and prev_period else pd.DataFrame()
                 
-                # 🌟 NEW: 先月以前のすべての小テスト記録（新規挑戦テストかどうかの判定用）
+                # 🌟 前月以前のすべての小テスト記録（新規挑戦テストかどうかの判定用 ＆ 前回の点数取得用）
                 quiz_past_all = df_all_quizzes[(df_all_quizzes['日時'] < pd.to_datetime(f"{selected_period[:4]}-{selected_period[5:7]}-01")) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
-                past_test_keys = set()
-                if not quiz_past_all.empty and 'テキスト' in quiz_past_all.columns and '単元' in quiz_past_all.columns:
+                
+                # 過去のテストの「最高得点」を記憶しておく辞書
+                past_test_scores = {}
+                if not quiz_past_all.empty and 'テキスト' in quiz_past_all.columns and '単元' in quiz_past_all.columns and '点数' in quiz_past_all.columns:
                     for _, r in quiz_past_all.iterrows():
-                        past_test_keys.add(f"{r.get('テキスト', '')}_{r.get('単元', '')}")
+                        key = f"{r.get('テキスト', '')}_{r.get('単元', '')}"
+                        try:
+                            score = float(r.get('点数', 0))
+                            # 同じテストを複数回受けている場合は最新（一番下）のものを「前回」とみなす
+                            past_test_scores[key] = score
+                        except ValueError:
+                            pass
 
                 ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty else pd.DataFrame()
                 ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty and prev_period else pd.DataFrame()
@@ -189,12 +197,12 @@ def render_dashboard_page():
                 quiz_pts_curr = 0
                 quiz_ratios_curr = []
                 detailed_tests_curr = [] 
-                new_challenge_count = 0 # 🌟 新規受験数
+                new_challenge_count = 0 
                 
                 if not quiz_curr.empty and '点数' in quiz_curr.columns:
                     for _, r in quiz_curr.iterrows():
                         t_name_raw = str(r.get('テキスト', '不明')).strip()
-                        t_chapter = str(r.get('単元', '不明')).strip() # 🌟 単元を取得
+                        t_chapter = str(r.get('単元', '不明')).strip() 
                         score_val = r.get('点数', '')
                         test_date = r.get('日時').strftime('%m/%d') if pd.notna(r.get('日時')) else '不明'
                         
@@ -214,18 +222,30 @@ def render_dashboard_page():
                         if full_marks > 0:
                             ratio = int((score / full_marks) * 100)
                             quiz_ratios_curr.append(ratio)
+                            
+                            current_key = f"{t_name_raw}_{t_chapter}"
+                            is_new = current_key not in past_test_scores
+                            
+                            # 🌟 NEW: 前回の正答率を計算してレポートデータに含める
+                            prev_ratio = 0
+                            if not is_new:
+                                prev_raw_score = past_test_scores[current_key]
+                                prev_ratio = int((prev_raw_score / full_marks) * 100)
+                            
                             detailed_tests_curr.append({
                                 "日付": test_date, 
                                 "テキスト": t_name_raw, 
-                                "単元": t_chapter, # 🌟 単元をレポート用に保存
-                                "正答率": ratio
+                                "単元": t_chapter, 
+                                "正答率": ratio,
+                                "is_new": is_new,
+                                "prev_score": prev_ratio if not is_new else "-",
+                                "diff_score": (ratio - prev_ratio) if not is_new else 0
                             })
                             
-                            # 🌟 過去に解いたことがないテストなら新規カウント
-                            current_key = f"{t_name_raw}_{t_chapter}"
-                            if current_key not in past_test_keys:
+                            if is_new:
                                 new_challenge_count += 1
-                                past_test_keys.add(current_key) # 同月に同じものを2回解いた場合は1回とカウントするため追加
+                                # 1ヶ月の中で同じ新規テストを2回受けた場合の対策
+                                past_test_scores[current_key] = score
 
                 quiz_avg_ratio_curr = int(sum(quiz_ratios_curr) / len(quiz_ratios_curr)) if quiz_ratios_curr else -1
 
@@ -250,7 +270,7 @@ def render_dashboard_page():
                 quiz_avg_ratio_prev = int(sum(quiz_ratios_prev) / len(quiz_ratios_prev)) if quiz_ratios_prev else -1
                 quiz_ratio_diff = (quiz_avg_ratio_curr - quiz_avg_ratio_prev) if (quiz_avg_ratio_curr != -1 and quiz_avg_ratio_prev != -1) else 0
 
-                # 🌟 レポートデータの保存（新規受験数を追加）
+                # 🌟 レポートデータの保存
                 if quiz_avg_ratio_curr != -1 or quiz_avg_ratio_prev != -1:
                     growth_report_data.append({
                         "生徒名": s_name,
