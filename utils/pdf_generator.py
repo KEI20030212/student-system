@@ -162,3 +162,67 @@ def generate_invoice_pdf(data_dict, month_str):
     c.save()
     buffer.seek(0)
     return buffer.getvalue()
+
+def generate_growth_report_pdf(data_dict, month_str, prev_month_str):
+    """
+    1人分の「成績成長レポート」を受け取り、PDFファイル（バイナリデータ）を作成して返す
+    """
+    pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+
+    # 1. タイトル
+    c.setFont('HeiseiKakuGo-W5', 22)
+    c.drawCentredString(297, 750, f"小テスト 成績成長レポート")
+
+    # 2. 宛名と期間
+    c.setFont('HeiseiKakuGo-W5', 14)
+    c.drawString(50, 700, f"{data_dict['生徒名']} さん")
+    c.line(50, 695, 250, 695)
+    
+    c.setFont('HeiseiKakuGo-W5', 12)
+    c.drawRightString(540, 700, f"【比較対象】 {prev_month_str} ➡ {month_str}")
+
+    # 3. 総合評価
+    y_pos = 630
+    c.setFont('HeiseiKakuGo-W5', 16)
+    
+    diff_val = data_dict['成績増減(%)']
+    
+    if diff_val > 0:
+        c.drawString(50, y_pos, f"✨ 素晴らしい！前月よりも正答率が【 +{diff_val}% 】アップしました！")
+    elif diff_val < 0:
+        c.drawString(50, y_pos, f"🔥 惜しい！前月よりも正答率が【 {diff_val}% 】ダウンしています。")
+    else:
+        c.drawString(50, y_pos, f"📊 前月からの正答率は【 ±0% 】です。この調子で頑張りましょう！")
+        
+    y_pos -= 30
+    c.setFont('HeiseiKakuGo-W5', 14)
+    c.drawString(70, y_pos, f"先月の平均正答率： {data_dict['前月正答率(%)']}%")
+    y_pos -= 25
+    c.drawString(70, y_pos, f"今月の平均正答率： {data_dict['今月正答率(%)']}%")
+
+    # 4. 今月受けたテストの内訳（もしあれば）
+    y_pos -= 60
+    c.setFont('HeiseiKakuGo-W5', 14)
+    c.drawString(50, y_pos, "■ 今月の小テスト実施履歴")
+    y_pos -= 20
+    
+    c.setFont('HeiseiKakuGo-W5', 12)
+    recent_tests = data_dict.get('今月のテスト一覧', [])
+    
+    if not recent_tests:
+        c.drawString(70, y_pos, "（今月の小テスト記録はありません）")
+    else:
+        for t in recent_tests[:15]: # 最大15件まで表示
+            c.drawString(70, y_pos, f"・{t['日付']} : 【{t['テキスト']}】 ➡ {t['正答率']}%")
+            y_pos -= 20
+
+    # 5. フッター
+    c.setFont('HeiseiKakuGo-W5', 10)
+    c.drawRightString(500, 50, "※本レポートはシステムによって自動生成されています")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
