@@ -192,11 +192,9 @@ def generate_growth_report_pdf(data_dict, month_str, prev_month_str):
     diff_val = data_dict['成績増減(%)']
     new_tests_count = data_dict.get('新規受験数', 0)
     
-    # 🌟 メッセージをより具体的に「褒める」仕様に変更
     if diff_val > 0:
         c.drawString(50, y_pos, f"✨ 素晴らしい！前月よりも平均正答率が【 +{diff_val}% 】アップしました！")
     elif diff_val < 0 and new_tests_count > 0:
-        # 新しいテストに挑戦して下がった場合は励ます
         c.drawString(50, y_pos, f"🔥 新しい範囲に果敢に挑戦しましたね！復習して定着させましょう。")
     elif diff_val < 0:
         c.drawString(50, y_pos, f"🔥 惜しい！前月よりも正答率が【 {diff_val}% 】ダウンしています。")
@@ -206,7 +204,6 @@ def generate_growth_report_pdf(data_dict, month_str, prev_month_str):
     y_pos -= 35
     c.setFont('HeiseiKakuGo-W5', 14)
     
-    # 🌟 成績比較表のようなレイアウト
     c.drawString(70, y_pos, f"先月の平均正答率： {data_dict['前月正答率(%)']}%")
     c.drawString(300, y_pos, f"今月の平均正答率： {data_dict['今月正答率(%)']}%")
     y_pos -= 25
@@ -220,21 +217,36 @@ def generate_growth_report_pdf(data_dict, month_str, prev_month_str):
     c.drawString(50, y_pos, "■ 今月の小テスト実施履歴（最新15件まで）")
     y_pos -= 20
     
-    c.setFont('HeiseiKakuGo-W5', 12)
     recent_tests = data_dict.get('今月のテスト一覧', [])
     
     if not recent_tests:
+        c.setFont('HeiseiKakuGo-W5', 12)
         c.drawString(70, y_pos, "（今月の小テスト記録はありません）")
     else:
         for t in recent_tests[:15]: 
-            # 🌟 「テキスト名」と「単元・章」を組み合わせて表示
             test_display_name = f"{t['テキスト']} ({t['単元']})"
-            
-            # 長すぎるテキスト名を少しだけカット
-            if len(test_display_name) > 25:
-                test_display_name = test_display_name[:24] + "…"
+            if len(test_display_name) > 23:
+                test_display_name = test_display_name[:22] + "…"
                 
-            c.drawString(70, y_pos, f"・{t['日付']} : 【 {test_display_name} 】 ➡ {t['正答率']}%")
+            c.setFont('HeiseiKakuGo-W5', 12)
+            c.drawString(70, y_pos, f"・{t['日付']} : 【 {test_display_name} 】")
+            
+            # 🌟 NEW: 前回との比較を表示
+            if t.get('is_new'):
+                c.setFont('HeiseiKakuGo-W5', 10)
+                c.drawString(340, y_pos, f"➡ {t['正答率']}% (🆕初挑戦)")
+            else:
+                prev_score = t.get('prev_score', '-')
+                diff_score = t.get('diff_score', 0)
+                
+                c.setFont('HeiseiKakuGo-W5', 11)
+                if diff_score > 0:
+                    c.drawString(340, y_pos, f"➡ {t['正答率']}%  (前回 {prev_score}% 🚀 +{diff_score}% UP!)")
+                elif diff_score < 0:
+                    c.drawString(340, y_pos, f"➡ {t['正答率']}%  (前回 {prev_score}% ⚠️ {diff_score}%)")
+                else:
+                    c.drawString(340, y_pos, f"➡ {t['正答率']}%  (前回 {prev_score}% ±0%)")
+                    
             y_pos -= 20
 
     # 5. フッター
