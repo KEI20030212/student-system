@@ -9,7 +9,7 @@ import re
 import zipfile
 
 from utils.api_guard import robust_api_call 
-from utils.pdf_generator import generate_growth_report_pdf # 🌟 追加したPDF関数をインポート
+from utils.pdf_generator import generate_growth_report_pdf 
 
 # 🌟 必要なインポート
 from utils.g_sheets import (
@@ -115,25 +115,47 @@ def render_dashboard_page():
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
     
-    # 🌟 必要なデータすべてを一括取得（超高速処理）
+    # 🌟 必要なデータすべてを一括取得しつつ、「検索用の名前」を生成（全角・半角スペース揺れを吸収）
     with st.spinner('☁️ 授業ログ・自習・小テスト・模試データを一括集計中...'):
         df_all_logs = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
         if not df_all_logs.empty and '日時' in df_all_logs.columns:
             df_all_logs['日時'] = pd.to_datetime(df_all_logs['日時'], format='mixed', errors='coerce')
             df_all_logs['年月'] = df_all_logs['日時'].dt.strftime('%Y年%m月')
+            name_c = '名前' if '名前' in df_all_logs.columns else '生徒名'
+            df_all_logs['検索用名前'] = df_all_logs[name_c].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         df_all_quizzes = robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
         if not df_all_quizzes.empty and '日時' in df_all_quizzes.columns:
             df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
             df_all_quizzes['年月'] = df_all_quizzes['日時'].dt.strftime('%Y年%m月')
+            df_all_quizzes['検索用名前'] = df_all_quizzes['名前'].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         df_ss = robust_api_call(load_self_study_data, fallback_value=pd.DataFrame())
         if not df_ss.empty and '日付' in df_ss.columns:
             df_ss['日付'] = pd.to_datetime(df_ss['日付'], errors='coerce')
             df_ss['年月'] = df_ss['日付'].dt.strftime('%Y年%m月')
+            name_c = '名前' if '名前' in df_ss.columns else '生徒名'
+            df_ss['検索用名前'] = df_ss[name_c].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         quiz_master_dict = robust_api_call(get_quiz_maker_sheets, fallback_value={})
         df_all_tests = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
+
+    # ==========================================
+    # 🐛 デバッグ用データ表示エリア（管理者限定）
+    # ==========================================
+    if has_manager_access:
+        with st.expander("🛠️ 【デバッグ用】スプレッドシートから読み込んだ生データを確認"):
+            st.write("▼ 小テスト記録（df_all_quizzes）の最初の5件")
+            if not df_all_quizzes.empty:
+                st.dataframe(df_all_quizzes.head(5), use_container_width=True)
+            else:
+                st.info("データがありません")
+            
+            st.write("▼ 授業記録（df_all_logs）の最初の5件")
+            if not df_all_logs.empty:
+                st.dataframe(df_all_logs.head(5), use_container_width=True)
+            else:
+                st.info("データがありません")
 
     # ==========================================
     # 🌟 校舎ごとのタブを描画
@@ -154,16 +176,18 @@ def render_dashboard_page():
             for student in students:
                 s_id = str(student.get(id_col, "未設定"))
                 s_name = str(student.get(name_col, "不明"))
+                # スペースを除去した検索用のお名前を作る
+                s_name_clean = s_name.replace(" ", "").replace(" ", "")
 
-                # 【データ抽出】当月 ＆ 前月
-                logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['名前' if '名前' in df_all_logs.columns else '生徒名'] == s_name)] if not df_all_logs.empty else pd.DataFrame()
-                logs_prev = df_all_logs[(df_all_logs['年月'] == prev_period) & (df_all_logs['名前' if '名前' in df_all_logs.columns else '生徒名'] == s_name)] if not df_all_logs.empty and prev_period else pd.DataFrame()
+                # 【データ抽出】当月 ＆ 前月 （スペース揺れを無視して検索！）
+                logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty else pd.DataFrame()
+                logs_prev = df_all_logs[(df_all_logs['年月'] == prev_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty and prev_period else pd.DataFrame()
 
-                quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['名前'] == s_name)] if not df_all_quizzes.empty else pd.DataFrame()
-                quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['名前'] == s_name)] if not df_all_quizzes.empty and prev_period else pd.DataFrame()
+                quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
+                quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty and prev_period else pd.DataFrame()
                 
-                ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['名前'] == s_name)] if not df_ss.empty else pd.DataFrame()
-                ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['名前'] == s_name)] if not df_ss.empty and prev_period else pd.DataFrame()
+                ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty else pd.DataFrame()
+                ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty and prev_period else pd.DataFrame()
 
                 # 【計算】宿題達成率
                 hw_rate_curr = -1
@@ -411,8 +435,6 @@ def render_dashboard_page():
             # ==========================================
             st.divider()
             st.markdown(f"### 📄 生徒ごとの「成績成長レポート」出力")
-            
-            # 👇 修正：prev_month_str を prev_period に直しました！
             st.write(f"小テストの平均正答率を先月（{prev_period if prev_period else 'データなし'}）と比較し、生徒1人1枚のPDFレポートとして作成します。面談や保護者配布用にご利用ください。")
             
             if not growth_report_data:
@@ -423,7 +445,6 @@ def render_dashboard_page():
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                         for rep in growth_report_data:
                             # 1人1枚のPDFを生成
-                            # 👇 修正：ここも prev_period に直しました！
                             pdf_bytes = generate_growth_report_pdf(rep, selected_period, prev_period if prev_period else "過去")
                             zip_file.writestr(f"成績成長レポート_{selected_period}_{rep['生徒名']}.pdf", pdf_bytes)
                             
