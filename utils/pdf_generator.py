@@ -163,6 +163,8 @@ def generate_invoice_pdf(data_dict, month_str):
     buffer.seek(0)
     return buffer.getvalue()
 
+# utils/pdf_generator.py にある generate_growth_report_pdf を上書き
+
 def generate_growth_report_pdf(data_dict, month_str, prev_month_str):
     """
     1人分の「成績成長レポート」を受け取り、PDFファイル（バイナリデータ）を作成して返す
@@ -183,29 +185,39 @@ def generate_growth_report_pdf(data_dict, month_str, prev_month_str):
     c.setFont('HeiseiKakuGo-W5', 12)
     c.drawRightString(540, 700, f"【比較対象】 {prev_month_str} ➡ {month_str}")
 
-    # 3. 総合評価
+    # 3. 総合評価メッセージ
     y_pos = 630
     c.setFont('HeiseiKakuGo-W5', 16)
     
     diff_val = data_dict['成績増減(%)']
+    new_tests_count = data_dict.get('新規受験数', 0)
     
+    # 🌟 メッセージをより具体的に「褒める」仕様に変更
     if diff_val > 0:
-        c.drawString(50, y_pos, f"✨ 素晴らしい！前月よりも正答率が【 +{diff_val}% 】アップしました！")
+        c.drawString(50, y_pos, f"✨ 素晴らしい！前月よりも平均正答率が【 +{diff_val}% 】アップしました！")
+    elif diff_val < 0 and new_tests_count > 0:
+        # 新しいテストに挑戦して下がった場合は励ます
+        c.drawString(50, y_pos, f"🔥 新しい範囲に果敢に挑戦しましたね！復習して定着させましょう。")
     elif diff_val < 0:
         c.drawString(50, y_pos, f"🔥 惜しい！前月よりも正答率が【 {diff_val}% 】ダウンしています。")
     else:
-        c.drawString(50, y_pos, f"📊 前月からの正答率は【 ±0% 】です。この調子で頑張りましょう！")
+        c.drawString(50, y_pos, f"📊 前月からの正答率は【 ±0% 】です。この調子で確実な定着を！")
         
-    y_pos -= 30
+    y_pos -= 35
     c.setFont('HeiseiKakuGo-W5', 14)
+    
+    # 🌟 成績比較表のようなレイアウト
     c.drawString(70, y_pos, f"先月の平均正答率： {data_dict['前月正答率(%)']}%")
+    c.drawString(300, y_pos, f"今月の平均正答率： {data_dict['今月正答率(%)']}%")
     y_pos -= 25
-    c.drawString(70, y_pos, f"今月の平均正答率： {data_dict['今月正答率(%)']}%")
+    c.drawString(70, y_pos, f"今月の受験テスト数： {len(data_dict.get('今月のテスト一覧', []))}回")
+    if new_tests_count > 0:
+        c.drawString(300, y_pos, f"（うち新規挑戦： {new_tests_count}回 🆕）")
 
     # 4. 今月受けたテストの内訳（もしあれば）
     y_pos -= 60
     c.setFont('HeiseiKakuGo-W5', 14)
-    c.drawString(50, y_pos, "■ 今月の小テスト実施履歴")
+    c.drawString(50, y_pos, "■ 今月の小テスト実施履歴（最新15件まで）")
     y_pos -= 20
     
     c.setFont('HeiseiKakuGo-W5', 12)
@@ -214,8 +226,15 @@ def generate_growth_report_pdf(data_dict, month_str, prev_month_str):
     if not recent_tests:
         c.drawString(70, y_pos, "（今月の小テスト記録はありません）")
     else:
-        for t in recent_tests[:15]: # 最大15件まで表示
-            c.drawString(70, y_pos, f"・{t['日付']} : 【{t['テキスト']}】 ➡ {t['正答率']}%")
+        for t in recent_tests[:15]: 
+            # 🌟 「テキスト名」と「単元・章」を組み合わせて表示
+            test_display_name = f"{t['テキスト']} ({t['単元']})"
+            
+            # 長すぎるテキスト名を少しだけカット
+            if len(test_display_name) > 25:
+                test_display_name = test_display_name[:24] + "…"
+                
+            c.drawString(70, y_pos, f"・{t['日付']} : 【 {test_display_name} 】 ➡ {t['正答率']}%")
             y_pos -= 20
 
     # 5. フッター
