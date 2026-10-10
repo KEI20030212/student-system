@@ -176,10 +176,8 @@ def render_dashboard_page():
             for student in students:
                 s_id = str(student.get(id_col, "未設定"))
                 s_name = str(student.get(name_col, "不明"))
-                # スペースを除去した検索用のお名前を作る
                 s_name_clean = s_name.replace(" ", "").replace(" ", "")
 
-                # 【データ抽出】当月 ＆ 前月 （スペース揺れを無視して検索！）
                 logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty else pd.DataFrame()
                 logs_prev = df_all_logs[(df_all_logs['年月'] == prev_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty and prev_period else pd.DataFrame()
 
@@ -189,24 +187,18 @@ def render_dashboard_page():
                 ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty else pd.DataFrame()
                 ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty and prev_period else pd.DataFrame()
 
-                # 【計算】宿題達成率
                 hw_rate_curr = -1
                 if not logs_curr.empty and '出した宿題P' in logs_curr.columns and 'やった宿題P' in logs_curr.columns:
                     assigned = pd.to_numeric(logs_curr['出した宿題P'], errors='coerce').fillna(0).sum()
                     done = pd.to_numeric(logs_curr['やった宿題P'], errors='coerce').fillna(0).sum()
                     if assigned > 0: hw_rate_curr = min(int((done / assigned) * 100), 100)
 
-                # 【計算】自習時間
                 ss_min_curr = pd.to_numeric(ss_curr['自習時間(分)'], errors='coerce').sum() if not ss_curr.empty else 0
-
-                # ==========================================
-                # 🌟 【計算】小テストの「正答率」と「獲得ポイント」
-                # ==========================================
                 
                 # --- 今月の計算 ---
                 quiz_pts_curr = 0
                 quiz_ratios_curr = []
-                detailed_tests_curr = [] # レポート印字用
+                detailed_tests_curr = [] 
                 
                 if not quiz_curr.empty and '点数' in quiz_curr.columns:
                     for _, r in quiz_curr.iterrows():
@@ -253,11 +245,9 @@ def render_dashboard_page():
                             quiz_ratios_prev.append(ratio)
                             
                 quiz_avg_ratio_prev = int(sum(quiz_ratios_prev) / len(quiz_ratios_prev)) if quiz_ratios_prev else -1
-                
-                # --- レポート用：増減の計算 ---
                 quiz_ratio_diff = (quiz_avg_ratio_curr - quiz_avg_ratio_prev) if (quiz_avg_ratio_curr != -1 and quiz_avg_ratio_prev != -1) else 0
 
-                # 生徒ごとのレポートデータを保存
+                # レポートデータの保存
                 if quiz_avg_ratio_curr != -1 or quiz_avg_ratio_prev != -1:
                     growth_report_data.append({
                         "生徒名": s_name,
@@ -267,11 +257,9 @@ def render_dashboard_page():
                         "今月のテスト一覧": detailed_tests_curr
                     })
 
-                # 【計算】総合ポイント
                 ss_pts_total = robust_api_call(get_student_self_study_points, s_name, fallback_value=0)
                 final_points = quiz_pts_curr + ss_pts_total
 
-                # 【計算】前月の実績（比較用）
                 hw_rate_prev = -1
                 if not logs_prev.empty and '出した宿題P' in logs_prev.columns:
                     assigned_p = pd.to_numeric(logs_prev['出した宿題P'], errors='coerce').fillna(0).sum()
@@ -280,7 +268,6 @@ def render_dashboard_page():
 
                 ss_min_prev = pd.to_numeric(ss_prev['自習時間(分)'], errors='coerce').sum() if not ss_prev.empty else 0
 
-                # 【能力(X) と やる気(Y) の算出】
                 latest_dev, latest_naishin = 50.0, 3 
                 if not df_all_tests.empty and '生徒名' in df_all_tests.columns:
                     df_s = df_all_tests[df_all_tests['生徒名'] == s_name]
@@ -302,7 +289,6 @@ def render_dashboard_page():
                     "生徒名": s_name, "能力 (X)": ability_x, "やる気 (Y)": motivation_y
                 })
 
-                # 🚨 【司令塔ロジック】To-Doミッションの自動判定
                 ss_diff = ss_min_curr - ss_min_prev
                 hw_diff = hw_rate_curr - hw_rate_prev if hw_rate_curr != -1 and hw_rate_prev != -1 else 0
 
@@ -331,15 +317,8 @@ def render_dashboard_page():
                     "今月の獲得pt": final_points
                 })
 
-            # ==========================================
-            # 🎨 タブ内の画面描画
-            # ==========================================
-            
-            # 🌟 柱1: 役職限定 To-Doリスト
             if has_manager_access:
                 st.markdown(f"### 🚨 {bucket_name} のマネジメント・ミッション（管理者専用）")
-                st.caption("システムがデータから自動判定した、今日あなたがアクションを起こすべき生徒リストです。")
-                
                 col_todo1, col_todo2 = st.columns(2)
                 with col_todo1:
                     st.success(f"🗣️ **褒める・励ます ({len(todo_praise) + len(todo_encourage)}件)**")
@@ -354,21 +333,17 @@ def render_dashboard_page():
                     if not todo_warn and not todo_contact: st.write("（現在対象者はいません）")
                 st.divider()
 
-            # 🌟 柱2: 4象限マトリクス
             st.markdown(f"### 🗺️ 俯瞰マトリクス")
             if matrix_data:
                 df_matrix = pd.DataFrame(matrix_data)
-                
                 chart = alt.Chart(df_matrix).mark_circle(size=400, opacity=0.8, color="#1E90FF").encode(
                     x=alt.X('能力 (X)', scale=alt.Scale(domain=[0.5, 5.5]), axis=alt.Axis(values=[1, 2, 3, 4, 5]), title="🧠 能力（内申・偏差値）"),
                     y=alt.Y('やる気 (Y)', scale=alt.Scale(domain=[0.5, 5.5]), axis=alt.Axis(values=[1, 2, 3, 4, 5]), title="🔥 やる気（自習・宿題）"),
                     tooltip=['生徒名', '能力 (X)', 'やる気 (Y)']
                 )
                 text = chart.mark_text(align='left', baseline='middle', dx=15, dy=0, fontSize=12, fontWeight='bold').encode(text='生徒名')
-                
                 rule_x = alt.Chart(pd.DataFrame({'x': [3]})).mark_rule(color='gray', strokeDash=[5,5], strokeWidth=2).encode(x='x')
                 rule_y = alt.Chart(pd.DataFrame({'y': [3]})).mark_rule(color='gray', strokeDash=[5,5], strokeWidth=2).encode(y='y')
-                
                 labels = pd.DataFrame([
                     {"x": 4.5, "y": 5.0, "t": "🏃‍♂️ 自走・エース"},
                     {"x": 1.5, "y": 5.0, "t": "💦 空回り・要指導"},
@@ -378,51 +353,39 @@ def render_dashboard_page():
                 label_chart = alt.Chart(labels).mark_text(fontSize=24, opacity=0.15, fontWeight='bold', color='gray').encode(
                     x='x:Q', y='y:Q', text='t:N'
                 )
-
                 st.altair_chart(label_chart + rule_x + rule_y + chart + text, use_container_width=True) 
 
-            # 🌟 柱3: トレンド分析 & 柱4: ランキング表
             if summary_data:
                 df_summary = pd.DataFrame(summary_data)
-                
                 st.divider()
                 c_left, c_right = st.columns([1, 1])
                 
                 with c_left:
                     st.markdown(f"### 📈 トレンド分析（{selected_period}）")
-                    st.caption("先月との差分。数字がプラスなら成長、マイナスなら危険信号です。")
-                    
                     df_trend = df_summary[['生徒名', '今月自習(分)', '前月比自習(分)', '今月宿題(%)', '前月比宿題(%)']].copy()
-                    
                     def format_diff(val):
                         if val > 0: return f"🟢 +{val}"
                         elif val < 0: return f"🔴 {val}"
                         else: return "±0"
-                        
                     df_trend['自習増減'] = df_trend['前月比自習(分)'].apply(format_diff)
                     df_trend['宿題増減'] = df_trend['前月比宿題(%)'].apply(lambda x: format_diff(x) if isinstance(x, (int, float)) else "-")
-                    
                     st.dataframe(df_trend[['生徒名', '今月自習(分)', '自習増減', '今月宿題(%)', '宿題増減']], hide_index=True, use_container_width=True)
 
                 with c_right:
                     st.markdown(f"### 🏆 {bucket_name} ポイントランキング")
-                    st.caption("累計ポイントのランキングです。この表はダウンロードして掲示用に使えます！")
-                    
                     df_ranking = df_summary[['生徒名', '今月の獲得pt', '小テスト正答率(%)']].sort_values(by="今月の獲得pt", ascending=False).reset_index(drop=True)
                     df_ranking.index = df_ranking.index + 1
                     df_ranking.reset_index(inplace=True)
                     df_ranking.rename(columns={'index': '順位'}, inplace=True)
-                    
                     st.dataframe(df_ranking, hide_index=True, use_container_width=True)
                     
                     excel_buffer = io.BytesIO()
                     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                         df_ranking.to_excel(writer, index=False, sheet_name='ポイントランキング')
                     
-                    excel_data = excel_buffer.getvalue()
                     st.download_button(
                         label=f"📥 {bucket_name} のランキングをダウンロード",
-                        data=excel_data,
+                        data=excel_buffer.getvalue(),
                         file_name=f"{selected_period}_{bucket_name}_ランキング.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="primary",
@@ -440,20 +403,19 @@ def render_dashboard_page():
             if not growth_report_data:
                 st.info("今月または先月の小テスト記録がないため、レポートを出力できません。")
             else:
-                if st.button(f"📦 {bucket_name}の生徒全員分をZIPで一括ダウンロード", key=f"btn_growth_{t_idx}", type="secondary", use_container_width=True):
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                        for rep in growth_report_data:
-                            # 1人1枚のPDFを生成
-                            pdf_bytes = generate_growth_report_pdf(rep, selected_period, prev_period if prev_period else "過去")
-                            zip_file.writestr(f"成績成長レポート_{selected_period}_{rep['生徒名']}.pdf", pdf_bytes)
-                            
-                    st.download_button(
-                        label="📥 ZIPファイルを保存する", 
-                        data=zip_buffer.getvalue(), 
-                        file_name=f"{selected_period}_{bucket_name}_成績成長レポート一式.zip", 
-                        mime="application/zip", 
-                        type="primary", 
-                        use_container_width=True,
-                        key=f"dl_zip_growth_{t_idx}"
-                    )
+                # 🌟 修正ポイント：裏側で最初からZIPを作っておき、1クリックでダウンロードできるようにした
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    for rep in growth_report_data:
+                        pdf_bytes = generate_growth_report_pdf(rep, selected_period, prev_period if prev_period else "過去")
+                        zip_file.writestr(f"成績成長レポート_{selected_period}_{rep['生徒名']}.pdf", pdf_bytes)
+                        
+                st.download_button(
+                    label=f"📦 {bucket_name}の生徒全員分をZIPで一括ダウンロード", 
+                    data=zip_buffer.getvalue(), 
+                    file_name=f"{selected_period}_{bucket_name}_成績成長レポート一式.zip", 
+                    mime="application/zip", 
+                    type="primary", 
+                    use_container_width=True,
+                    key=f"dl_zip_growth_direct_{t_idx}" # キーを変更してリセットを防ぐ
+                )
