@@ -51,7 +51,7 @@ def render_report_generation_tab(can_use_report):
             # 権限が 'admin' の人を探す（小文字・大文字の揺れも吸収）
             if str(info.get('権限', '')).lower() == 'admin':
                 # 名前が見つかればそれをセットして終了
-                admin_name = str(info.get('名前', '教室長'))
+                admin_name = str(info.get('講師名', '教室長'))
                 break
 
         if df_all_logs.empty or "APIエラー発生" in df_all_logs.columns:
