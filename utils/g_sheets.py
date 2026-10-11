@@ -100,6 +100,7 @@ def get_student_info(student_name):#「特定の生徒1人だけの詳細情報�
     return {}
 
 #app.py
+@st.cache_data(ttl=600)
 def load_system_settings():
     """
     システム全体の基本設定（教室長名、校舎名、生徒IDプレフィックスなど）を読み込む
@@ -129,9 +130,12 @@ def load_system_settings():
         print(f"システム設定読み込みエラー: {e}")
         return {}
 
+# utils/g_sheets.py の一番下の関数をこれで上書きしてください
+
 def save_system_settings(manager_name, branch_name, id_prefix):
     """
     初回セットアップなどで入力されたシステム設定を保存する
+    ※複数校舎の場合は、横（列）に展開して保存します。
     """
     try:
         gc = get_gc_client()
@@ -140,16 +144,31 @@ def save_system_settings(manager_name, branch_name, id_prefix):
         try:
             ws = sh.worksheet("設定_システム")
         except:
-            ws = sh.add_worksheet(title="設定_システム", rows="10", cols="5")
-            ws.append_row(["設定項目", "値", "メモ"])
+            ws = sh.add_worksheet(title="設定_システム", rows="10", cols="10")
             
         # 一旦クリアして書き直すのが一番確実
         ws.clear()
-        ws.append_row(["設定項目", "値", "メモ"])
-        ws.append_row(["教室長名", manager_name, "LINEレポートなどの署名に使用"])
-        ws.append_row(["メイン校舎名", branch_name, "ダッシュボードの表示などに使用"])
-        ws.append_row(["生徒IDの頭文字", id_prefix, "例: T (田端新町校) など"])
         
+        # 1行目：教室長の設定
+        ws.append_row(["教室長名", manager_name])
+        
+        # 2行目以降：校舎の設定（入力されたカンマ区切りの文字列をバラして横に展開）
+        # branch_name には "田端新町校:T, 東十条駅前校:H" のように入ってくる
+        branches = [b.strip() for b in str(branch_name).split(',')]
+        
+        branch_names_row = ["校舎名"]
+        prefix_row = ["ID頭文字"]
+        
+        for b in branches:
+            if ":" in b:
+                name, prefix = b.split(":")
+                branch_names_row.append(name.strip())
+                prefix_row.append(prefix.strip())
+        
+        ws.append_row(branch_names_row)
+        ws.append_row(prefix_row)
+        
+        # ログインできるようにアカウントシートにも管理者として追加
         try:
             acc_ws = sh.worksheet("設定_アカウント")
             acc_ws.append_row(["admin", "admin123", manager_name, "admin"])
