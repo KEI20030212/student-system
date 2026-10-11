@@ -43,15 +43,22 @@ def render_report_generation_tab(can_use_report):
         df_hw = cached_load_hw_records() 
         quiz_master = cached_get_quiz_master()
         
-        # 🌟 NEW: 管理者の名前（署名）を取得する処理
+        # 🌟 管理者の名前（署名）を取得する処理
         accounts_data = robust_api_call(get_all_accounts, fallback_value={})
         admin_name = "教室長" # 見つからなかった場合のデフォルト値
         
         for account_id, info in accounts_data.items():
-            # 権限が 'admin' の人を探す（小文字・大文字の揺れも吸収）
             if str(info.get('権限', '')).lower() == 'admin':
-                # 名前が見つかればそれをセットして終了
-                admin_name = str(info.get('講師名', '教室長'))
+                # まずフルネームを取得（列名が「講師名」か「名前」か揺れを吸収）
+                raw_name = str(info.get('講師名', info.get('名前', '教室長'))).strip()
+                
+                # 🌟 スペース（全角・半角）で分割し、最初の部分（苗字）だけを取り出す
+                if ' ' in raw_name or ' ' in raw_name:
+                    # 全角スペースを半角に変換してから分割
+                    split_name = raw_name.replace(' ', ' ').split(' ')
+                    admin_name = split_name[0]
+                else:
+                    admin_name = raw_name
                 break
 
         if df_all_logs.empty or "APIエラー発生" in df_all_logs.columns:
@@ -219,7 +226,7 @@ def render_report_generation_tab(can_use_report):
                 if quiz_results_list:
                     quiz_text = "\n・".join(quiz_results_list)
 
-                # 🌟 NEW: メールの一番下に、上で取得した admin_name を動的に埋め込む
+                # 🌟 メールの一番下に、上で取得した admin_name を動的に埋め込む
                 if bucket_name == "体験授業":
                     advices_block = f"🗣️ 【本日の輝いていた点】\n" + "\n\n".join(advice_sections) + "\n\n" if advice_sections else ""
                     msgs_block = f"📢 【今後の課題・ご提案】\n" + "\n\n".join(parent_msg_sections) + "\n\n" if parent_msg_sections else ""
