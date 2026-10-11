@@ -31,66 +31,93 @@ from utils.g_sheets import (
     add_new_textbook, 
     get_last_homework_info,
     get_all_accounts,
-    load_system_settings,    # 🌟 NEW: 追加した関数をインポート
-    save_system_settings     # 🌟 NEW: 追加した関数をインポート
+    load_system_settings,
+    save_system_settings
 )
 from utils.api_guard import robust_api_call
 
 # ページの基本設定
 try:
     img = Image.open("icon.jpg")
-    st.set_page_config(page_title="学習塾管理システム", page_icon=img, layout="wide")
+    st.set_page_config(page_title="管理システムK-AI", page_icon=img, layout="wide")
 except Exception:
-    st.set_page_config(page_title="学習塾管理システム", page_icon="🏫", layout="wide")
+    st.set_page_config(page_title="管理システムK-AI", page_icon="🏫", layout="wide")
 
 # --------------------------------------------------
 # 🔒 初回セットアップ ＆ ログイン画面
 # --------------------------------------------------
 def login_screen():
-    # まずシステム設定がすでにあるかチェック
     settings = robust_api_call(load_system_settings, fallback_value={})
     
     # 🌟 もし「教室長名」が設定されていなければ、初回セットアップ画面を表示
     if not settings or not settings.get("教室長名"):
         st.markdown("<h1 style='text-align: center; color: #FF4500;'>🚀 システム初回セットアップ</h1>", unsafe_allow_html=True)
-        st.info("ようこそ！まずはこのシステムを利用する教室の基本設定を行ってください。")
+        st.info("ようこそ！まずはこのシステムを利用する基本設定を行ってください。\n\n※複数校舎を管理する場合は「校舎2」「校舎3」も入力してください。（1校舎のみの場合は空欄でOKです）")
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             with st.form("setup_form"):
-                setup_manager = st.text_input("👤 あなたのお名前（教室長名）", placeholder="例：山田 太郎")
-                setup_branch = st.text_input("🏫 校舎名", placeholder="例：田端新町校")
-                setup_prefix = st.text_input("🔑 生徒IDの頭文字（アルファベット1〜2文字）", placeholder="例：T （T001などの場合）")
-                
+                setup_manager = st.text_input("👤 あなたのお名前（教室長名 / 代表者名）", placeholder="例：山田 太郎")
                 st.caption("※ここで設定したお名前は、LINEレポートなどの自動署名に使用されます。")
+                
+                st.divider()
+                st.markdown("### 🏢 校舎と生徒IDの設定")
+                
+                # 🌟 校舎1（必須）
+                c1_1, c1_2 = st.columns([2, 1])
+                setup_b1 = c1_1.text_input("🏫 メイン校舎名（必須）", placeholder="例：田端新町校")
+                setup_p1 = c1_2.text_input("🔑 ID頭文字（必須）", placeholder="例：t")
+                
+                # 🌟 校舎2（任意）
+                c2_1, c2_2 = st.columns([2, 1])
+                setup_b2 = c2_1.text_input("🏫 校舎2（任意）", placeholder="例：東十条駅前校")
+                setup_p2 = c2_2.text_input("🔑 ID頭文字（任意）", placeholder="例：h")
+                
+                # 🌟 校舎3（任意）
+                c3_1, c3_2 = st.columns([2, 1])
+                setup_b3 = c3_1.text_input("🏫 校舎3（任意）", placeholder="例：池上校")
+                setup_p3 = c3_2.text_input("🔑 ID頭文字（任意）", placeholder="例：i")
                 
                 submit_setup = st.form_submit_button("設定を保存してシステムを開始 🚀", use_container_width=True)
                 
                 if submit_setup:
-                    if setup_manager and setup_branch and setup_prefix:
+                    if setup_manager and setup_b1 and setup_p1:
+                        # 入力された校舎情報を「校舎名:頭文字」のカンマ区切りにまとめる
+                        branches = [f"{setup_b1}:{setup_p1.upper()}"]
+                        if setup_b2 and setup_p2: branches.append(f"{setup_b2}:{setup_p2.upper()}")
+                        if setup_b3 and setup_p3: branches.append(f"{setup_b3}:{setup_p3.upper()}")
+                        
+                        # まとめた文字列（例 "田端新町校:T, 東十条駅前校:H, 池上校:I"）を作る
+                        combined_branches = ", ".join(branches)
+                        
                         with st.spinner("スプレッドシートに設定を保存しています..."):
-                            success = robust_api_call(save_system_settings, setup_manager, setup_branch, setup_prefix.upper(), fallback_value=False)
+                            # save_system_settings は (manager_name, branch_name, id_prefix) を受け取る仕様なので、
+                            # combined_branches を branch_name として保存し、prefix は一旦メインのものを渡す
+                            success = robust_api_call(save_system_settings, setup_manager, combined_branches, setup_p1.upper(), fallback_value=False)
                             if success:
                                 st.success("✅ 設定が完了しました！自動的にログインします。")
-                                # 自動的に初期管理者としてログインさせる
                                 st.session_state.update({
                                     'logged_in': True, 
                                     'role': 'admin', 
                                     'username': setup_manager, 
                                     'user_id': 'admin',
-                                    'sys_branch': setup_branch,
-                                    'sys_prefix': setup_prefix.upper()
+                                    'sys_branch': combined_branches,
+                                    'sys_prefix': setup_p1.upper()
                                 })
                                 st.rerun()
                             else:
                                 st.error("❌ 保存に失敗しました。Googleスプレッドシートの連携を確認してください。")
                     else:
-                        st.warning("すべての項目を入力してください。")
-        return # セットアップ画面表示中は下のログイン画面は出さない
+                        st.warning("「教室長名」「メイン校舎名」「ID頭文字」は必ず入力してください。")
+        return 
 
     # 🌟 設定が完了している場合は、通常のログイン画面を表示
-    st.markdown("<h1 style='text-align: center; color: #1E90FF;'>🌟 統合管理システム</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center;'>現在の校舎: <b>{settings.get('メイン校舎名', '未設定')}</b></p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E90FF;'>🌟 管理システムK-AI</h1>", unsafe_allow_html=True)
+    
+    # 登録されている校舎を綺麗に表示
+    saved_branches = settings.get('メイン校舎名', '未設定')
+    display_text = " / ".join([b.split(':')[0] for b in saved_branches.split(', ')]) if ':' in saved_branches else saved_branches
+    st.markdown(f"<p style='text-align: center;'>登録校舎: <b>{display_text}</b></p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -100,7 +127,7 @@ def login_screen():
             submit = st.form_submit_button("ログイン 🚀", use_container_width=True)
             
             if submit:
-                # 緊急バックドア（万が一アカウントシートが壊れた時用）
+                # 緊急バックドア
                 if username == "admin" and password == "admin123":
                     st.session_state.update({
                         'logged_in': True, 
@@ -137,7 +164,11 @@ def main():
 
     # 全画面共通のヘッダー
     sys_branch = st.session_state.get('sys_branch', '')
-    branch_display = f"【{sys_branch}】" if sys_branch else ""
+    branch_display = ""
+    if sys_branch:
+        # 「田端新町校:T, 池上校:I」のようになっているデータを「田端新町校 / 池上校」に整形
+        clean_names = [b.split(':')[0] for b in sys_branch.split(', ')]
+        branch_display = f"【{' / '.join(clean_names)}】"
     
     st.markdown(f"""
     <div style="background-color:#1E90FF;padding:10px;border-radius:10px;margin-bottom:20px;">
