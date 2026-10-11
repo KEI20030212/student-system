@@ -122,30 +122,36 @@ def load_system_settings():
             
         # 全履歴を上から順番に読み込み、最新の状態で上書きしていく
         manager_name = "教室長"
-        branches_dict = {} # 校舎名をキーにしてプレフィックスを保存する辞書
+        branches_dict = {} # 校舎ナンバーをキーにして、校舎名と頭文字を保存する辞書
         
         for row in records[1:]: # 2行目から最後までループ
             if len(row) < 4:
                 continue # データが足りない行はスキップ
                 
-            # 教室長名は常に最新の行のものを正とする
-            if row[1]: 
-                manager_name = row[1]
+            num = str(row[0]).strip()
+            manager = str(row[1]).strip()
+            branch = str(row[2]).strip()
+            prefix = str(row[3]).strip()
             
-            # 校舎名とプレフィックスのペアを抽出
-            for i in range(2, len(row), 2):
-                if i+1 < len(row) and row[i]:
-                    branch_name = str(row[i]).strip()
-                    prefix = str(row[i+1]).strip()
-                    
-                    # 辞書に保存（同じ校舎名が後から出てきたらプレフィックスを上書き）
-                    branches_dict[branch_name] = prefix
+            if manager:
+                manager_name = manager
+                
+            if num and branch:
+                # 同じ校舎ナンバーが後から出てきたら上書き（更新）される
+                branches_dict[num] = {"branch": branch, "prefix": prefix}
         
-        # 抽出した辞書を "田端新町校:t, 東十条駅前校:h" の形式に戻す
-        combined_branches = ", ".join([f"{k}:{v}" for k, v in branches_dict.items()])
+        # 抽出した辞書を "田端:t, 東十条:h" の形式にまとめる（ナンバー順に並び替え）
+        sorted_branches = []
+        for num in sorted(branches_dict.keys(), key=lambda x: int(x) if x.isdigit() else 999):
+            b_info = branches_dict[num]
+            sorted_branches.append(f"{b_info['branch']}:{b_info['prefix']}")
+            
+        combined_branches = ", ".join(sorted_branches)
         
         # 最初のプレフィックスを便宜上取得
-        first_prefix = list(branches_dict.values())[0] if branches_dict else ""
+        first_prefix = ""
+        if sorted_branches:
+            first_prefix = branches_dict[list(sorted(branches_dict.keys(), key=lambda x: int(x) if x.isdigit() else 999))[0]]['prefix']
                 
         settings = {
             "教室長名": manager_name,
@@ -162,30 +168,38 @@ def save_system_settings(manager_name, branch_name, id_prefix):
     """
     初回セットアップなどで入力されたシステム設定を保存する
     ※既存のデータを消さずに、下に追加（append）していきます。
+    フォーマット: [校舎ナンバー, 教室長名, 校舎, 頭文字ID]
     """
-    import datetime
-    
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         
         try:
             ws = sh.worksheet("設定_システム")
+            records = ws.get_all_values()
+            
+            # 既存の最大の校舎ナンバーを探す
+            max_num = 0
+            for row in records[1:]:
+                if len(row) > 0 and str(row[0]).isdigit():
+                    max_num = max(max_num, int(row[0]))
+            next_num = max_num + 1
+            
         except:
             ws = sh.add_worksheet(title="設定_システム", rows="100", cols="10")
             # 最初の1回目だけヘッダーを作る
-            ws.append_row(["登録日時", "教室長名", "校舎名", "ID頭文字"])
+            ws.append_row(["校舎ナンバー", "教室長名", "校舎", "頭文字ID"])
+            next_num = 1
             
-        now_str = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-        
         # 入力されたカンマ区切りの文字列をバラして、それぞれの校舎ごとに1行ずつ追加する
         branches = [b.strip() for b in str(branch_name).split(',')]
         
         for b in branches:
             if ":" in b:
                 name, prefix = b.split(":")
-                # 下に1行追加
-                ws.append_row([now_str, manager_name, name.strip(), prefix.strip()])
+                # 下に1行追加 (ナンバーを自動採番して割り当て)
+                ws.append_row([str(next_num), manager_name, name.strip(), prefix.strip()])
+                next_num += 1
         
         # ログインできるようにアカウントシートにも管理者として追加
         try:
