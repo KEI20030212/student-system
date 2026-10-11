@@ -83,9 +83,9 @@ def login_screen():
                 if submit_setup:
                     if setup_manager and setup_b1 and setup_p1:
                         # 入力された校舎情報を「校舎名:頭文字」のカンマ区切りにまとめる
-                        branches = [f"{setup_b1}:{setup_p1.upper()}"]
-                        if setup_b2 and setup_p2: branches.append(f"{setup_b2}:{setup_p2.upper()}")
-                        if setup_b3 and setup_p3: branches.append(f"{setup_b3}:{setup_p3.upper()}")
+                        branches = [f"{setup_b1}:{setup_p1}"]
+                        if setup_b2 and setup_p2: branches.append(f"{setup_b2}:{setup_p2}")
+                        if setup_b3 and setup_p3: branches.append(f"{setup_b3}:{setup_p3}")
                         
                         # まとめた文字列（例 "田端新町校:T, 東十条駅前校:H, 池上校:I"）を作る
                         combined_branches = ", ".join(branches)
@@ -93,7 +93,7 @@ def login_screen():
                         with st.spinner("スプレッドシートに設定を保存しています..."):
                             # save_system_settings は (manager_name, branch_name, id_prefix) を受け取る仕様なので、
                             # combined_branches を branch_name として保存し、prefix は一旦メインのものを渡す
-                            success = robust_api_call(save_system_settings, setup_manager, combined_branches, setup_p1.upper(), fallback_value=False)
+                            success = robust_api_call(save_system_settings, setup_manager, combined_branches, setup_p1, fallback_value=False)
                             if success:
                                 st.success("✅ 設定が完了しました！自動的にログインします。")
                                 st.session_state.update({
@@ -102,7 +102,7 @@ def login_screen():
                                     'username': setup_manager, 
                                     'user_id': 'admin',
                                     'sys_branch': combined_branches,
-                                    'sys_prefix': setup_p1.upper()
+                                    'sys_prefix': setup_p1
                                 })
                                 st.rerun()
                             else:
