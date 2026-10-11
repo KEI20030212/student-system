@@ -26,25 +26,72 @@ from views.finance_integrated import render_finance_integrated_page
 # 🛠️ 2. 裏方部隊（utils）のインポート
 # ==========================================
 from utils.calc_logic import calculate_hw_rate, calculate_quiz_points, calculate_motivation_rank
-from utils.g_sheets import get_textbook_master, add_new_textbook, get_last_homework_info
-from utils.g_sheets import get_all_accounts, get_gc_client, SPREADSHEET_ID # 🌟 NEW: スプレッドシート操作用
+from utils.g_sheets import (
+    get_textbook_master, 
+    add_new_textbook, 
+    get_last_homework_info,
+    get_all_accounts,
+    load_system_settings,    # 🌟 NEW: 追加した関数をインポート
+    save_system_settings     # 🌟 NEW: 追加した関数をインポート
+)
 from utils.api_guard import robust_api_call
 
 # ページの基本設定
-img = Image.open("icon.jpg")
-st.set_page_config(page_title="学習塾管理システム", page_icon=img, layout="wide")
-
-# 🔑 パスワード設定（管理者用のマスターキー）
-ADMIN_USER = "admin"
-ADMIN_PASS = "admin123"
-TEACHER_USER = "teacher"
-TEACHER_PASS = "teacher123"
+try:
+    img = Image.open("icon.jpg")
+    st.set_page_config(page_title="学習塾管理システム", page_icon=img, layout="wide")
+except Exception:
+    st.set_page_config(page_title="学習塾管理システム", page_icon="🏫", layout="wide")
 
 # --------------------------------------------------
-# 🔒 ログイン画面
+# 🔒 初回セットアップ ＆ ログイン画面
 # --------------------------------------------------
 def login_screen():
+    # まずシステム設定がすでにあるかチェック
+    settings = robust_api_call(load_system_settings, fallback_value={})
+    
+    # 🌟 もし「教室長名」が設定されていなければ、初回セットアップ画面を表示
+    if not settings or not settings.get("教室長名"):
+        st.markdown("<h1 style='text-align: center; color: #FF4500;'>🚀 システム初回セットアップ</h1>", unsafe_allow_html=True)
+        st.info("ようこそ！まずはこのシステムを利用する教室の基本設定を行ってください。")
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            with st.form("setup_form"):
+                setup_manager = st.text_input("👤 あなたのお名前（教室長名）", placeholder="例：山田 太郎")
+                setup_branch = st.text_input("🏫 校舎名", placeholder="例：田端新町校")
+                setup_prefix = st.text_input("🔑 生徒IDの頭文字（アルファベット1〜2文字）", placeholder="例：T （T001などの場合）")
+                
+                st.caption("※ここで設定したお名前は、LINEレポートなどの自動署名に使用されます。")
+                
+                submit_setup = st.form_submit_button("設定を保存してシステムを開始 🚀", use_container_width=True)
+                
+                if submit_setup:
+                    if setup_manager and setup_branch and setup_prefix:
+                        with st.spinner("スプレッドシートに設定を保存しています..."):
+                            success = robust_api_call(save_system_settings, setup_manager, setup_branch, setup_prefix.upper(), fallback_value=False)
+                            if success:
+                                st.success("✅ 設定が完了しました！自動的にログインします。")
+                                # 自動的に初期管理者としてログインさせる
+                                st.session_state.update({
+                                    'logged_in': True, 
+                                    'role': 'admin', 
+                                    'username': setup_manager, 
+                                    'user_id': 'admin',
+                                    'sys_branch': setup_branch,
+                                    'sys_prefix': setup_prefix.upper()
+                                })
+                                st.rerun()
+                            else:
+                                st.error("❌ 保存に失敗しました。Googleスプレッドシートの連携を確認してください。")
+                    else:
+                        st.warning("すべての項目を入力してください。")
+        return # セットアップ画面表示中は下のログイン画面は出さない
+
+    # 🌟 設定が完了している場合は、通常のログイン画面を表示
     st.markdown("<h1 style='text-align: center; color: #1E90FF;'>🌟 統合管理システム</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center;'>現在の校舎: <b>{settings.get('メイン校舎名', '未設定')}</b></p>", unsafe_allow_html=True)
+    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.form("login_form"):
@@ -53,138 +100,48 @@ def login_screen():
             submit = st.form_submit_button("ログイン 🚀", use_container_width=True)
             
             if submit:
-                # 🌟 管理者マスターキーでのログイン
-                if username == ADMIN_USER and password == ADMIN_PASS:
+                # 緊急バックドア（万が一アカウントシートが壊れた時用）
+                if username == "admin" and password == "admin123":
                     st.session_state.update({
                         'logged_in': True, 
                         'role': 'admin', 
-                        'username': '管理者', 
+                        'username': settings.get("教室長名", "管理者"), 
                         'user_id': 'admin',
-                        'needs_setup': False # マスターは設定不要
+                        'sys_branch': settings.get("メイン校舎名", ""),
+                        'sys_prefix': settings.get("生徒IDの頭文字", "")
                     })
                     st.rerun()
-                    
-                # 🌟 テスト講師キーでのログイン
-                elif username == TEACHER_USER and password == TEACHER_PASS:
-                    st.session_state.update({
-                        'logged_in': True, 
-                        'role': 'teacher', 
-                        'username': 'テスト講師', 
-                        'user_id': 'teacher',
-                        'needs_setup': False
-                    })
-                    st.rerun()
-                    
-                # 🌟 アカウントシートからのログイン照合
                 else:
                     accounts = robust_api_call(get_all_accounts, fallback_value={})
 
                     if username in accounts and str(accounts[username].get('パスワード')) == str(password):
-                        # スプレッドシートから情報を取得
-                        acc_info = accounts[username]
-                        role = acc_info.get('権限', 'teacher')
-                        
-                        # 🌟 NEW: 「講師名」と「所属校舎」が空欄かどうかをチェック
-                        teacher_name = str(acc_info.get('講師名', '')).strip()
-                        branch_name = str(acc_info.get('所属校舎', '')).strip()
-                        
-                        # どちらかが未入力（初期状態）ならセットアップ画面へ誘導
-                        needs_setup = False
-                        if not teacher_name or not branch_name:
-                            needs_setup = True
-                            teacher_name = "新規ユーザー" # 仮の名前
-                            
                         st.session_state.update({
                             'logged_in': True, 
-                            'role': role,
-                            'username': teacher_name,
+                            'role': accounts[username].get('権限', 'teacher'),
+                            'username': accounts[username].get('講師名', accounts[username].get('名前', '先生')),
                             'user_id': username,
-                            'branch': branch_name,
-                            'needs_setup': needs_setup # 🌟 ここでフラグを立てる
+                            'sys_branch': settings.get("メイン校舎名", ""),
+                            'sys_prefix': settings.get("生徒IDの頭文字", "")
                         })
                         st.rerun()
                     else:
                         st.error("⚠️ IDまたはパスワードが間違っています。")
 
 # --------------------------------------------------
-# 🌱 初回セットアップ画面
-# --------------------------------------------------
-def setup_screen():
-    st.markdown("<h2 style='text-align: center; color: #32CD32;'>🌱 はじめまして！初期設定をお願いします</h2>", unsafe_allow_html=True)
-    st.write("このシステムを初めてご利用になる方へ。あなたの表示名とメインで担当する校舎を登録してください。（この情報はレポートの署名などに使用されます）")
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("setup_form"):
-            new_name = st.text_input("📛 あなたのお名前（フルネーム、または苗字のみ）", placeholder="例：山田 太郎")
-            
-            # 校舎の選択肢（実際の運用に合わせて変更可能）
-            branch_options = ["田端新町校", "東十条駅前校", "池上校", "本部・その他"]
-            new_branch = st.selectbox("🏫 主な担当校舎", branch_options)
-            
-            submit_setup = st.form_submit_button("登録してシステムを開始する ✨", use_container_width=True)
-            
-            if submit_setup:
-                if not new_name.strip():
-                    st.error("⚠️ お名前を入力してください。")
-                else:
-                    with st.spinner("設定を保存しています..."):
-                        try:
-                            # スプレッドシートの「設定_アカウント」を更新する
-                            gc = get_gc_client()
-                            sh = gc.open_by_key(SPREADSHEET_ID)
-                            ws = sh.worksheet("設定_アカウント")
-                            
-                            # IDが一致する行を探す
-                            records = ws.get_all_values()
-                            target_row_idx = -1
-                            for i, row in enumerate(records):
-                                if len(row) > 0 and str(row[0]) == st.session_state['user_id']:
-                                    target_row_idx = i + 1 # スプレッドシートは1始まり
-                                    break
-                            
-                            if target_row_idx != -1:
-                                # 名前はC列(3)、校舎はD列(4)に保存すると仮定（シートの構造に合わせて調整してください）
-                                # ※ここでは「講師名」がC列、「所属校舎」がD列と想定しています
-                                ws.update_cell(target_row_idx, 3, new_name.strip())
-                                ws.update_cell(target_row_idx, 4, new_branch)
-                                
-                                # Session Stateを更新
-                                st.session_state['username'] = new_name.strip()
-                                st.session_state['branch'] = new_branch
-                                st.session_state['needs_setup'] = False
-                                
-                                # キャッシュをクリアして次回から新しい情報を読み込ませる
-                                if 'all_accounts' in st.session_state:
-                                    del st.session_state['all_accounts']
-                                    
-                                st.success("✅ 登録が完了しました！")
-                                st.rerun()
-                            else:
-                                st.error("⚠️ アカウント情報が見つかりませんでした。")
-                        except Exception as e:
-                            st.error(f"⚠️ 保存中にエラーが発生しました: {e}")
-
-# --------------------------------------------------
 # 🚀 メイン画面＆ルーティング（司令塔）
 # --------------------------------------------------
 def main():
-    # 1. ログインしていない場合はログイン画面
     if not st.session_state.get('logged_in', False):
         login_screen()
         return
 
-    # 🌟 2. NEW: ログイン直後、名前や校舎が未登録ならセットアップ画面を強制表示
-    if st.session_state.get('needs_setup', False):
-        setup_screen()
-        return
-
-    # 3. 通常のメイン画面（全画面共通のヘッダー）
-    branch_badge = f" 🏫 {st.session_state.get('branch', '')}" if st.session_state.get('branch') else ""
+    # 全画面共通のヘッダー
+    sys_branch = st.session_state.get('sys_branch', '')
+    branch_display = f"【{sys_branch}】" if sys_branch else ""
     
     st.markdown(f"""
     <div style="background-color:#1E90FF;padding:10px;border-radius:10px;margin-bottom:20px;">
-        <h2 style="color:white;text-align:center;margin:0;">🌟 統合管理システム <span style="font-size:0.5em;background-color:white;color:#1E90FF;padding:2px 8px;border-radius:5px;">{st.session_state['username']} モード{branch_badge}</span></h2>
+        <h2 style="color:white;text-align:center;margin:0;">🌟 統合管理システム {branch_display} <span style="font-size:0.5em;background-color:white;color:#1E90FF;padding:2px 8px;border-radius:5px;">{st.session_state['username']} モード</span></h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -213,21 +170,20 @@ def main():
             "💰 財務・請求ダッシュボード"
         ])
     else:
-        # 👨‍🏫 一般講師専用（自分に関することだけ）
+        # 👨‍🏫 一般講師専用
         menu_options.extend([
             "💴 自分の給与確認"
         ])
         
     page = st.sidebar.radio("移動先", menu_options)
 
-    # ログアウトボタン
     st.sidebar.divider()
     if st.sidebar.button("🚪 ログアウト", use_container_width=True):
         st.session_state.clear()
         st.rerun()
 
     # ==========================================
-    # 🎯 選ばれたメニューに応じて、該当する画面関数を呼び出すだけ！
+    # 🎯 画面遷移
     # ==========================================
     if page == "📢 ホーム": render_combined_home_page()
     elif page == "📝 授業・自習記録の入力 (出欠対応)": render_combined_input_page()
