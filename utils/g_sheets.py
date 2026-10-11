@@ -103,40 +103,68 @@ def get_student_info(student_name):#「特定の生徒1人だけの詳細情報�
 @st.cache_data(ttl=600)
 def load_system_settings():
     """
-    システム全体の基本設定（教室長名、校舎名、生徒IDプレフィックスなど）を読み込む
+    システム全体の基本設定（教室長名、校舎名、生徒IDプレフィックスなど）を読み込む。
+    シート上のすべての履歴を読み込み、最新の設定を構築して返します。
     """
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
-        # 「設定_システム」という専用シートがあればそこから、なければアカウントシートの特定行から
         try:
             ws = sh.worksheet("設定_システム")
         except:
-            # なければ自動で作る
-            ws = sh.add_worksheet(title="設定_システム", rows="10", cols="5")
-            ws.append_row(["設定項目", "値", "メモ"])
-            ws.append_row(["教室長名", "", "LINEレポートなどの署名に使用"])
-            ws.append_row(["メイン校舎名", "", "ダッシュボードの表示などに使用"])
-            ws.append_row(["生徒IDの頭文字", "", "例: t (田端新町校) など"])
+            return {} # シートがなければ空を返す
             
         records = ws.get_all_values()
-        settings = {}
-        for row in records[1:]:
-            if len(row) >= 2 and row[0]:
-                settings[row[0]] = row[1]
+        
+        # データがヘッダー行（1行目）しかない、または空の場合は空を返す
+        if len(records) <= 1:
+            return {}
+            
+        # 全履歴を上から順番に読み込み、最新の状態で上書きしていく
+        manager_name = "教室長"
+        branches_dict = {} # 校舎名をキーにしてプレフィックスを保存する辞書
+        
+        for row in records[1:]: # 2行目から最後までループ
+            if len(row) < 4:
+                continue # データが足りない行はスキップ
+                
+            # 教室長名は常に最新の行のものを正とする
+            if row[1]: 
+                manager_name = row[1]
+            
+            # 校舎名とプレフィックスのペアを抽出
+            for i in range(2, len(row), 2):
+                if i+1 < len(row) and row[i]:
+                    branch_name = str(row[i]).strip()
+                    prefix = str(row[i+1]).strip()
+                    
+                    # 辞書に保存（同じ校舎名が後から出てきたらプレフィックスを上書き）
+                    branches_dict[branch_name] = prefix
+        
+        # 抽出した辞書を "田端新町校:t, 東十条駅前校:h" の形式に戻す
+        combined_branches = ", ".join([f"{k}:{v}" for k, v in branches_dict.items()])
+        
+        # 最初のプレフィックスを便宜上取得
+        first_prefix = list(branches_dict.values())[0] if branches_dict else ""
+                
+        settings = {
+            "教室長名": manager_name,
+            "メイン校舎名": combined_branches,
+            "生徒IDの頭文字": first_prefix 
+        }
                 
         return settings
     except Exception as e:
         print(f"システム設定読み込みエラー: {e}")
         return {}
 
-# utils/g_sheets.py の一番下の関数をこれで上書きしてください
-
 def save_system_settings(manager_name, branch_name, id_prefix):
     """
     初回セットアップなどで入力されたシステム設定を保存する
-    ※複数校舎の場合は、横（列）に展開して保存します。
+    ※既存のデータを消さずに、下に追加（append）していきます。
     """
+    import datetime
+    
     try:
         gc = get_gc_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
@@ -144,29 +172,20 @@ def save_system_settings(manager_name, branch_name, id_prefix):
         try:
             ws = sh.worksheet("設定_システム")
         except:
-            ws = sh.add_worksheet(title="設定_システム", rows="10", cols="10")
+            ws = sh.add_worksheet(title="設定_システム", rows="100", cols="10")
+            # 最初の1回目だけヘッダーを作る
+            ws.append_row(["登録日時", "教室長名", "校舎名", "ID頭文字"])
             
-        # 一旦クリアして書き直すのが一番確実
-        ws.clear()
+        now_str = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         
-        # 1行目：教室長の設定
-        ws.append_row(["教室長名", manager_name])
-        
-        # 2行目以降：校舎の設定（入力されたカンマ区切りの文字列をバラして横に展開）
-        # branch_name には "田端新町校:T, 東十条駅前校:H" のように入ってくる
+        # 入力されたカンマ区切りの文字列をバラして、それぞれの校舎ごとに1行ずつ追加する
         branches = [b.strip() for b in str(branch_name).split(',')]
-        
-        branch_names_row = ["校舎名"]
-        prefix_row = ["ID頭文字"]
         
         for b in branches:
             if ":" in b:
                 name, prefix = b.split(":")
-                branch_names_row.append(name.strip())
-                prefix_row.append(prefix.strip())
-        
-        ws.append_row(branch_names_row)
-        ws.append_row(prefix_row)
+                # 下に1行追加
+                ws.append_row([now_str, manager_name, name.strip(), prefix.strip()])
         
         # ログインできるようにアカウントシートにも管理者として追加
         try:
