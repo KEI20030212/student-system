@@ -99,6 +99,68 @@ def get_student_info(student_name):#「特定の生徒1人だけの詳細情報�
             return r
     return {}
 
+#app.py
+def load_system_settings():
+    """
+    システム全体の基本設定（教室長名、校舎名、生徒IDプレフィックスなど）を読み込む
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        # 「設定_システム」という専用シートがあればそこから、なければアカウントシートの特定行から
+        try:
+            ws = sh.worksheet("設定_システム")
+        except:
+            # なければ自動で作る
+            ws = sh.add_worksheet(title="設定_システム", rows="10", cols="5")
+            ws.append_row(["設定項目", "値", "メモ"])
+            ws.append_row(["教室長名", "", "LINEレポートなどの署名に使用"])
+            ws.append_row(["メイン校舎名", "", "ダッシュボードの表示などに使用"])
+            ws.append_row(["生徒IDの頭文字", "", "例: t (田端新町校) など"])
+            
+        records = ws.get_all_values()
+        settings = {}
+        for row in records[1:]:
+            if len(row) >= 2 and row[0]:
+                settings[row[0]] = row[1]
+                
+        return settings
+    except Exception as e:
+        print(f"システム設定読み込みエラー: {e}")
+        return {}
+
+def save_system_settings(manager_name, branch_name, id_prefix):
+    """
+    初回セットアップなどで入力されたシステム設定を保存する
+    """
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        
+        try:
+            ws = sh.worksheet("設定_システム")
+        except:
+            ws = sh.add_worksheet(title="設定_システム", rows="10", cols="5")
+            ws.append_row(["設定項目", "値", "メモ"])
+            
+        # 一旦クリアして書き直すのが一番確実
+        ws.clear()
+        ws.append_row(["設定項目", "値", "メモ"])
+        ws.append_row(["教室長名", manager_name, "LINEレポートなどの署名に使用"])
+        ws.append_row(["メイン校舎名", branch_name, "ダッシュボードの表示などに使用"])
+        ws.append_row(["生徒IDの頭文字", id_prefix, "例: T (田端新町校) など"])
+        
+        try:
+            acc_ws = sh.worksheet("設定_アカウント")
+            acc_ws.append_row(["admin", "admin123", manager_name, "admin"])
+        except:
+            pass # アカウントシートが無ければスルー
+            
+        return True
+    except Exception as e:
+        print(f"システム設定保存エラー: {e}")
+        return False
+
 #home.py
 @st.cache_data(ttl=120)
 def load_board_message():
@@ -1630,6 +1692,7 @@ def move_student_to_inactive_sheet(student_id):
         return False, str(e)
 
 #quiz_dashboard.py
+@st.cache_data(ttl=600, show_spinner=False)
 def get_quiz_master_dict():
     """
     「設定_小テスト一覧」シートから、テスト名と満点・用紙サイズ、
