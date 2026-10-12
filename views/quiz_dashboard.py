@@ -1,4 +1,4 @@
-# views/quiz_management.py (または views/quiz_dashboard.py)
+# views/quiz_dashboard.py
 
 import streamlit as st
 import pandas as pd
@@ -33,7 +33,7 @@ def cached_get_textbook_master():
 
 # ==========================================
 
-def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてください
+def render_quiz_list_page():
     st.header("📝 小テスト進捗＆習熟度マップ")
     st.write("実施した小テストの結果入力と、習熟度の確認ができるページです🎨")
 
@@ -79,7 +79,31 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
         nums = re.findall(r'\d+', str(c))
         return int(nums[0]) if nums else 999
 
+    # 🌟 NEW: マスターデータを基に横軸を完全展開する関数
+    def fill_all_chapters(pivot_df, target_q_name):
+        t_master = textbook_master.get(target_q_name, {})
+        if not t_master:
+            return pivot_df # マスターがなければそのまま返す
+            
+        # マスターにある全単元のリストを作成
+        all_chaps = list(t_master.keys())
+        
+        # pivot_dfに存在しない単元列を追加（中身は空っぽ）
+        for chap in all_chaps:
+            if chap not in pivot_df.columns:
+                pivot_df[chap] = ""
+                
+        # マスターにある順番通りに並び替えつつ、マスターに無い謎の単元（誤入力など）も一番後ろに残す
+        sorted_cols = sorted(all_chaps, key=sort_key)
+        other_cols = [c for c in pivot_df.columns if c not in all_chaps]
+        final_cols = sorted_cols + sorted(other_cols, key=sort_key)
+        
+        return pivot_df[final_cols]
+
     def style_pivot_dataframe(pivot_df, target_q_name):
+        # 🌟 ここで全単元を横軸に展開する
+        pivot_df = fill_all_chapters(pivot_df, target_q_name)
+        
         col_mapping = {}
         t_master = textbook_master.get(target_q_name, {}) 
         
@@ -133,7 +157,7 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
     tab_student, tab_quiz_all, tab_edit = st.tabs([
         "👤 生徒別データ ＆ 結果入力", 
         "📊 小テスト別 クラス全体マップ", 
-        "⚙️ 履歴の編集・削除"  # 🌟 NEW
+        "⚙️ 履歴の編集・削除"  
     ])
 
     # -----------------------------------------------------
@@ -191,7 +215,7 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
                                     )
                                     
                                     if success:
-                                        st.success(f"【{target_quiz} {target_unit}】を {score}点で記録しました！")
+                                        st.success(f"【{target_quiz} 第{target_unit}回】を {score}点で記録しました！")
                                         load_quiz_records.clear() 
                                         time.sleep(1)
                                         st.rerun()
@@ -234,19 +258,10 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
                             for i, q_name in enumerate(quiz_list):
                                 with s_tabs[i]: 
                                     df_display = latest_records[latest_records['小テスト名'] == q_name]
-                                    pivot_df = df_display[['単元', '最新点数', '挑戦回数', '実施日']].set_index('単元').T
+                                    pivot_df = df_display[['単元', '最新点数']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
-                                        # 🌟 NEW: マスターデータから全単元を取得し、空の列を追加する（生徒個別用）
-                                        t_master = textbook_master.get(q_name, {})
-                                        if t_master:
-                                            for chap_num in t_master.keys():
-                                                if str(chap_num) not in pivot_df.columns:
-                                                    pivot_df[str(chap_num)] = "" # まだ解いてない単元は空欄にする
-                                                    
-                                        pivot_df = pivot_df[sorted(pivot_df.columns.tolist(), key=sort_key)]
                                         pivot_df.index.name = None 
-                                        
                                         styled_df = style_pivot_dataframe(pivot_df, q_name)
                                         st.dataframe(styled_df, use_container_width=True)
 
@@ -293,15 +308,6 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
                                 )
                                 
                                 if not pivot_all.empty:
-                                    # 🌟 NEW: マスターデータから全単元を取得し、空の列を追加する（全体マップ用）
-                                    t_master = textbook_master.get(selected_quiz_for_map, {})
-                                    if t_master:
-                                        for chap_num in t_master.keys():
-                                            if str(chap_num) not in pivot_all.columns:
-                                                pivot_all[str(chap_num)] = "" # 誰も解いていない単元は空欄にする
-                                                
-                                    pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
-                                    
                                     pivot_all = pivot_all.reset_index()
                                     pivot_all['学年'] = pivot_all['名前'].map(lambda x: student_name_to_grade.get(x, "未設定"))
                                     
@@ -346,7 +352,7 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
                                     st.info(f"この小テストを受けた {branch} の生徒はいません。")
 
     # -----------------------------------------------------
-    # 🌟 NEW タブ3: 履歴の編集・削除
+    # タブ3: 履歴の編集・削除
     # -----------------------------------------------------
     with tab_edit:
         st.subheader("⚙️ 履歴の編集・削除")
@@ -361,7 +367,6 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
             if df_edit.empty:
                 st.info(f"{e_student_name} さんの記録はまだありません。")
             else:
-                # 📝 新しい記録が上に来るように日付で並べ替え
                 df_edit['日時_dt'] = pd.to_datetime(df_edit['日時'], format='mixed', errors='coerce')
                 df_edit = df_edit.sort_values(by='日時_dt', ascending=False).reset_index(drop=True)
                 
@@ -373,7 +378,6 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
                     orig_unit = str(row['単元'])
                     orig_score = str(row['点数'])
                     
-                    # アコーディオン（折りたたみ）で1件ずつ表示
                     with st.expander(f"📅 {orig_date} | 📚 {orig_quiz} (第{orig_unit}回) | 💯 {orig_score}点"):
                         
                         # --- ✏️ 編集エリア ---
@@ -418,7 +422,7 @@ def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてく�
                                     else:
                                         st.error("❌ 更新に失敗しました。")
                         
-                        # --- 🗑️ 削除エリア（誤操作防止の安全装置付き） ---
+                        # --- 🗑️ 削除エリア ---
                         st.write("")
                         st.write("▼ この記録を削除する場合は、チェックを入れてからボタンを押してください")
                         del_check = st.checkbox("本当に削除する", key=f"chk_{i}")
