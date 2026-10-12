@@ -33,7 +33,7 @@ def cached_get_textbook_master():
 
 # ==========================================
 
-def render_quiz_management_page(): # 関数名は適宜ファイルに合わせてください
+def render_quiz_list_page(): # 関数名は適宜ファイルに合わせてください
     st.header("📝 小テスト進捗＆習熟度マップ")
     st.write("実施した小テストの結果入力と、習熟度の確認ができるページです🎨")
 
