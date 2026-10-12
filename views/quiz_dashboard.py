@@ -1,3 +1,5 @@
+# views/quiz_management.py (または views/quiz_dashboard.py)
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -11,7 +13,6 @@ from utils.g_sheets import (
     save_quizzes_to_dedicated_sheet,  
     load_quiz_records,
     get_textbook_master,
-    # 🌟 NEW: これから g_sheets.py に追加する関数をインポート
     update_quiz_record,  
     delete_quiz_record   
 )
@@ -32,7 +33,7 @@ def cached_get_textbook_master():
 
 # ==========================================
 
-def render_quiz_list_page():
+def render_quiz_management_page(): # 関数名は適宜ファイルに合わせてください
     st.header("📝 小テスト進捗＆習熟度マップ")
     st.write("実施した小テストの結果入力と、習熟度の確認ができるページです🎨")
 
@@ -190,7 +191,7 @@ def render_quiz_list_page():
                                     )
                                     
                                     if success:
-                                        st.success(f"【{target_quiz} - {target_unit}】を {score}点で記録しました！")
+                                        st.success(f"【{target_quiz} {target_unit}】を {score}点で記録しました！")
                                         load_quiz_records.clear() 
                                         time.sleep(1)
                                         st.rerun()
@@ -236,6 +237,13 @@ def render_quiz_list_page():
                                     pivot_df = df_display[['単元', '最新点数', '挑戦回数', '実施日']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
+                                        # 🌟 NEW: マスターデータから全単元を取得し、空の列を追加する（生徒個別用）
+                                        t_master = textbook_master.get(q_name, {})
+                                        if t_master:
+                                            for chap_num in t_master.keys():
+                                                if str(chap_num) not in pivot_df.columns:
+                                                    pivot_df[str(chap_num)] = "" # まだ解いてない単元は空欄にする
+                                                    
                                         pivot_df = pivot_df[sorted(pivot_df.columns.tolist(), key=sort_key)]
                                         pivot_df.index.name = None 
                                         
@@ -285,6 +293,13 @@ def render_quiz_list_page():
                                 )
                                 
                                 if not pivot_all.empty:
+                                    # 🌟 NEW: マスターデータから全単元を取得し、空の列を追加する（全体マップ用）
+                                    t_master = textbook_master.get(selected_quiz_for_map, {})
+                                    if t_master:
+                                        for chap_num in t_master.keys():
+                                            if str(chap_num) not in pivot_all.columns:
+                                                pivot_all[str(chap_num)] = "" # 誰も解いていない単元は空欄にする
+                                                
                                     pivot_all = pivot_all[sorted(pivot_all.columns.tolist(), key=sort_key)]
                                     
                                     pivot_all = pivot_all.reset_index()
