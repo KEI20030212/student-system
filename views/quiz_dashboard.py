@@ -111,8 +111,7 @@ def render_quiz_list_page():
         
         return pivot_df[final_cols]
 
-    # 🌟 修正ポイント: show_date_col=True の場合、右隣に日付列を作成する
-    def style_pivot_dataframe(pivot_df, target_q_name, dates_pivot_df=None, show_date_col=False):
+    def style_pivot_dataframe(pivot_df, target_q_name):
         pivot_df = fill_all_chapters(pivot_df, target_q_name)
         
         col_mapping = {}
@@ -127,11 +126,6 @@ def render_quiz_list_page():
                 col_mapping[col] = f"第{chap_str}回"
                 
         pivot_df = pivot_df.rename(columns=col_mapping)
-        
-        if dates_pivot_df is not None:
-            dates_pivot_df.columns = [str(c) for c in dates_pivot_df.columns]
-            dates_pivot_df = dates_pivot_df.loc[:, ~dates_pivot_df.columns.duplicated()].copy()
-            dates_pivot_df = dates_pivot_df.rename(columns=col_mapping)
 
         def add_icon(val):
             if pd.isna(val) or val == "": return ""
@@ -140,6 +134,7 @@ def render_quiz_list_page():
             matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{target_q_name}_")]
             if matched_marks:
                 full_m = int(pd.Series(matched_marks).mode()[0])
+                    
             try:
                 v = float(val)
                 ratio = v / full_m if full_m > 0 else 0
@@ -148,78 +143,26 @@ def render_quiz_list_page():
                 elif ratio >= 0.2: return f"🟡 {int(v)}"
                 else: return f"🔴 {int(v)}"
             except:
+                # 🌟 "1回" (挑戦回数) や "2024/10/12" (実施日) はfloat変換できないためそのまま返す
                 return str(val)
 
-        # 点数アイコン化
         styled_display = pivot_df.copy()
         styled_display = styled_display.loc[:, ~styled_display.columns.duplicated()].copy()
+        
         for col in styled_display.columns:
             styled_display[col] = styled_display[col].apply(add_icon)
 
-        # 🌟 日付列を追加する処理（タブ1専用）
-        if show_date_col and dates_pivot_df is not None:
-            combined_cols = []
-            new_df_dict = {}
-            
-            # 各単元の「点数列」の隣に「実施日列」をねじ込む
-            for col in styled_display.columns:
-                score_col_name = f"{col}"
-                date_col_name = f"{col} (実施日)"
-                
-                combined_cols.append(score_col_name)
-                combined_cols.append(date_col_name)
-                
-                new_df_dict[score_col_name] = styled_display[col]
-                
-                # 日付のフォーマット整形
-                date_series = []
-                for idx in styled_display.index:
-                    d_val = ""
-                    if col in dates_pivot_df.columns and idx in dates_pivot_df.index:
-                        d_val = dates_pivot_df.at[idx, col]
-                        if pd.notna(d_val) and str(d_val).strip() != "":
-                            try:
-                                d_obj = pd.to_datetime(d_val)
-                                d_val = d_obj.strftime("%y/%m/%d")
-                            except:
-                                d_val = str(d_val)
-                        else:
-                            d_val = ""
-                    date_series.append(d_val)
-                
-                new_df_dict[date_col_name] = date_series
-                
-            styled_display = pd.DataFrame(new_df_dict, index=styled_display.index)
-
-        # 🌟 色塗り処理（日付列も点数と同じ色に塗るための高度な関数）
-        def get_color(v_str):
-            if "👑" in v_str: return 'background-color: #fffacd; color: #000; font-weight: bold;'
-            if "🟢" in v_str: return 'background-color: #c6efce; color: #006100;'
-            if "🟡" in v_str: return 'background-color: #ffeb9c; color: #9c6500;'
-            if "🔴" in v_str: return 'background-color: #ffc7ce; color: #9c0006;'
+        def color_bg(v):
+            if "👑" in str(v): return 'background-color: #fffacd; color: #000; font-weight: bold;'
+            if "🟢" in str(v): return 'background-color: #c6efce; color: #006100;'
+            if "🟡" in str(v): return 'background-color: #ffeb9c; color: #9c6500;'
+            if "🔴" in str(v): return 'background-color: #ffc7ce; color: #9c0006;'
             return ''
 
-        def style_entire_row(row):
-            styles = [''] * len(row)
-            for i, col_name in enumerate(row.index):
-                val = str(row[col_name])
-                # 「(実施日)」がついている列は、その左隣（点数列）の値を参照して色を決める
-                if "(実施日)" in str(col_name):
-                    try:
-                        base_col_idx = i - 1
-                        base_val = str(row.iloc[base_col_idx])
-                        styles[i] = get_color(base_val)
-                    except:
-                        styles[i] = ''
-                else:
-                    styles[i] = get_color(val)
-            return styles
-
         try:
-            return styled_display.style.apply(style_entire_row, axis=1)
-        except Exception:
-            # 万が一 apply(axis=1) が動かなかった場合の安全策
-            return styled_display.style.applymap(get_color)
+            return styled_display.style.applymap(color_bg)
+        except AttributeError:
+            return styled_display.style.map(color_bg)
 
     # ==========================================
     # 🌟 メインの画面構成
@@ -312,9 +255,14 @@ def render_quiz_list_page():
                         last_date = df_quiz_s['日時'].max().strftime("%Y年%m月%d日")
                         st.success(f"📅 前回実施日: **{last_date}**")
 
+                        attempt_counts = df_quiz_s.groupby(['テキスト', '単元']).size().reset_index(name='挑戦回数')
                         df_quiz_s_sorted = df_quiz_s.reset_index().sort_values(by=['テキスト', '単元', '日時', 'index'], ascending=[True, True, False, False])
                         latest_records = df_quiz_s_sorted.drop_duplicates(subset=['テキスト', '単元'], keep='first').copy()
+                        latest_records = pd.merge(latest_records, attempt_counts, on=['テキスト', '単元'], how='left')
+                        
+                        # 🌟 日付を / 形式に短縮
                         latest_records['実施日'] = latest_records['日時'].dt.strftime('%y/%m/%d')
+                        latest_records['挑戦回数'] = latest_records['挑戦回数'].astype(str) + "回"
                         
                         latest_records = latest_records.rename(columns={'テキスト': '小テスト名', '点数': '最新点数'})
 
@@ -325,17 +273,13 @@ def render_quiz_list_page():
                             for i, q_name in enumerate(quiz_list):
                                 with s_tabs[i]: 
                                     df_display = latest_records[latest_records['小テスト名'] == q_name]
-                                    pivot_df = df_display[['単元', '最新点数']].set_index('単元').T
                                     
-                                    # 日付情報をピボット化
-                                    dates_pivot_df = df_display[['単元', '実施日']].set_index('単元').T
+                                    # 🌟 最新点数・挑戦回数・実施日をすべて含めてピボット（転置）する！
+                                    pivot_df = df_display[['単元', '最新点数', '挑戦回数', '実施日']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
                                         pivot_df.index.name = None 
-                                        dates_pivot_df.index.name = None
-                                        
-                                        # 🌟 タブ1では show_date_col=True を渡して日付列を表示させる
-                                        styled_df = style_pivot_dataframe(pivot_df, q_name, dates_pivot_df, show_date_col=True)
+                                        styled_df = style_pivot_dataframe(pivot_df, q_name)
                                         st.dataframe(styled_df, use_container_width=True)
 
     # -----------------------------------------------------
@@ -372,14 +316,13 @@ def render_quiz_list_page():
                             with map_tabs[idx]:
                                 df_branch = df_q[df_q['校舎'] == branch].copy()
                                 
-                                df_branch_sorted = df_branch.sort_values(by=['名前', '単元', '日時'], ascending=[True, True, False])
-                                latest_scores = df_branch_sorted.drop_duplicates(subset=['名前', '単元'], keep='first')
-                                
-                                pivot_all = latest_scores.pivot_table(
+                                # 🌟 タブ2では日付情報は含めず、純粋に生徒の「点数」だけを扱う
+                                best_scores_all = df_branch.groupby(['名前', '単元'])['点数'].max().reset_index()
+                                pivot_all = best_scores_all.pivot_table(
                                     index='名前',
                                     columns='単元',
                                     values='点数',
-                                    aggfunc='first'
+                                    aggfunc='max'
                                 )
                                 
                                 if not pivot_all.empty:
@@ -403,7 +346,6 @@ def render_quiz_list_page():
                                     
                                     st.markdown(f"### 📊 【{selected_quiz_for_map}】 {branch} マップ")
                                     
-                                    # 🌟 タブ2では show_date_col=False (デフォルト) のまま呼び出すので日付列は表示されない
                                     styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
                                     st.dataframe(styled_all_df, use_container_width=True)
                                     
