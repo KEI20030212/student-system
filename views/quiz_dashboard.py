@@ -79,7 +79,6 @@ def render_quiz_list_page():
         nums = re.findall(r'\d+', str(c))
         return int(nums[0]) if nums else 999
 
-    # 🌟 マスターデータを基に横軸を完全展開する関数
     def fill_all_chapters(pivot_df, target_q_name):
         pivot_df.columns = [str(c) for c in pivot_df.columns]
         pivot_df = pivot_df.loc[:, ~pivot_df.columns.duplicated()].copy()
@@ -119,33 +118,42 @@ def render_quiz_list_page():
         def add_icon(val):
             if pd.isna(val) or val == "": return ""
             
+            # 🌟 NEW: 点数と日付の結合データ（"80\n24/10/12" など）を分離して処理
+            score_part = str(val)
+            date_part = ""
+            if "\n" in str(val):
+                parts = str(val).split("\n", 1)
+                score_part = parts[0]
+                date_part = f"\n{parts[1]}"
+            
             full_m = 100
             matched_marks = [v["full_marks"] for k, v in quiz_details.items() if k.startswith(f"{target_q_name}_")]
             if matched_marks:
                 full_m = int(pd.Series(matched_marks).mode()[0])
                     
             try:
-                v = float(val)
+                v = float(score_part)
                 ratio = v / full_m if full_m > 0 else 0
-                if ratio >= 1.0: return f"👑 {int(v)}"
-                elif ratio >= 0.85: return f"🟢 {int(v)}"
-                elif ratio >= 0.2: return f"🟡 {int(v)}"
-                else: return f"🔴 {int(v)}"
+                if ratio >= 1.0: return f"👑 {int(v)}{date_part}"
+                elif ratio >= 0.85: return f"🟢 {int(v)}{date_part}"
+                elif ratio >= 0.2: return f"🟡 {int(v)}{date_part}"
+                else: return f"🔴 {int(v)}{date_part}"
             except:
                 return str(val)
 
         styled_display = pivot_df.copy()
+        
         styled_display = styled_display.loc[:, ~styled_display.columns.duplicated()].copy()
         
         for col in styled_display.columns:
             styled_display[col] = styled_display[col].apply(add_icon)
 
         def color_bg(v):
-            if "👑" in str(v): return 'background-color: #fffacd; color: #000; font-weight: bold;'
-            if "🟢" in str(v): return 'background-color: #c6efce; color: #006100;'
-            if "🟡" in str(v): return 'background-color: #ffeb9c; color: #9c6500;'
-            if "🔴" in str(v): return 'background-color: #ffc7ce; color: #9c0006;'
-            return ''
+            if "👑" in str(v): return 'background-color: #fffacd; color: #000; font-weight: bold; white-space: pre-wrap;'
+            if "🟢" in str(v): return 'background-color: #c6efce; color: #006100; white-space: pre-wrap;'
+            if "🟡" in str(v): return 'background-color: #ffeb9c; color: #9c6500; white-space: pre-wrap;'
+            if "🔴" in str(v): return 'background-color: #ffc7ce; color: #9c0006; white-space: pre-wrap;'
+            return 'white-space: pre-wrap;' # 空白セルも改行を許可
 
         try:
             return styled_display.style.applymap(color_bg)
@@ -153,7 +161,7 @@ def render_quiz_list_page():
             return styled_display.style.map(color_bg)
 
     # ==========================================
-    # 🌟 メインの画面構成
+    # 🌟 メインの画面構成（タブを3つに！）
     # ==========================================
     tab_student, tab_quiz_all, tab_edit = st.tabs([
         "👤 生徒別データ ＆ 結果入力", 
@@ -240,8 +248,6 @@ def render_quiz_list_page():
                         st.info("有効な点数記録がありません。")
                     else:
                         df_quiz_s['日時'] = pd.to_datetime(df_quiz_s['日時'], format='mixed', errors='coerce')
-                        
-                        # 🌟 復活させた箇所：直近で解いた最新の日付を表示
                         last_date = df_quiz_s['日時'].max().strftime("%Y年%m月%d日")
                         st.success(f"📅 前回実施日: **{last_date}**")
 
@@ -254,6 +260,9 @@ def render_quiz_list_page():
                         
                         latest_records = latest_records.rename(columns={'テキスト': '小テスト名', '点数': '最新点数'})
 
+                        # 🌟 NEW: 点数と日付を改行で結合した「表示用データ」の列を作成！
+                        latest_records['表示データ'] = latest_records['最新点数'].astype(str) + "\n" + latest_records['実施日']
+
                         quiz_list = latest_records['小テスト名'].unique().tolist()
                         
                         if quiz_list:
@@ -261,7 +270,9 @@ def render_quiz_list_page():
                             for i, q_name in enumerate(quiz_list):
                                 with s_tabs[i]: 
                                     df_display = latest_records[latest_records['小テスト名'] == q_name]
-                                    pivot_df = df_display[['単元', '最新点数']].set_index('単元').T
+                                    
+                                    # 🌟 最新点数ではなく「表示データ」をPivotの対象にする
+                                    pivot_df = df_display[['単元', '表示データ']].set_index('単元').T
                                     
                                     if not pivot_df.empty:
                                         pivot_df.index.name = None 
@@ -290,8 +301,15 @@ def render_quiz_list_page():
                 else:
                     df_q['校舎'] = df_q['名前'].map(lambda x: student_name_to_branch.get(x, "その他"))
                     
+                    # 🌟 念のため最新のデータを取るようにソート（クラスマップも日付が出るように）
+                    df_q['日時'] = pd.to_datetime(df_q['日時'], format='mixed', errors='coerce')
+                    df_q = df_q.sort_values(by=['名前', '単元', '日時'], ascending=[True, True, False])
+                    best_scores_all = df_q.drop_duplicates(subset=['名前', '単元'], keep='first').copy()
+                    best_scores_all['実施日'] = best_scores_all['日時'].dt.strftime('%y/%m/%d')
+                    best_scores_all['表示データ'] = best_scores_all['点数'].astype(str) + "\n" + best_scores_all['実施日']
+                    
                     branch_order = ["田端新町校", "東十条駅前校", "体験授業", "その他"]
-                    available_branches = [b for b in branch_order if b in df_q['校舎'].unique()]
+                    available_branches = [b for b in branch_order if b in best_scores_all['校舎'].unique()]
                     
                     if not available_branches:
                         st.info("表示できる校舎データがありません。")
@@ -300,14 +318,13 @@ def render_quiz_list_page():
                         
                         for idx, branch in enumerate(available_branches):
                             with map_tabs[idx]:
-                                df_branch = df_q[df_q['校舎'] == branch].copy()
+                                df_branch = best_scores_all[best_scores_all['校舎'] == branch].copy()
                                 
-                                best_scores_all = df_branch.groupby(['名前', '単元'])['点数'].max().reset_index()
-                                pivot_all = best_scores_all.pivot_table(
+                                pivot_all = df_branch.pivot_table(
                                     index='名前',
                                     columns='単元',
-                                    values='点数',
-                                    aggfunc='max'
+                                    values='表示データ',
+                                    aggfunc='first' # 重複はないはずだが、文字列なので first
                                 )
                                 
                                 if not pivot_all.empty:
@@ -383,7 +400,6 @@ def render_quiz_list_page():
                     
                     with st.expander(f"📅 {orig_date} | 📚 {orig_quiz} (第{orig_unit}回) | 💯 {orig_score}点"):
                         
-                        # --- ✏️ 編集エリア ---
                         with st.form(f"edit_form_{i}"):
                             st.write("▼ 内容を修正して「更新」を押してください")
                             c1, c2, c3 = st.columns(3)
@@ -425,7 +441,6 @@ def render_quiz_list_page():
                                     else:
                                         st.error("❌ 更新に失敗しました。")
                         
-                        # --- 🗑️ 削除エリア ---
                         st.write("")
                         st.write("▼ この記録を削除する場合は、チェックを入れてからボタンを押してください")
                         del_check = st.checkbox("本当に削除する", key=f"chk_{i}")
