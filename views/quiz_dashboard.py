@@ -79,25 +79,21 @@ def render_quiz_list_page():
         nums = re.findall(r'\d+', str(c))
         return int(nums[0]) if nums else 999
 
-    # 🌟 マスターデータを基に横軸を完全展開する関数（エラー修正版）
+    # 🌟 マスターデータを基に横軸を完全展開する関数
     def fill_all_chapters(pivot_df, target_q_name):
-        # 🐛 修正箇所：列名（単元）をすべて強制的に文字列に変換し、数値と文字の混在による重複を防ぐ
         pivot_df.columns = [str(c) for c in pivot_df.columns]
         pivot_df = pivot_df.loc[:, ~pivot_df.columns.duplicated()].copy()
         
         t_master = textbook_master.get(target_q_name, {})
         if not t_master:
-            return pivot_df # マスターがなければそのまま返す
+            return pivot_df 
             
-        # マスターにある全単元のリストを作成（キーも文字列化）
         all_chaps = [str(k) for k in t_master.keys()]
         
-        # pivot_dfに存在しない単元列を追加（中身は空っぽ）
         for chap in all_chaps:
             if chap not in pivot_df.columns:
                 pivot_df[chap] = ""
                 
-        # マスターにある順番通りに並び替えつつ、マスターに無い謎の単元（誤入力など）も一番後ろに残す
         sorted_cols = sorted(all_chaps, key=sort_key)
         other_cols = [c for c in pivot_df.columns if c not in all_chaps]
         final_cols = sorted_cols + sorted(other_cols, key=sort_key)
@@ -105,7 +101,6 @@ def render_quiz_list_page():
         return pivot_df[final_cols]
 
     def style_pivot_dataframe(pivot_df, target_q_name):
-        # 🌟 ここで全単元を横軸に展開する
         pivot_df = fill_all_chapters(pivot_df, target_q_name)
         
         col_mapping = {}
@@ -140,8 +135,6 @@ def render_quiz_list_page():
                 return str(val)
 
         styled_display = pivot_df.copy()
-        
-        # 🐛 修正箇所：念のための安全装置（リネーム後にも重複がないかチェック）
         styled_display = styled_display.loc[:, ~styled_display.columns.duplicated()].copy()
         
         for col in styled_display.columns:
@@ -160,7 +153,7 @@ def render_quiz_list_page():
             return styled_display.style.map(color_bg)
 
     # ==========================================
-    # 🌟 メインの画面構成（タブを3つに！）
+    # 🌟 メインの画面構成
     # ==========================================
     tab_student, tab_quiz_all, tab_edit = st.tabs([
         "👤 生徒別データ ＆ 結果入力", 
@@ -247,6 +240,8 @@ def render_quiz_list_page():
                         st.info("有効な点数記録がありません。")
                     else:
                         df_quiz_s['日時'] = pd.to_datetime(df_quiz_s['日時'], format='mixed', errors='coerce')
+                        
+                        # 🌟 復活させた箇所：直近で解いた最新の日付を表示
                         last_date = df_quiz_s['日時'].max().strftime("%Y年%m月%d日")
                         st.success(f"📅 前回実施日: **{last_date}**")
 
