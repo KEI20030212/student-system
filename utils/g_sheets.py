@@ -100,7 +100,7 @@ def get_student_info(student_name):#「特定の生徒1人だけの詳細情報�
     return {}
 
 #app.py
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner=False)
 def load_system_settings():
     """
     システム全体の基本設定（教室長名、校舎名、生徒IDプレフィックスなど）を読み込む。
