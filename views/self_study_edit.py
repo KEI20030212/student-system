@@ -17,7 +17,7 @@ def render_self_study_edit_page():
         st.write("") 
         st.write("") 
         if st.button("🔄 データを更新", use_container_width=True, key="ss_edit_refresh"):
-            load_self_study_data.clear() # キャッシュを強制クリアして最新化
+            st.cache_data.clear() # 🌟 修正：全体のキャッシュを強制クリアして最新化
             st.rerun() 
 
     with st.spinner("自習記録を検索中..."):
@@ -109,14 +109,12 @@ def render_self_study_edit_page():
             submitted = st.form_submit_button("💾 修正を上書き保存する", type="primary", use_container_width=True)
 
             if submitted:
-                # 更新前の検索キー
                 target_data = {
                     "名前": student_name,
                     "日付": str(record.get(date_col)),
                     "開始": str(record.get('開始'))
                 }
                 
-                # 更新後のデータ
                 new_data = {
                     "日付": new_date.strftime("%Y/%m/%d"),
                     "開始": new_start.strftime("%H:%M"),
@@ -132,7 +130,7 @@ def render_self_study_edit_page():
                     success = robust_api_call(update_self_study_record, target_data, new_data, fallback_value=False)
                     if success:
                         st.success("✅ 自習記録の修正を保存しました！")
-                        load_self_study_data.clear()
+                        st.cache_data.clear() # 🌟 修正：全体のキャッシュを強制クリア
                         time.sleep(1.5)
                         st.rerun()
                     else:
@@ -154,7 +152,7 @@ def render_self_study_edit_page():
                     success = robust_api_call(delete_self_study_record, target_data, fallback_value=False)
                     if success:
                         st.success("✅ 削除しました！")
-                        load_self_study_data.clear()
+                        st.cache_data.clear() # 🌟 修正：全体のキャッシュを強制クリア
                         time.sleep(1.5)
                         st.rerun()
                     else:
