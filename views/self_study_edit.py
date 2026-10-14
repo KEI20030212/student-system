@@ -46,9 +46,9 @@ def render_self_study_edit_page():
     options = []
     for idx, row in df_filtered.iterrows():
         s_name = str(row.get(name_col, '不明'))
-        s_time = str(row.get('開始', ''))
-        e_time = str(row.get('終了', ''))
-        sub = str(row.get('科目', ''))
+        s_time = str(row.get('開始時間', ''))
+        e_time = str(row.get('終了時間', ''))
+        sub = str(row.get('教科', ''))
         
         opt_label = f"👤 {s_name} | ⌚ {s_time}〜{e_time} | 📚 {sub}"
         options.append((idx, opt_label))
@@ -78,15 +78,15 @@ def render_self_study_edit_page():
                 try: return pd.to_datetime(str(time_str)).time()
                 except: return default_time
                 
-            orig_start = parse_time(record.get('開始'), datetime.time(17, 0))
-            orig_end = parse_time(record.get('終了'), datetime.time(19, 0))
+            orig_start = parse_time(record.get('開始時間'), datetime.time(17, 0))
+            orig_end = parse_time(record.get('終了時間'), datetime.time(19, 0))
             
-            new_start = c_s.time_input("🛫 開始", orig_start, key="edit_ss_start")
-            new_end = c_e.time_input("🛬 終了", orig_end, key="edit_ss_end")
+            new_start = c_s.time_input("🛫 開始時間", orig_start, key="edit_ss_start")
+            new_end = c_e.time_input("🛬 終了時間", orig_end, key="edit_ss_end")
             
             # 休憩時間の復元
-            orig_break = str(record.get('休憩', 0)).replace('分', '').strip()
-            new_break = c_b.number_input("☕ 休憩(分)", value=int(orig_break) if orig_break.isdigit() else 0, step=5, key="edit_ss_break")
+            orig_break = str(record.get('休憩時間', 0)).replace('分', '').strip()
+            new_break = c_b.number_input("☕ 休憩時間(分)", value=int(orig_break) if orig_break.isdigit() else 0, step=5, key="edit_ss_break")
             
             # 実質勉強時間の自動計算表示用
             start_dt = datetime.datetime.combine(new_date, new_start)
@@ -100,9 +100,9 @@ def render_self_study_edit_page():
 
             c_sub, c_memo = st.columns([1, 2])
             sub_opts = ["英語", "数学", "国語", "理科", "社会", "その他"]
-            curr_sub = str(record.get('科目', 'その他'))
+            curr_sub = str(record.get('教科', 'その他'))
             if curr_sub not in sub_opts: sub_opts.append(curr_sub)
-            new_sub = c_sub.selectbox("📚 科目", sub_opts, index=sub_opts.index(curr_sub), key="edit_ss_sub")
+            new_sub = c_sub.selectbox("📚 教科", sub_opts, index=sub_opts.index(curr_sub), key="edit_ss_sub")
             
             new_memo = c_memo.text_area("📖 学習内容", value=str(record.get('内容', '')), height=68, key="edit_ss_memo")
 
@@ -112,16 +112,16 @@ def render_self_study_edit_page():
                 target_data = {
                     "名前": student_name,
                     "日付": str(record.get(date_col)),
-                    "開始": str(record.get('開始'))
+                    "開始時間": str(record.get('開始時間'))
                 }
                 
                 new_data = {
                     "日付": new_date.strftime("%Y/%m/%d"),
-                    "開始": new_start.strftime("%H:%M"),
-                    "終了": new_end.strftime("%H:%M"),
-                    "休憩": new_break,
+                    "開始時間": new_start.strftime("%H:%M"),
+                    "終了時間": new_end.strftime("%H:%M"),
+                    "休憩時間": new_break,
                     "実質": actual_min,
-                    "科目": new_sub,
+                    "教科": new_sub,
                     "内容": new_memo,
                     "獲得pt": pts
                 }
@@ -146,7 +146,7 @@ def render_self_study_edit_page():
                 target_data = {
                     "名前": student_name,
                     "日付": str(record.get(date_col)),
-                    "開始": str(record.get('開始'))
+                    "開始時間": str(record.get('開始時間'))
                 }
                 with st.spinner("スプレッドシートから削除中..."):
                     success = robust_api_call(delete_self_study_record, target_data, fallback_value=False)
