@@ -42,7 +42,7 @@ SELF_STUDY_SHEET_IDS = {
         "中学生": "1Tbbz7SO0-chcOlUwsDjTVhAYQ9zXNhopfwSPFpByD9A",
         "高校生": "1nnFJo8k81VBuz232gAZYVnSX47YgLuaU8Mqt1hzuS_M"
     },
-    "東十条校": {
+    "東十条駅前校": {
         "小学生": "1n0NvREF5Sf8WHMVOXXHCfm6EhsYDtcDd0qB4dXMR4c8",
         "中学生": "1okTYoVDhBfZzjcq5bVBeMxqc-7Ocv1Woz4JISDI3vGQ",
         "高校生": "12fWkakGZPt8it_OxZNmddDOimzM0CTmCrD2GS5mIX2U"
