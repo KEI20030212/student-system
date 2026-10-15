@@ -30,7 +30,7 @@ def render_self_study_input_page():
         st.warning("生徒データが取得できませんでした。")
 
     # タブで「入力」と「修正」を分ける
-    tab_input, tab_edit = st.tabs(["🆕 一括登録モード", "⚙️ 履歴の修正・削除"])
+    tab_input, tab_edit = st.tabs(["一括登録モード", "⚙️ 履歴の修正・削除"])
 
     with tab_input:
         with st.container(border=True):
