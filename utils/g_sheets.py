@@ -139,8 +139,7 @@ def load_system_settings():
             if num and branch:
                 # 同じ校舎ナンバーが後から出てきたら上書き（更新）される
                 branches_dict[num] = {"branch": branch, "prefix": prefix}
-        
-        # 抽出した辞書を "田端:t, 東十条:h" の形式にまとめる（ナンバー順に並び替え）
+
         sorted_branches = []
         for num in sorted(branches_dict.keys(), key=lambda x: int(x) if x.isdigit() else 999):
             b_info = branches_dict[num]
@@ -1821,31 +1820,36 @@ def load_self_study_data():
 def sync_self_study_settings_add(student_id, name, grade_raw):
     """新入生を自習管理スプレッドシートの「設定」シートに自動追加する（複数校舎対応）"""
     import time
+    from utils.config import SELF_STUDY_SHEET_IDS
     
-    # 🌟 生徒IDの1文字目を取得して小文字に変換（t または h）
+    # 🌟 設定シートから現在の全校舎のプレフィックスと校舎名の対応を取得
+    settings = load_system_settings()
+    sys_branch = settings.get("メイン校舎名", "")
+    
+    branch_dict = {}
+    if sys_branch:
+        for b in sys_branch.split(', '):
+            if ':' in b:
+                b_name, pref = b.split(':')
+                branch_dict[pref.lower()] = b_name
+
+    # 生徒IDの1文字目を取得して小文字に変換
     prefix = str(student_id)[0].lower()
     
-    if prefix == 'h':
-        # 🏢 東十条校用のスプレッドシートID（※ここにIDを設定してください！）
-        GRADE_SHEET_IDS = {
-            "小学生": "1n0NvREF5Sf8WHMVOXXHCfm6EhsYDtcDd0qB4dXMR4c8",
-            "中学生": "1okTYoVDhBfZzjcq5bVBeMxqc-7Ocv1Woz4JISDI3vGQ",
-            "高校生": "12fWkakGZPt8it_OxZNmddDOimzM0CTmCrD2GS5mIX2U"
-        }
-    else:
-        # 🏢 田端新町校用のスプレッドシートID（tから始まる場合、または数字だけの場合）
-        GRADE_SHEET_IDS = {
-            "小学生": "1V4ID3wirXoTM3M-rdZeYhfu0wrVE19wu3AZOod2XVJ0",
-            "中学生": "1Tbbz7SO0-chcOlUwsDjTVhAYQ9zXNhopfwSPFpByD9A",
-            "高校生": "1nnFJo8k81VBuz232gAZYVnSX47YgLuaU8Mqt1hzuS_M"
-        }
+    # 🌟 プレフィックスから校舎名を特定
+    target_branch_name = branch_dict.get(prefix)
+    
+    if not target_branch_name:
+        return False, f"ID頭文字 '{prefix}' に対応する校舎が見つかりません"
 
     grade_category = "その他"
     if "小" in grade_raw: grade_category = "小学生"
     elif "中" in grade_raw: grade_category = "中学生"
     elif "高" in grade_raw: grade_category = "高校生"
     
-    target_sheet_id = GRADE_SHEET_IDS.get(grade_category)
+    # config.pyから対象のシートIDを取得
+    target_sheet_id = SELF_STUDY_SHEET_IDS.get(target_branch_name, {}).get(grade_category)
+    
     # IDがまだ設定されていない場合はスキップする安全設計
     if not target_sheet_id or target_sheet_id.startswith("ここ"): return True, "対象外"
 
@@ -1888,28 +1892,32 @@ def sync_self_study_settings_add(student_id, name, grade_raw):
 def sync_self_study_settings_remove(student_id, name):
     """退塾生を自習管理スプレッドシートの「設定」シートから自動削除する（複数校舎対応）"""
     import time
+    from utils.config import SELF_STUDY_SHEET_IDS
     
+    # 🌟 設定シートから現在の全校舎のプレフィックスと校舎名の対応を取得
+    settings = load_system_settings()
+    sys_branch = settings.get("メイン校舎名", "")
+    
+    branch_dict = {}
+    if sys_branch:
+        for b in sys_branch.split(', '):
+            if ':' in b:
+                b_name, pref = b.split(':')
+                branch_dict[pref.lower()] = b_name
+
     prefix = str(student_id)[0].lower()
+    target_branch_name = branch_dict.get(prefix)
     
-    if prefix == 'h':
-        # 🏢 東十条校用のスプレッドシートID
-        GRADE_SHEET_IDS = {
-            "小学生": "1n0NvREF5Sf8WHMVOXXHCfm6EhsYDtcDd0qB4dXMR4c8",
-            "中学生": "1okTYoVDhBfZzjcq5bVBeMxqc-7Ocv1Woz4JISDI3vGQ",
-            "高校生": "12fWkakGZPt8it_OxZNmddDOimzM0CTmCrD2GS5mIX2U"
-        }
-    else:
-        # 🏢 田端新町校用のスプレッドシートID
-        GRADE_SHEET_IDS = {
-            "小学生": "1V4ID3wirXoTM3M-rdZeYhfu0wrVE19wu3AZOod2XVJ0",
-            "中学生": "1Tbbz7SO0-chcOlUwsDjTVhAYQ9zXNhopfwSPFpByD9A",
-            "高校生": "1nnFJo8k81VBuz232gAZYVnSX47YgLuaU8Mqt1hzuS_M"
-        }
+    if not target_branch_name:
+        return False, f"ID頭文字 '{prefix}' に対応する校舎が見つかりません"
+        
+    # config.pyから対象の校舎のシートID一覧（小中高すべて）を取得
+    target_grade_sheets = SELF_STUDY_SHEET_IDS.get(target_branch_name, {})
     
     try:
         gc = get_gc_client()
-        for sheet_id in GRADE_SHEET_IDS.values():
-            if sheet_id.startswith("ここ"): continue
+        for sheet_id in target_grade_sheets.values():
+            if not sheet_id or sheet_id.startswith("ここ"): continue
             try:
                 sh = gc.open_by_key(sheet_id)
                 worksheet = sh.worksheet("設定")
