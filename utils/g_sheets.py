@@ -1025,13 +1025,14 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
     """自習の記録を全体シートと学年別シートの2箇所に同時保存する（APIエラー対策・複数校舎対応版）"""
     import time
     from utils.config import SELF_STUDY_SHEET_IDS
+    import gspread # 🌟 書式設定で使うため
     
     max_retries = 3
     for attempt in range(max_retries):
         try:
             gc = get_gc_client()
             
-            # 🌟 NEW: 設定シートから現在の全校舎のプレフィックスと校舎名の対応を取得
+            # 設定シートから現在の全校舎のプレフィックスと校舎名の対応を取得
             settings = load_system_settings()
             sys_branch = settings.get("メイン校舎名", "")
             
@@ -1042,7 +1043,7 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
                         b_name, pref = b.split(':')
                         branch_dict[pref.lower()] = b_name
 
-            # 🌟 NEW: 生徒マスタから名前を検索し、生徒ID（プレフィックス）を取得して校舎を特定
+            # 生徒マスタから名前を検索し、生徒ID（プレフィックス）を取得して校舎を特定
             student_master = get_student_master()
             student_row = student_master[student_master['生徒名'] == name]
             
@@ -1055,6 +1056,8 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
                         break
                         
             # 🌟 先生ご指定の順番（維持）
+            # 💡 ここで str(date) として文字列で送るのではなく、
+            #    純粋な日付文字列（例："2026/07/01"）としてそのままリストに入れます
             row_data = [
                 str(date),         # 1列目: 日付
                 name,              # 2列目: 名前
@@ -1067,10 +1070,27 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
                 points             # 9列目: ポイント
             ]
             
+            # ==========================================
+            # 🌟 共通処理：行を追加した直後にA列（日付）の書式を強制設定する関数
+            # ==========================================
+            def append_and_format_date(sheet, data):
+                # 普通に行を追加する（USER_ENTEREDを使うとExcelのように賢く解釈してくれる）
+                sheet.append_row(data, value_input_option="USER_ENTERED")
+                
+                # 追加された一番下の行のA列（日付セル）の書式を強制的に「日付(yyyy/mm/dd)」にする
+                last_row = len(sheet.col_values(1))
+                cell_range = f"A{last_row}"
+                sheet.format(cell_range, {
+                    "numberFormat": {
+                        "type": "DATE",
+                        "pattern": "yyyy/mm/dd"
+                    }
+                })
+
             # 1️⃣ 全体用のスプレッドシート（マスター）に保存
             sh_main = gc.open_by_key(SPREADSHEET_ID)
             worksheet_main = sh_main.worksheet("自習記録")
-            worksheet_main.append_row(row_data)
+            append_and_format_date(worksheet_main, row_data)
             
             # 2️⃣ 学年・校舎別のスプレッドシートにも保存（該当する場合）
             target_sheet_id = SELF_STUDY_SHEET_IDS.get(target_branch_name, {}).get(grade_category)
@@ -1078,7 +1098,7 @@ def save_self_study_record(date, name, start_time, end_time, break_time, actual_
             if target_sheet_id and not target_sheet_id.startswith("ここ"):
                 sh_sub = gc.open_by_key(target_sheet_id)
                 worksheet_sub = sh_sub.worksheet("自習記録")
-                worksheet_sub.append_row(row_data)
+                append_and_format_date(worksheet_sub, row_data)
                 
             return True, "成功"
             
