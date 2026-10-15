@@ -12,7 +12,7 @@ from utils.g_sheets import (
     get_all_logs,
     get_sent_list,
     update_sent_flag,
-    load_system_settings # 🌟 動的に校舎を取得するため追加
+    load_system_settings # 🌟 動的に校舎や教室長を取得するため追加
 )
 from utils.api_guard import robust_api_call
 
@@ -87,9 +87,10 @@ def render_monthly_visual_report_tab():
     
     target_students = df_students.to_dict('records')
     
-    # 🌟 NEW: 設定シートから校舎辞書を動的に構築
+    # 🌟 設定シートから各種設定を動的に取得
     settings = robust_api_call(load_system_settings, fallback_value={})
     sys_branch = settings.get("メイン校舎名", "")
+    manager_name = settings.get("教室長名", "教室長") # 🌟 教室長名を取得（デフォルトは"教室長"）
     
     branch_dict = {}
     if sys_branch:
@@ -266,7 +267,7 @@ def render_monthly_visual_report_tab():
 より良い指導のため、ご家庭での様子やご要望など、簡単なアンケートにご協力をお願いいたします！
 👉 {survey_url.strip()}
 """
-
+                # 🌟 最後に署名部分で {manager_name} を差し込む
                 message = f"""保護者様
 
 いつもお世話になっております。
@@ -288,7 +289,7 @@ def render_monthly_visual_report_tab():
 ご自宅でもぜひ、今月の頑張りを褒めてあげてください！
 {survey_block}
 よろしくお願いいたします。
-槌屋"""
+{manager_name}"""
 
                 needs_followup = False
                 followup_reasons = []
