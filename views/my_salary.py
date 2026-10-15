@@ -6,7 +6,6 @@ import time
 
 from utils.api_guard import robust_api_call
 from utils.g_sheets import load_published_salary
-from utils.pdf_generator import generate_payslip_pdf
 
 def get_my_salary_data_safe():
     """公開済みの給与データを取得・防御（キャッシュはg_sheets側で処理）"""
@@ -88,47 +87,12 @@ def render_my_salary_page():
     col3.metric("交通費・手当", f"¥{transport_fee + allowance:,}")
 
     st.write("**詳細データ**")
+    # 画面に表示しない「裏側の計算用データ」などを除外して綺麗に表示
     display_df = pd.DataFrame([selected_row]).drop(columns=['年月'], errors='ignore')
+    
+    # "単価_" から始まる列（計算用の隠しデータ）を表示から除外する処理
+    cols_to_drop = [c for c in display_df.columns if c.startswith("単価_")]
+    display_df = display_df.drop(columns=cols_to_drop, errors='ignore')
+    
     st.dataframe(display_df, hide_index=True, use_container_width=True)
-
     st.divider()
-
-    # --- 📄 給与明細PDFのダウンロード ---
-    st.subheader("📄 給与明細のダウンロード")
-    
-    # 🌟 PDFジェネレーターが要求するフォーマットに変換する（名寄せ処理）
-    pdf_dict = {
-        "講師名": selected_row.get("👨‍🏫 担当講師", teacher_name),
-        "単価_11": safe_int(selected_row.get("単価_11", 0)),
-        "単価_12": safe_int(selected_row.get("単価_12", 0)),
-        "単価_13": safe_int(selected_row.get("単価_13", 0)),
-        "役職手当": safe_int(selected_row.get("役職手当 (円)", 0)),
-        "交通費合計": safe_int(selected_row.get("交通費合計 (円)", 0)),
-        
-        # ※本来なら各校舎ごとのコマ数が必要ですが、公開済みの合算データ（全体データ）から
-        # 先生個人の画面を開いている場合、校舎ごとの内訳情報が欠落している可能性があります。
-        # ここでは、PDFの生成エラーを防ぐため、一旦すべて「田端」として仮集計し、
-        # 交通費の単価などは 0 にして計算式のエラーを回避します。
-        # （より正確に出す場合は、給与公開のロジックそのものを改修する必要があります）
-        "単価_交_田端": 0,
-        "単価_交_東十条": 0,
-        "田端": {
-            "11": safe_int(selected_row.get("1:1コマ", 0)),
-            "12": safe_int(selected_row.get("1:2コマ", 0)),
-            "13": safe_int(selected_row.get("1:3コマ", 0)),
-            "days": safe_int(selected_row.get("出勤日数", 0))
-        },
-        "東十条": {"11": 0, "12": 0, "13": 0, "days": 0}
-    }
-    
-    try:
-        pdf_bytes = generate_payslip_pdf(pdf_dict, selected_month)
-        st.download_button(
-            label=f"📥 {selected_month} の給与明細 (PDF) をダウンロード",
-            data=pdf_bytes,
-            file_name=f"給与明細_{selected_month}_{teacher_name}.pdf",
-            mime="application/pdf",
-            type="primary"
-        )
-    except Exception as e:
-        st.error(f"⚠️ PDFの作成中にエラーが発生しました: {e}")
