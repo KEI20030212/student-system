@@ -1,3 +1,5 @@
+# views/my_salary.py
+
 import streamlit as st
 import pandas as pd
 import time 
@@ -6,7 +8,6 @@ from utils.api_guard import robust_api_call
 from utils.g_sheets import load_published_salary
 from utils.pdf_generator import generate_payslip_pdf
 
-# 👇 修正: @st.cache_data を削除！（キャッシュ管理は g_sheets.py に完全に任せる）
 def get_my_salary_data_safe():
     """公開済みの給与データを取得・防御（キャッシュはg_sheets側で処理）"""
     with st.spinner("☁️ 給与データを取得中..."):
@@ -19,7 +20,6 @@ def render_my_salary_page():
     st.header(f"💴 {teacher_name} 先生の給与確認")
     st.write("※教室長から公開された確定済みの給与明細を表示しています。")
 
-    # 👇 修正: 二重キャッシュを排除した新しい関数を呼び出す
     df_all_salaries = get_my_salary_data_safe()
     
     # --------------------------------------------------------
@@ -95,10 +95,34 @@ def render_my_salary_page():
 
     # --- 📄 給与明細PDFのダウンロード ---
     st.subheader("📄 給与明細のダウンロード")
-    row_dict = selected_row.to_dict()
+    
+    # 🌟 PDFジェネレーターが要求するフォーマットに変換する（名寄せ処理）
+    pdf_dict = {
+        "講師名": selected_row.get("👨‍🏫 担当講師", teacher_name),
+        "単価_11": safe_int(selected_row.get("単価_11", 0)),
+        "単価_12": safe_int(selected_row.get("単価_12", 0)),
+        "単価_13": safe_int(selected_row.get("単価_13", 0)),
+        "役職手当": safe_int(selected_row.get("役職手当 (円)", 0)),
+        "交通費合計": safe_int(selected_row.get("交通費合計 (円)", 0)),
+        
+        # ※本来なら各校舎ごとのコマ数が必要ですが、公開済みの合算データ（全体データ）から
+        # 先生個人の画面を開いている場合、校舎ごとの内訳情報が欠落している可能性があります。
+        # ここでは、PDFの生成エラーを防ぐため、一旦すべて「田端」として仮集計し、
+        # 交通費の単価などは 0 にして計算式のエラーを回避します。
+        # （より正確に出す場合は、給与公開のロジックそのものを改修する必要があります）
+        "単価_交_田端": 0,
+        "単価_交_東十条": 0,
+        "田端": {
+            "11": safe_int(selected_row.get("1:1コマ", 0)),
+            "12": safe_int(selected_row.get("1:2コマ", 0)),
+            "13": safe_int(selected_row.get("1:3コマ", 0)),
+            "days": safe_int(selected_row.get("出勤日数", 0))
+        },
+        "東十条": {"11": 0, "12": 0, "13": 0, "days": 0}
+    }
     
     try:
-        pdf_bytes = generate_payslip_pdf(row_dict, selected_month)
+        pdf_bytes = generate_payslip_pdf(pdf_dict, selected_month)
         st.download_button(
             label=f"📥 {selected_month} の給与明細 (PDF) をダウンロード",
             data=pdf_bytes,
