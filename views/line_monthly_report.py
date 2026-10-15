@@ -1,3 +1,5 @@
+# views/line_monthly_report.py
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -9,7 +11,8 @@ from utils.g_sheets import (
     get_quiz_master_dict,
     get_all_logs,
     get_sent_list,
-    update_sent_flag
+    update_sent_flag,
+    load_system_settings # 🌟 動的に校舎を取得するため追加
 )
 from utils.api_guard import robust_api_call
 
@@ -83,16 +86,43 @@ def render_monthly_visual_report_tab():
     name_col = '生徒名' if '生徒名' in df_students.columns else '名前'
     
     target_students = df_students.to_dict('records')
-    data_buckets = {"田端新町校": [], "東十条駅前校": [], "体験授業": [], "その他": []}
+    
+    # 🌟 NEW: 設定シートから校舎辞書を動的に構築
+    settings = robust_api_call(load_system_settings, fallback_value={})
+    sys_branch = settings.get("メイン校舎名", "")
+    
+    branch_dict = {}
+    if sys_branch:
+        for b in sys_branch.split(', '):
+            if ':' in b:
+                b_name, pref = b.split(':')
+                branch_dict[pref.lower()] = b_name
+                
+    # 動的にバケツ（分類用の箱）を用意
+    data_buckets = {b_name: [] for b_name in branch_dict.values()}
+    data_buckets["体験授業"] = []
+    data_buckets["その他"] = []
     
     for s in target_students:
         s_id = str(s.get(id_col, "")).lower()
-        if s_id == "trial": data_buckets["体験授業"].append(s)
-        elif s_id.startswith('t'): data_buckets["田端新町校"].append(s)
-        elif s_id.startswith('h'): data_buckets["東十条駅前校"].append(s)
-        else: data_buckets["その他"].append(s)
+        if s_id == "trial": 
+            data_buckets["体験授業"].append(s)
+        else:
+            matched = False
+            for pref, b_name in branch_dict.items():
+                if s_id.startswith(pref):
+                    data_buckets[b_name].append(s)
+                    matched = True
+                    break
+            if not matched:
+                data_buckets["その他"].append(s)
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
+    
+    if not display_buckets:
+        st.info("対象の生徒はいません。")
+        return
+        
     tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
 
     # --- タブごとの描画 ---
@@ -212,10 +242,10 @@ def render_monthly_visual_report_tab():
                             for i in range(0, len(score_items), 2):
                                 if i + 1 < len(score_items):
                                     # 2列揃った場合
-                                    quiz_lines.append(f" {score_items[i]} ｜ {score_items[i+1]}")
+                                    quiz_lines.append(f"  {score_items[i]} ｜ {score_items[i+1]}")
                                 else:
                                     # 奇数で1つ余った場合
-                                    quiz_lines.append(f" {score_items[i]}")
+                                    quiz_lines.append(f"  {score_items[i]}")
 
                 quiz_result_text = "\n".join(quiz_lines) if quiz_lines else "今月の小テスト実施記録はありません。"
 
