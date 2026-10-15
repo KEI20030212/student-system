@@ -1,3 +1,5 @@
+# views/email_report_generate.py
+
 import streamlit as st
 import datetime
 import pandas as pd
@@ -10,7 +12,8 @@ from utils.g_sheets import (
     load_quiz_records, 
     get_sent_list,      
     update_sent_flag,
-    get_student_master # 🌟 メールアドレス取得用に追加
+    get_student_master, 
+    load_system_settings # 🌟 動的に校舎を取得するため追加
 )
 from utils.g_drive import get_or_create_student_folder
 from utils.api_guard import robust_api_call
@@ -87,15 +90,42 @@ def render_email_report_tab(can_use_report):
 
     target_students = daily_logs[[id_col, name_col]].drop_duplicates().to_dict('records')
 
-    data_buckets = {"田端新町校": [], "東十条駅前校": [], "体験授業": [], "その他": []}
+    # 🌟 NEW: 設定シートから校舎辞書を動的に構築
+    settings = robust_api_call(load_system_settings, fallback_value={})
+    sys_branch = settings.get("メイン校舎名", "")
+    
+    branch_dict = {}
+    if sys_branch:
+        for b in sys_branch.split(', '):
+            if ':' in b:
+                b_name, pref = b.split(':')
+                branch_dict[pref.lower()] = b_name
+                
+    # 動的にバケツ（分類用の箱）を用意
+    data_buckets = {b_name: [] for b_name in branch_dict.values()}
+    data_buckets["体験授業"] = []
+    data_buckets["その他"] = []
+    
     for s in target_students:
         s_id = str(s.get(id_col, "")).lower()
-        if s_id == "trial": data_buckets["体験授業"].append(s)
-        elif s_id.startswith('t'): data_buckets["田端新町校"].append(s)
-        elif s_id.startswith('h'): data_buckets["東十条駅前校"].append(s)
-        else: data_buckets["その他"].append(s)
+        if s_id == "trial": 
+            data_buckets["体験授業"].append(s)
+        else:
+            matched = False
+            for pref, b_name in branch_dict.items():
+                if s_id.startswith(pref):
+                    data_buckets[b_name].append(s)
+                    matched = True
+                    break
+            if not matched:
+                data_buckets["その他"].append(s)
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
+    
+    if not display_buckets:
+        st.info("対象の生徒はいません。")
+        return
+        
     tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
 
     for t_idx, (bucket_name, students) in enumerate(display_buckets.items()):
@@ -209,7 +239,6 @@ def render_email_report_tab(can_use_report):
                         col_mail, col_btn = st.columns([3, 1])
                         
                         with col_mail:
-                            # マスターにメアドがなければ手入力できるようにする
                             target_email = st.text_input("✉️ 送信先メールアドレス", value=parent_email, key=f"addr_{student_id}")
                             
                         st.text_area("📝 メールのプレビュー（ここで手直し可能）", value=email_message, height=300, key=f"body_{student_id}")
@@ -217,13 +246,11 @@ def render_email_report_tab(can_use_report):
                         if st.button("📧 この内容でメールを送信する", key=f"btn_send_{student_id}", type="primary"):
                             if can_use_report:
                                 with st.spinner("メールを送信中..."):
-                                    # 編集後の本文を取得
                                     final_body = st.session_state[f"body_{student_id}"]
                                     success, msg = send_email_report(target_email, email_subject, final_body)
                                     
                                 if success:
                                     st.success(f"✅ {student_name} さんの保護者へメールを送信しました！")
-                                    # 送信済みにチェックを入れる（裏側を更新してリロード）
                                     robust_api_call(update_sent_flag, date_str, student_id, True)
                                     st.rerun()
                                 else:
