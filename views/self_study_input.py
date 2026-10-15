@@ -143,3 +143,4 @@ def render_self_study_input_page():
                             for k in list(st.session_state.keys()):
                                 if k.startswith(("d_","s_","e_","b_","m_","sub_","ss_")): del st.session_state[k]
                             st.rerun()
+
