@@ -104,7 +104,7 @@ def render_dashboard_page():
         st.warning("該当する生徒がいません。")
         return
 
-    # 🌟 NEW: 設定シートから校舎辞書を動的に構築
+    # 🌟 設定シートから校舎辞書を動的に構築
     settings = robust_api_call(load_system_settings, fallback_value={})
     sys_branch = settings.get("メイン校舎名", "")
     
@@ -136,22 +136,27 @@ def render_dashboard_page():
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
     
-    # 🌟 必要なデータすべてを一括取得（超高速処理）
+    # 🌟 必要なデータすべてを一括取得（ループの前で名前の加工を行う安全・高速版！）
     with st.spinner('☁️ 授業ログ・自習・小テスト・模試データを一括集計中...'):
         df_all_logs = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
         if not df_all_logs.empty and '日時' in df_all_logs.columns:
             df_all_logs['日時'] = pd.to_datetime(df_all_logs['日時'], format='mixed', errors='coerce')
             df_all_logs['年月'] = df_all_logs['日時'].dt.strftime('%Y年%m月')
+            name_c = '名前' if '名前' in df_all_logs.columns else '生徒名'
+            df_all_logs['検索用名前'] = df_all_logs[name_c].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         df_all_quizzes = robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
         if not df_all_quizzes.empty and '日時' in df_all_quizzes.columns:
             df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
             df_all_quizzes['年月'] = df_all_quizzes['日時'].dt.strftime('%Y年%m月')
+            df_all_quizzes['検索用名前'] = df_all_quizzes['名前'].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         df_ss = robust_api_call(load_self_study_data, fallback_value=pd.DataFrame())
         if not df_ss.empty and '日付' in df_ss.columns:
             df_ss['日付'] = pd.to_datetime(df_ss['日付'], errors='coerce')
             df_ss['年月'] = df_ss['日付'].dt.strftime('%Y年%m月')
+            name_c = '名前' if '名前' in df_ss.columns else '生徒名'
+            df_ss['検索用名前'] = df_ss[name_c].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         quiz_master_dict = robust_api_call(get_quiz_maker_sheets, fallback_value={})
         df_all_tests = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
@@ -175,40 +180,25 @@ def render_dashboard_page():
             for student in students:
                 s_id = str(student.get(id_col, "未設定"))
                 s_name = str(student.get(name_col, "不明"))
+                # 生徒の名前からも空白を除去してマッチング用にする
                 s_name_clean = s_name.replace(" ", "").replace(" ", "")
 
-                # 【データ抽出】当月 ＆ 前月
-                logs_name_col = '名前' if '名前' in df_all_logs.columns else '生徒名'
+                # 【データ抽出】当月 ＆ 前月（検索用名前を使って安全に抽出！）
+                logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty else pd.DataFrame()
+                logs_prev = df_all_logs[(df_all_logs['年月'] == prev_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty and prev_period else pd.DataFrame()
+
+                quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
+                quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty and prev_period else pd.DataFrame()
+                quiz_past_all = df_all_quizzes[(df_all_quizzes['日時'] < pd.to_datetime(f"{selected_period[:4]}-{selected_period[5:7]}-01")) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
                 
-                # ログの取得時は空白除去した名前でマッチング（精度向上）
-                if not df_all_logs.empty and logs_name_col in df_all_logs.columns:
-                    df_all_logs['検索用名前'] = df_all_logs[logs_name_col].astype(str).str.replace(r'[\s ]', '', regex=True)
-                    logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['検索用名前'] == s_name_clean)]
-                    logs_prev = df_all_logs[(df_all_logs['年月'] == prev_period) & (df_all_logs['検索用名前'] == s_name_clean)] if prev_period else pd.DataFrame()
-                else:
-                    logs_curr, logs_prev = pd.DataFrame(), pd.DataFrame()
-
-                if not df_all_quizzes.empty and '名前' in df_all_quizzes.columns:
-                    df_all_quizzes['検索用名前'] = df_all_quizzes['名前'].astype(str).str.replace(r'[\s ]', '', regex=True)
-                    quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)]
-                    quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if prev_period else pd.DataFrame()
-                    quiz_past_all = df_all_quizzes[(df_all_quizzes['日時'] < pd.to_datetime(f"{selected_period[:4]}-{selected_period[5:7]}-01")) & (df_all_quizzes['検索用名前'] == s_name_clean)]
-                else:
-                    quiz_curr, quiz_prev, quiz_past_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-                if not df_ss.empty and ('名前' in df_ss.columns or '生徒名' in df_ss.columns):
-                    ss_name_col = '名前' if '名前' in df_ss.columns else '生徒名'
-                    df_ss['検索用名前'] = df_ss[ss_name_col].astype(str).str.replace(r'[\s ]', '', regex=True)
-                    ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)]
-                    ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if prev_period else pd.DataFrame()
-                else:
-                    ss_curr, ss_prev = pd.DataFrame(), pd.DataFrame()
+                ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty else pd.DataFrame()
+                ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty and prev_period else pd.DataFrame()
 
                 # --- 今月の小テスト計算・履歴生成 ---
                 past_test_scores = {}
                 if not quiz_past_all.empty and 'テキスト' in quiz_past_all.columns and '単元' in quiz_past_all.columns and '点数' in quiz_past_all.columns:
                     for _, r in quiz_past_all.iterrows():
-                        key = f"{r.get('テキスト', '')}_{r.get('単元', '')}"
+                        key = f"{str(r.get('テキスト', '')).strip()}_{str(r.get('単元', '')).strip()}"
                         try: past_test_scores[key] = float(r.get('点数', 0))
                         except ValueError: pass
 
