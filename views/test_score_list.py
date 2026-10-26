@@ -206,26 +206,11 @@ def render_test_scores_list_page():
                     # 必要な列だけを抽出し、欠損値（未入力）をハイフンに置き換え
                     df_display = df_merged[display_cols].copy()
                     
-                    # 🌟 NEW: 回収状況がわかるように「状態」列を追加
-                    # 必須科目のどれか一つでも入力されていれば「回収済」、そうでなければ「未回収」
-                    if selected_score_cols:
-                        def check_status(row):
-                            for col in selected_score_cols:
-                                val = row.get(col)
-                                if pd.notna(val) and str(val).strip() not in ["", "nan", "None"]:
-                                    return "✅ 回収済"
-                            return "🚨 未回収"
-                            
-                        df_display['状態'] = df_display.apply(check_status, axis=1)
-                        display_cols = ['状態'] + display_cols # 状態を一番左に持ってくる
-                        df_display = df_display[display_cols]
-                    
                     for col in df_display.columns:
                         df_display[col] = df_display[col].astype(str).replace(['nan', 'None', '<NA>'], '-')
 
-                    # 状態（未回収）が上に来るように並び替え
-                    if '状態' in df_display.columns:
-                        df_display = df_display.sort_values(by=['状態', '学年', '生徒名'], ascending=[False, True, True])
+                    # 学年、生徒名で並び替え
+                    df_display = df_display.sort_values(by=['学年', '生徒名'], ascending=[True, True])
 
                     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
