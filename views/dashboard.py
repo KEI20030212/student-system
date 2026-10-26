@@ -17,7 +17,8 @@ from utils.g_sheets import (
     get_quiz_maker_sheets,
     get_student_self_study_points,
     load_test_scores,
-    load_self_study_data 
+    load_self_study_data,
+    load_system_settings # 🌟 動的に校舎を取得するため追加
 )
 from utils.calc_logic import (
     calculate_quiz_points,
@@ -103,13 +104,35 @@ def render_dashboard_page():
         st.warning("該当する生徒がいません。")
         return
 
-    data_buckets = {"田端新町校": [], "東十条駅前校": [], "体験授業": [], "その他": []}
+    # 🌟 NEW: 設定シートから校舎辞書を動的に構築
+    settings = robust_api_call(load_system_settings, fallback_value={})
+    sys_branch = settings.get("メイン校舎名", "")
+    
+    branch_dict = {}
+    if sys_branch:
+        for b in sys_branch.split(', '):
+            if ':' in b:
+                b_name, pref = b.split(':')
+                branch_dict[pref.lower()] = b_name
+                
+    # 動的にバケツ（分類用の箱）を用意
+    data_buckets = {b_name: [] for b_name in branch_dict.values()}
+    data_buckets["体験授業"] = []
+    data_buckets["その他"] = []
+    
     for s in target_students:
         s_id = str(s.get(id_col, "")).lower()
-        if s_id == "trial": data_buckets["体験授業"].append(s)
-        elif s_id.startswith('t'): data_buckets["田端新町校"].append(s)
-        elif s_id.startswith('h'): data_buckets["東十条駅前校"].append(s)
-        else: data_buckets["その他"].append(s)
+        if s_id == "trial": 
+            data_buckets["体験授業"].append(s)
+        else:
+            matched = False
+            for pref, b_name in branch_dict.items():
+                if s_id.startswith(pref):
+                    data_buckets[b_name].append(s)
+                    matched = True
+                    break
+            if not matched:
+                data_buckets["その他"].append(s)
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
     
@@ -138,7 +161,7 @@ def render_dashboard_page():
         df_all_tests = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
 
     # ==========================================
-    # 🌟 校舎ごとのタブを描画
+    # 🌟 校舎ごとのタブを動的に描画
     # ==========================================
     tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
 
@@ -485,7 +508,7 @@ def render_dashboard_page():
                         diff_val = rep['成績増減(%)']
                         new_count = rep['新規受験数']
                         
-                        # 🌟 NEW: やる気を引き出すコメントの自動生成
+                        # やる気を引き出すコメントの自動生成
                         cheer_msg = ""
                         if diff_val > 0:
                             cheer_msg = f"✨【先生より】素晴らしい！先月よりも全体の正答率が {diff_val}% もアップしました！日々の努力の成果がしっかり数字に表れています。この調子でガンガン進めよう！"
@@ -494,7 +517,7 @@ def render_dashboard_page():
                         elif diff_val < 0:
                             cheer_msg = f"💪【先生より】惜しい！先月よりも少しだけ正答率が下がっています。解きっぱなしになっていないか、ノートの使い方や復習のタイミングをもう一度見直してみよう！"
                         else:
-                            cheer_msg = f"🌟【先生より】正答率をしっかりキープできています！基礎が固まってきた証拠拠です。次は自己ベスト更新を目指して、もう一段階レベルアップしよう！"
+                            cheer_msg = f"🌟【先生より】正答率をしっかりキープできています！基礎が固まってきた証拠です。次は自己ベスト更新を目指して、もう一段階レベルアップしよう！"
                             
                         # コメントを書き込み
                         worksheet.write('A3', cheer_msg, msg_format)
