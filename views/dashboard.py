@@ -86,7 +86,7 @@ def render_dashboard_page():
         prev_period = None
 
     # ==========================================
-    # 🌟 生徒のリストアップ ＆ 校舎ごとの振り分け
+    # 🌟 生徒のリストアップ ＆ 校舎ごとの振り分け（動的化）
     # ==========================================
     id_col = '生徒ID' if '生徒ID' in df_students.columns else None
     name_col = '生徒名' if '生徒名' in df_students.columns else '名前'
@@ -136,32 +136,28 @@ def render_dashboard_page():
 
     display_buckets = {k: v for k, v in data_buckets.items() if len(v) > 0 or k != "その他"}
     
+    # 🌟 必要なデータすべてを一括取得（超高速処理）
     with st.spinner('☁️ 授業ログ・自習・小テスト・模試データを一括集計中...'):
         df_all_logs = robust_api_call(get_all_logs, fallback_value=pd.DataFrame())
         if not df_all_logs.empty and '日時' in df_all_logs.columns:
             df_all_logs['日時'] = pd.to_datetime(df_all_logs['日時'], format='mixed', errors='coerce')
             df_all_logs['年月'] = df_all_logs['日時'].dt.strftime('%Y年%m月')
-            name_c = '名前' if '名前' in df_all_logs.columns else '生徒名'
-            df_all_logs['検索用名前'] = df_all_logs[name_c].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         df_all_quizzes = robust_api_call(load_quiz_records, fallback_value=pd.DataFrame())
         if not df_all_quizzes.empty and '日時' in df_all_quizzes.columns:
             df_all_quizzes['日時'] = pd.to_datetime(df_all_quizzes['日時'], format='mixed', errors='coerce')
             df_all_quizzes['年月'] = df_all_quizzes['日時'].dt.strftime('%Y年%m月')
-            df_all_quizzes['検索用名前'] = df_all_quizzes['名前'].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         df_ss = robust_api_call(load_self_study_data, fallback_value=pd.DataFrame())
         if not df_ss.empty and '日付' in df_ss.columns:
             df_ss['日付'] = pd.to_datetime(df_ss['日付'], errors='coerce')
             df_ss['年月'] = df_ss['日付'].dt.strftime('%Y年%m月')
-            name_c = '名前' if '名前' in df_ss.columns else '生徒名'
-            df_ss['検索用名前'] = df_ss[name_c].astype(str).str.replace(r'[\s ]', '', regex=True)
 
         quiz_master_dict = robust_api_call(get_quiz_maker_sheets, fallback_value={})
         df_all_tests = robust_api_call(load_test_scores, fallback_value=pd.DataFrame())
 
     # ==========================================
-    # 🌟 校舎ごとのタブを動的に描画
+    # 🌟 校舎ごとのタブを描画
     # ==========================================
     tabs = st.tabs([f"🏫 {k} ({len(v)}名)" for k, v in display_buckets.items()])
 
@@ -181,36 +177,41 @@ def render_dashboard_page():
                 s_name = str(student.get(name_col, "不明"))
                 s_name_clean = s_name.replace(" ", "").replace(" ", "")
 
-                logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty else pd.DataFrame()
-                logs_prev = df_all_logs[(df_all_logs['年月'] == prev_period) & (df_all_logs['検索用名前'] == s_name_clean)] if not df_all_logs.empty and prev_period else pd.DataFrame()
+                # 【データ抽出】当月 ＆ 前月
+                logs_name_col = '名前' if '名前' in df_all_logs.columns else '生徒名'
+                
+                # ログの取得時は空白除去した名前でマッチング（精度向上）
+                if not df_all_logs.empty and logs_name_col in df_all_logs.columns:
+                    df_all_logs['検索用名前'] = df_all_logs[logs_name_col].astype(str).str.replace(r'[\s ]', '', regex=True)
+                    logs_curr = df_all_logs[(df_all_logs['年月'] == selected_period) & (df_all_logs['検索用名前'] == s_name_clean)]
+                    logs_prev = df_all_logs[(df_all_logs['年月'] == prev_period) & (df_all_logs['検索用名前'] == s_name_clean)] if prev_period else pd.DataFrame()
+                else:
+                    logs_curr, logs_prev = pd.DataFrame(), pd.DataFrame()
 
-                quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
-                quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty and prev_period else pd.DataFrame()
-                
-                quiz_past_all = df_all_quizzes[(df_all_quizzes['日時'] < pd.to_datetime(f"{selected_period[:4]}-{selected_period[5:7]}-01")) & (df_all_quizzes['検索用名前'] == s_name_clean)] if not df_all_quizzes.empty else pd.DataFrame()
-                
+                if not df_all_quizzes.empty and '名前' in df_all_quizzes.columns:
+                    df_all_quizzes['検索用名前'] = df_all_quizzes['名前'].astype(str).str.replace(r'[\s ]', '', regex=True)
+                    quiz_curr = df_all_quizzes[(df_all_quizzes['年月'] == selected_period) & (df_all_quizzes['検索用名前'] == s_name_clean)]
+                    quiz_prev = df_all_quizzes[(df_all_quizzes['年月'] == prev_period) & (df_all_quizzes['検索用名前'] == s_name_clean)] if prev_period else pd.DataFrame()
+                    quiz_past_all = df_all_quizzes[(df_all_quizzes['日時'] < pd.to_datetime(f"{selected_period[:4]}-{selected_period[5:7]}-01")) & (df_all_quizzes['検索用名前'] == s_name_clean)]
+                else:
+                    quiz_curr, quiz_prev, quiz_past_all = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+                if not df_ss.empty and ('名前' in df_ss.columns or '生徒名' in df_ss.columns):
+                    ss_name_col = '名前' if '名前' in df_ss.columns else '生徒名'
+                    df_ss['検索用名前'] = df_ss[ss_name_col].astype(str).str.replace(r'[\s ]', '', regex=True)
+                    ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)]
+                    ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if prev_period else pd.DataFrame()
+                else:
+                    ss_curr, ss_prev = pd.DataFrame(), pd.DataFrame()
+
+                # --- 今月の小テスト計算・履歴生成 ---
                 past_test_scores = {}
                 if not quiz_past_all.empty and 'テキスト' in quiz_past_all.columns and '単元' in quiz_past_all.columns and '点数' in quiz_past_all.columns:
                     for _, r in quiz_past_all.iterrows():
                         key = f"{r.get('テキスト', '')}_{r.get('単元', '')}"
-                        try:
-                            score = float(r.get('点数', 0))
-                            past_test_scores[key] = score
-                        except ValueError:
-                            pass
+                        try: past_test_scores[key] = float(r.get('点数', 0))
+                        except ValueError: pass
 
-                ss_curr = df_ss[(df_ss['年月'] == selected_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty else pd.DataFrame()
-                ss_prev = df_ss[(df_ss['年月'] == prev_period) & (df_ss['検索用名前'] == s_name_clean)] if not df_ss.empty and prev_period else pd.DataFrame()
-
-                hw_rate_curr = -1
-                if not logs_curr.empty and '出した宿題P' in logs_curr.columns and 'やった宿題P' in logs_curr.columns:
-                    assigned = pd.to_numeric(logs_curr['出した宿題P'], errors='coerce').fillna(0).sum()
-                    done = pd.to_numeric(logs_curr['やった宿題P'], errors='coerce').fillna(0).sum()
-                    if assigned > 0: hw_rate_curr = min(int((done / assigned) * 100), 100)
-
-                ss_min_curr = pd.to_numeric(ss_curr['自習時間(分)'], errors='coerce').sum() if not ss_curr.empty else 0
-                
-                # --- 今月の小テスト計算 ---
                 quiz_pts_curr = 0
                 quiz_ratios_curr = []
                 detailed_tests_curr = [] 
@@ -306,6 +307,15 @@ def render_dashboard_page():
                         "今月のテスト一覧": detailed_tests_curr
                     })
 
+                # 【計算】宿題達成率と自習時間
+                hw_rate_curr = -1
+                if not logs_curr.empty and '出した宿題P' in logs_curr.columns and 'やった宿題P' in logs_curr.columns:
+                    assigned = pd.to_numeric(logs_curr['出した宿題P'], errors='coerce').fillna(0).sum()
+                    done = pd.to_numeric(logs_curr['やった宿題P'], errors='coerce').fillna(0).sum()
+                    if assigned > 0: hw_rate_curr = min(int((done / assigned) * 100), 100)
+
+                ss_min_curr = pd.to_numeric(ss_curr['自習時間(分)'], errors='coerce').sum() if not ss_curr.empty else 0
+                
                 ss_pts_total = robust_api_call(get_student_self_study_points, s_name, fallback_value=0)
                 final_points = quiz_pts_curr + ss_pts_total
 
@@ -317,6 +327,7 @@ def render_dashboard_page():
 
                 ss_min_prev = pd.to_numeric(ss_prev['自習時間(分)'], errors='coerce').sum() if not ss_prev.empty else 0
 
+                # 【能力(X) と やる気(Y) の算出】
                 latest_dev, latest_naishin = 50.0, 3 
                 if not df_all_tests.empty and '生徒名' in df_all_tests.columns:
                     df_s = df_all_tests[df_all_tests['生徒名'] == s_name]
@@ -338,20 +349,25 @@ def render_dashboard_page():
                     "生徒名": s_name, "能力 (X)": ability_x, "やる気 (Y)": motivation_y
                 })
 
+                # 🚨 【司令塔ロジック】To-Doミッションの自動判定
                 ss_diff = ss_min_curr - ss_min_prev
                 hw_diff = hw_rate_curr - hw_rate_prev if hw_rate_curr != -1 and hw_rate_prev != -1 else 0
 
-                if ss_diff >= 300: todo_praise.append(f"**{s_name}**：自習時間が前月比 +{int(ss_diff/60)}時間です！")
-                elif hw_diff >= 20: todo_praise.append(f"**{s_name}**：宿題達成率が前月比 +{hw_diff}%改善しています！")
+                if ss_diff >= 300:
+                    todo_praise.append(f"**{s_name}**：自習時間が前月比 +{int(ss_diff/60)}時間です！隠れヒーローを褒めましょう。")
+                elif hw_diff >= 20:
+                    todo_praise.append(f"**{s_name}**：宿題達成率が前月比 +{hw_diff}%改善しています！")
 
                 if hw_rate_curr >= 80 and quiz_avg_ratio_curr >= 0 and quiz_avg_ratio_curr < 60:
                     todo_encourage.append(f"**{s_name}**：宿題は{hw_rate_curr}%やっていますが、小テスト正答率が{quiz_avg_ratio_curr}%です。勉強のやり方の面談が必要です。")
 
-                if ss_diff <= -300: todo_warn.append(f"**{s_name}**：自習時間が前月から {int(abs(ss_diff)/60)}時間 減少しています。")
-                elif hw_diff <= -20: todo_warn.append(f"**{s_name}**：宿題達成率が前月から {abs(hw_diff)}% も落ちています。")
+                if ss_diff <= -300:
+                    todo_warn.append(f"**{s_name}**：自習時間が前月から {int(abs(ss_diff)/60)}時間 減少しています。油断しているかも？")
+                elif hw_diff <= -20:
+                    todo_warn.append(f"**{s_name}**：宿題達成率が前月から {abs(hw_diff)}% も落ちています。お尻を叩きましょう。")
 
                 if not logs_curr.empty and ss_min_curr == 0:
-                    todo_contact.append(f"**{s_name}**：今月授業を受けていますが、自習時間が0分です。")
+                    todo_contact.append(f"**{s_name}**：今月授業を受けていますが、自習時間が0分です。ご家庭へ様子伺いの連絡を！")
                 elif hw_rate_curr != -1 and hw_rate_curr < 50:
                     todo_contact.append(f"**{s_name}**：宿題達成率が {hw_rate_curr}% です。ご家庭に注意喚起のLINEを推奨。")
 
@@ -361,13 +377,20 @@ def render_dashboard_page():
                     "前月比自習(分)": ss_diff,
                     "今月宿題(%)": hw_rate_curr if hw_rate_curr != -1 else "-",
                     "前月比宿題(%)": hw_diff,
-                    "小テスト正答率(%)": quiz_avg_ratio_curr if quiz_avg_ratio_curr >= 0 else "-",
+                    "小テスト正答率(%)": round(quiz_avg_ratio_curr, 1) if quiz_avg_ratio_curr >= 0 else "-",
                     "正答率 増減(%)": quiz_ratio_diff,
                     "今月の獲得pt": final_points
                 })
 
+            # ==========================================
+            # 🎨 タブ内の画面描画
+            # ==========================================
+            
+            # 🌟 柱1: 役職限定 To-Doリスト
             if has_manager_access:
                 st.markdown(f"### 🚨 {bucket_name} のマネジメント・ミッション（管理者専用）")
+                st.caption("システムがデータから自動判定した、今日あなたがアクションを起こすべき生徒リストです。")
+                
                 col_todo1, col_todo2 = st.columns(2)
                 with col_todo1:
                     st.success(f"🗣️ **褒める・励ます ({len(todo_praise) + len(todo_encourage)}件)**")
@@ -382,17 +405,21 @@ def render_dashboard_page():
                     if not todo_warn and not todo_contact: st.write("（現在対象者はいません）")
                 st.divider()
 
+            # 🌟 柱2: 4象限マトリクス
             st.markdown(f"### 🗺️ 俯瞰マトリクス")
             if matrix_data:
                 df_matrix = pd.DataFrame(matrix_data)
+                
                 chart = alt.Chart(df_matrix).mark_circle(size=400, opacity=0.8, color="#1E90FF").encode(
                     x=alt.X('能力 (X)', scale=alt.Scale(domain=[0.5, 5.5]), axis=alt.Axis(values=[1, 2, 3, 4, 5]), title="🧠 能力（内申・偏差値）"),
                     y=alt.Y('やる気 (Y)', scale=alt.Scale(domain=[0.5, 5.5]), axis=alt.Axis(values=[1, 2, 3, 4, 5]), title="🔥 やる気（自習・宿題）"),
                     tooltip=['生徒名', '能力 (X)', 'やる気 (Y)']
                 )
                 text = chart.mark_text(align='left', baseline='middle', dx=15, dy=0, fontSize=12, fontWeight='bold').encode(text='生徒名')
+                
                 rule_x = alt.Chart(pd.DataFrame({'x': [3]})).mark_rule(color='gray', strokeDash=[5,5], strokeWidth=2).encode(x='x')
                 rule_y = alt.Chart(pd.DataFrame({'y': [3]})).mark_rule(color='gray', strokeDash=[5,5], strokeWidth=2).encode(y='y')
+                
                 labels = pd.DataFrame([
                     {"x": 4.5, "y": 5.0, "t": "🏃‍♂️ 自走・エース"},
                     {"x": 1.5, "y": 5.0, "t": "💦 空回り・要指導"},
@@ -402,46 +429,58 @@ def render_dashboard_page():
                 label_chart = alt.Chart(labels).mark_text(fontSize=24, opacity=0.15, fontWeight='bold', color='gray').encode(
                     x='x:Q', y='y:Q', text='t:N'
                 )
+
                 st.altair_chart(label_chart + rule_x + rule_y + chart + text, use_container_width=True) 
 
+            # 🌟 柱3: トレンド分析 & 柱4: ランキング表
             if summary_data:
                 df_summary = pd.DataFrame(summary_data)
+                
                 st.divider()
                 c_left, c_right = st.columns([1, 1])
                 
                 with c_left:
                     st.markdown(f"### 📈 トレンド分析（{selected_period}）")
+                    st.caption("先月との差分。数字がプラスなら成長、マイナスなら危険信号です。")
+                    
                     df_trend = df_summary[['生徒名', '今月自習(分)', '前月比自習(分)', '今月宿題(%)', '前月比宿題(%)']].copy()
+                    
                     def format_diff(val):
                         if val > 0: return f"🟢 +{val}"
                         elif val < 0: return f"🔴 {val}"
                         else: return "±0"
+                        
                     df_trend['自習増減'] = df_trend['前月比自習(分)'].apply(format_diff)
                     df_trend['宿題増減'] = df_trend['前月比宿題(%)'].apply(lambda x: format_diff(x) if isinstance(x, (int, float)) else "-")
+                    
                     st.dataframe(df_trend[['生徒名', '今月自習(分)', '自習増減', '今月宿題(%)', '宿題増減']], hide_index=True, use_container_width=True)
 
                 with c_right:
                     st.markdown(f"### 🏆 {bucket_name} ポイントランキング")
+                    st.caption("累計ポイントのランキングです。この表はダウンロードして掲示用に使えます！")
+                    
                     df_ranking = df_summary[['生徒名', '今月の獲得pt', '小テスト正答率(%)']].sort_values(by="今月の獲得pt", ascending=False).reset_index(drop=True)
                     df_ranking.index = df_ranking.index + 1
                     df_ranking.reset_index(inplace=True)
                     df_ranking.rename(columns={'index': '順位'}, inplace=True)
+                    
                     st.dataframe(df_ranking, hide_index=True, use_container_width=True)
                     
                     excel_buffer = io.BytesIO()
                     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                         df_ranking.to_excel(writer, index=False, sheet_name='ポイントランキング')
                     
+                    excel_data = excel_buffer.getvalue()
                     st.download_button(
                         label=f"📥 {bucket_name} のランキングをダウンロード",
-                        data=excel_buffer.getvalue(),
+                        data=excel_data,
                         file_name=f"{selected_period}_{bucket_name}_ランキング.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="primary",
                         use_container_width=True,
                         key=f"dl_btn_{t_idx}"
                     )
-            
+
             # ==========================================
             # 🌟 個別成績アップ・ダウンレポートの出力エリア（Excel形式）
             # ==========================================
