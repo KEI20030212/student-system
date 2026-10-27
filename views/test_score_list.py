@@ -1,4 +1,4 @@
-# views/test_score_list.py
+# views/test_scores_list.py
 
 import streamlit as st
 import pandas as pd
@@ -363,7 +363,7 @@ def render_test_scores_list_page():
                     if not df_q.empty:
                         df_q['点数'] = pd.to_numeric(df_q['点数'], errors='coerce')
                         
-                        # 🌟 修正ポイント：ここで事前に「日時」を安全なカレンダー（datetime）型にしておく！
+                        # 🌟 日時を安全なカレンダー（datetime）型にしておく！
                         if '日時' in df_q.columns:
                             df_q['日時'] = pd.to_datetime(df_q['日時'], errors='coerce')
                             # タイムゾーン情報がついている場合は削除（比較時のエラーを防止）
@@ -373,7 +373,7 @@ def render_test_scores_list_page():
                         df_q = df_q.dropna(subset=['点数']).copy()
                         df_q['校舎'] = df_q['名前'].map(lambda x: student_name_to_branch.get(x, "その他"))
                     
-                    # 🌟 変更点：成績の有無に関わらず、「生徒が在籍している校舎」のタブをすべて作成する
+                    # 🌟 成績の有無に関わらず、「生徒が在籍している校舎」のタブをすべて作成する
                     branch_order = list(branch_dict.values()) + ["体験授業", "その他"]
                     available_branches = [b for b in branch_order if b in student_name_to_branch.values()]
                     
@@ -446,7 +446,6 @@ def render_test_scores_list_page():
                                 pivot_all = pivot_all.drop(columns=['学年_ソート'])
                                 
                                 # 🌟 5. インデックスを【新規挑戦回数】【学年】【名前】の順番にセットする！
-                                # これにより、ダウンロードしたExcelでもこの順番で左側に固定されます。
                                 pivot_all = pivot_all.set_index(['新規挑戦回数', '学年', '名前'])
                                 
                                 styled_all_df = style_pivot_dataframe(pivot_all, selected_quiz_for_map)
@@ -454,7 +453,8 @@ def render_test_scores_list_page():
                                 
                                 excel_buffer_map = io.BytesIO()
                                 with pd.ExcelWriter(excel_buffer_map, engine='xlsxwriter') as writer:
-                                    styled_all_df.to_excel(writer, sheet_name=branch)
+                                    # 🌟 修正ポイント: merge_cells=False を指定してセル結合を解除！
+                                    styled_all_df.to_excel(writer, sheet_name=branch, merge_cells=False)
                                 
                                 excel_data_map = excel_buffer_map.getvalue()
                                 safe_file_name_map = re.sub(r'[\\/:*?"<>|]', '_', selected_quiz_for_map)
