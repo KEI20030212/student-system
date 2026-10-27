@@ -1,4 +1,4 @@
-# views/test_scores_list.py
+# views/test_score_list.py
 
 import streamlit as st
 import pandas as pd
@@ -243,6 +243,7 @@ def render_test_scores_list_page():
         else:
             taken_quizzes = [q for q in df_all_quizzes['テキスト'].dropna().unique().tolist() if q]
             
+            # 🌟 シートの「E列」から現在のデフォルト候補を抽出
             default_candidates = set()
             for key, data in quiz_details.items():
                 if data.get("is_default", False):
@@ -252,6 +253,7 @@ def render_test_scores_list_page():
             
             valid_defaults = [q for q in default_candidates if q in taken_quizzes]
             
+            # 🌟 アプリ画面からのデフォルト保存エリア
             c_sel, c_save = st.columns([4, 1.5], vertical_alignment="bottom")
             with c_sel:
                 selected_quizzes_for_map = st.multiselect(
@@ -262,6 +264,7 @@ def render_test_scores_list_page():
                     key="active_quizzes_selection"
                 )
             with c_save:
+                # 権限がある管理者なら誰でも保存可能
                 user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
                 if user_role in ['admin', 'owner', 'am']:
                     if st.button("💾 この選択をデフォルト保存", use_container_width=True):
@@ -359,6 +362,14 @@ def render_test_scores_list_page():
                     df_q = df_all_quizzes[df_all_quizzes['テキスト'] == selected_quiz_for_map].copy()
                     if not df_q.empty:
                         df_q['点数'] = pd.to_numeric(df_q['点数'], errors='coerce')
+                        
+                        # 🌟 修正ポイント：ここで事前に「日時」を安全なカレンダー（datetime）型にしておく！
+                        if '日時' in df_q.columns:
+                            df_q['日時'] = pd.to_datetime(df_q['日時'], errors='coerce')
+                            # タイムゾーン情報がついている場合は削除（比較時のエラーを防止）
+                            if df_q['日時'].dt.tz is not None:
+                                df_q['日時'] = df_q['日時'].dt.tz_localize(None)
+
                         df_q = df_q.dropna(subset=['点数']).copy()
                         df_q['校舎'] = df_q['名前'].map(lambda x: student_name_to_branch.get(x, "その他"))
                     
@@ -384,7 +395,12 @@ def render_test_scores_list_page():
                             new_challenge_counts = {}
                             if not df_branch.empty and '日時' in df_branch.columns:
                                 # 生徒名・単元ごとに「最初の受験記録（一番古い日時）」だけを残す
-                                first_attempts = df_branch.sort_values('日時').drop_duplicates(subset=['名前', '単元'], keep='first')
+                                first_attempts = df_branch.sort_values('日時').drop_duplicates(subset=['名前', '単元'], keep='first').copy()
+                                
+                                # 型エラー回避用：念のためもう一度型を揃える
+                                first_attempts['日時'] = pd.to_datetime(first_attempts['日時'], errors='coerce')
+                                if first_attempts['日時'].dt.tz is not None:
+                                    first_attempts['日時'] = first_attempts['日時'].dt.tz_localize(None)
                                 
                                 # 今日からちょうど7日前の日付（時刻は無視）
                                 today_naive = pd.Timestamp.now(tz='Asia/Tokyo').tz_localize(None).normalize()
