@@ -10,6 +10,11 @@ from utils.g_sheets import (
     update_textbook_master_bulk
 )
 
+# 🌟 NEW: キャッシュ化することで、セル編集のたびにAPI通信（読み込み中...）が走るのを防ぎます！
+@st.cache_data(ttl=600, show_spinner=False)
+def cached_get_textbook_master_raw():
+    return robust_api_call(get_textbook_master_raw, fallback_value=pd.DataFrame())
+
 def render_textbook_manager_page():
     st.header("📚 テキスト情報一覧（マスタ管理）")
     st.write("スプレッドシートに登録されているテキストの章やページ範囲を確認・編集・一括追加できる管理画面です。")
@@ -20,9 +25,13 @@ def render_textbook_manager_page():
         st.error("このページは管理者のみアクセス可能です。")
         return
 
-    # データ取得
+    # 🌟 NEW: アップローダーのリセット用キーを初期化（完了後に元の画面に戻すため）
+    if "tb_uploader_key" not in st.session_state:
+        st.session_state.tb_uploader_key = 0
+
+    # データ取得（キャッシュを使うのでセルをいじってもサクサク！）
     with st.spinner("テキスト情報を読み込み中..."):
-        df_master = robust_api_call(get_textbook_master_raw, fallback_value=pd.DataFrame())
+        df_master = cached_get_textbook_master_raw()
 
     if df_master.empty:
         st.warning("テキスト情報が取得できませんでした。スプレッドシートの設定を確認してください。")
@@ -67,7 +76,6 @@ def render_textbook_manager_page():
             with st.spinner("保存中..."):
                 # もし絞り込んで編集した場合は、元のデータフレームに合成する
                 if selected_text != "すべて":
-                    # 元のデータから選択されたテキストの行を消して、編集後のデータをくっつける
                     df_new_full = df_master[df_master["テキスト"] != selected_text].copy()
                     df_final = pd.concat([df_new_full, edited_df], ignore_index=True)
                 else:
@@ -76,6 +84,7 @@ def render_textbook_manager_page():
                 success = robust_api_call(update_textbook_master_bulk, df_final[req_cols], fallback_value=False)
                 if success:
                     st.success("✅ テキスト情報を更新しました！")
+                    # 🌟 保存が成功したらキャッシュを消して最新のデータに更新する
                     st.cache_data.clear()
                     time.sleep(1)
                     st.rerun()
@@ -118,7 +127,12 @@ def render_textbook_manager_page():
         
         # アップロードエリア
         st.markdown("#### 2. データのアップロード")
-        uploaded_file = st.file_uploader("完成したExcelまたはCSVファイルをアップロードしてください", type=["xlsx", "csv"])
+        # 🌟 NEW: アップローダーのkeyにセッション変数を使い、完了後にリセットできるようにする
+        uploaded_file = st.file_uploader(
+            "完成したExcelまたはCSVファイルをアップロードしてください", 
+            type=["xlsx", "csv"], 
+            key=f"tb_uploader_{st.session_state.tb_uploader_key}"
+        )
         
         if uploaded_file is not None:
             try:
@@ -142,24 +156,43 @@ def render_textbook_manager_page():
                                           ["既存のデータに【追加】する", "既存のデータをすべて【上書き（入れ替え）】する"])
                     
                     if st.button("🚀 このデータで更新を実行する", type="primary", use_container_width=True):
-                        with st.spinner("データを更新中..."):
-                            if merge_mode == "既存のデータに【追加】する":
-                                df_final = pd.concat([df_master, df_upload_clean], ignore_index=True)
-                            else:
-                                df_final = df_upload_clean
-                                
-                            # 空行を消して整理
-                            df_final = df_final.dropna(subset=["テキスト", "章"])
-                            df_final = df_final[df_final["テキスト"].astype(str).str.strip() != ""]
-                                
-                            success = robust_api_call(update_textbook_master_bulk, df_final[req_cols], fallback_value=False)
+                        # 🌟 NEW: プログレスバーの追加
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        status_text.text("データを結合・整形中...")
+                        progress_bar.progress(20)
+                        time.sleep(0.5)
+                        
+                        if merge_mode == "既存のデータに【追加】する":
+                            df_final = pd.concat([df_master, df_upload_clean], ignore_index=True)
+                        else:
+                            df_final = df_upload_clean
                             
-                            if success:
-                                st.success("✅ 一括アップロードが完了しました！")
-                                st.cache_data.clear()
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.error("❌ 更新に失敗しました。")
+                        # 空行を消して整理
+                        df_final = df_final.dropna(subset=["テキスト", "章"])
+                        df_final = df_final[df_final["テキスト"].astype(str).str.strip() != ""]
+                            
+                        status_text.text("スプレッドシートへ送信中... (しばらくお待ちください)")
+                        progress_bar.progress(60)
+                        
+                        # データ送信
+                        success = robust_api_call(update_textbook_master_bulk, df_final[req_cols], fallback_value=False)
+                        
+                        if success:
+                            progress_bar.progress(100)
+                            status_text.text("更新完了！")
+                            st.success("✅ 一括アップロードが完了しました！元の画面に戻ります。")
+                            
+                            st.cache_data.clear() # 最新データにするためキャッシュをクリア
+                            
+                            # 🌟 NEW: アップローダーをリセットして元の画面に戻す
+                            time.sleep(1.5)
+                            st.session_state.tb_uploader_key += 1
+                            st.rerun()
+                        else:
+                            progress_bar.empty()
+                            status_text.empty()
+                            st.error("❌ 更新に失敗しました。")
             except Exception as e:
                 st.error(f"ファイルの読み込みエラー: {e}")
