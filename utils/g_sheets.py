@@ -2569,6 +2569,42 @@ def save_learning_plan(student_id, student_name, plan_type, plan_details):
         st.error(f"🚨 学習計画の保存でエラーが発生しました: {e}")
         return False
 
+#textbook_manager.py
+def get_textbook_master_raw():
+    """テキスト情報一覧の生データ（DataFrame）を取得する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("テキスト情報一覧")
+        # numericise_ignore をつけて 0落ち を防ぐ
+        records = ws.get_all_records(numericise_ignore=["all"])
+        return pd.DataFrame(records)
+    except Exception as e:
+        print(f"テキスト情報一覧の生データ取得エラー: {e}")
+        return pd.DataFrame()
+
+def update_textbook_master_bulk(df_new):
+    """テキスト情報一覧を丸ごと上書き更新する"""
+    try:
+        gc = get_gc_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("テキスト情報一覧")
+        
+        # 既存のデータをクリア
+        ws.clear()
+        
+        # DataFrameをリストのリスト（二次元配列）に変換
+        header = df_new.columns.values.tolist()
+        values = df_new.fillna("").values.tolist()
+        data_to_write = [header] + values
+        
+        # 一括書き込み
+        ws.update(values=data_to_write, range_name="A1", value_input_option="USER_ENTERED")
+        return True
+    except Exception as e:
+        print(f"テキスト情報一覧の一括更新エラー: {e}")
+        return False
+
 #my_salary.py
 @st.cache_data(ttl=600, show_spinner=False)
 def load_published_salary():
