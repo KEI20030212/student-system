@@ -191,7 +191,7 @@ def main():
 
     if st.session_state['role'] in ['admin', 'sub_admin', 'owner', 'am', 'head_teacher']:
         menu_options.extend([
-            "📱 LINE用 学習レポート生成"
+            "📱 LINE用 学習レポート生成",
             "📚 テキストマスタ管理"
         ])
 
