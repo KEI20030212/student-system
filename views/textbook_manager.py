@@ -10,18 +10,17 @@ from utils.g_sheets import (
     update_textbook_master_bulk
 )
 
-# 🌟 NEW: キャッシュ化することで、セル編集のたびにAPI通信（読み込み中...）が走るのを防ぎます！
 @st.cache_data(ttl=600, show_spinner=False)
 def cached_get_textbook_master_raw():
     return robust_api_call(get_textbook_master_raw, fallback_value=pd.DataFrame())
 
 def render_textbook_manager_page():
     st.header("📚 テキスト情報一覧（マスタ管理）")
-    st.write("スプレッドシートに登録されているテキストの章やページ範囲を確認・編集・一括追加できる管理画面です。")
+    st.write("登録されているテキストの章やページ範囲を確認・編集・一括追加できる管理画面です。")
 
     # 権限チェック（管理者のみ）
     user_role = str(st.session_state.get('role', st.session_state.get('user_role', 'guest'))).lower()
-    if user_role not in ['admin', 'owner', 'am']:
+    if user_role not in ['admin', 'sub_admin', 'owner', 'am', 'head_teacher']:
         st.error("このページは管理者のみアクセス可能です。")
         return
 
@@ -103,9 +102,10 @@ def render_textbook_manager_page():
         
         # テンプレートデータの作成
         template_data = pd.DataFrame([
-            {"テキスト": "新研究 数学", "章": "第1章", "単元名": "式の計算", "開始ページ": 10, "終了ページ": 20},
-            {"テキスト": "新研究 数学", "章": "第2章", "単元名": "連立方程式", "開始ページ": 21, "終了ページ": 35},
-            {"テキスト": "【説明】", "章": "章番号", "単元名": "単元の名前", "開始ページ": "数字のみ", "終了ページ": "数字のみ"}
+            {"テキスト": "新研究 数学", "章": "1", "単元名": "式の計算", "開始ページ": 10, "終了ページ": 20},
+            {"テキスト": "新研究 数学", "章": "2", "単元名": "連立方程式", "開始ページ": 21, "終了ページ": 35},
+            {"テキスト": "【説明】", "章": "数字のみ", "単元名": "単元の名前", "開始ページ": "数字のみ", "終了ページ": "数字のみ"},
+            {"テキスト": "【説明】", "章": "一行目の列名を残し、それ以外はこの説明文を含め、全て削除してください"},
         ])
         
         excel_buffer = io.BytesIO()
@@ -182,7 +182,7 @@ def render_textbook_manager_page():
                         if success:
                             progress_bar.progress(100)
                             status_text.text("更新完了！")
-                            st.success("✅ 一括アップロードが完了しました！元の画面に戻ります。")
+                            st.success("✅ 一括アップロードが完了しました！")
                             
                             st.cache_data.clear() # 最新データにするためキャッシュをクリア
                             
