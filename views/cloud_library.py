@@ -216,7 +216,9 @@ def render_cloud_library_page():
         # 🌟 NEW: 小テストの新規登録機能
         with st.expander("➕ 新しい小テストをリストに登録する"):
             st.write("他の先生も使えるように、新しい小テストの情報をシステムに保存します！")
-            with st.form("add_quiz_form"):
+            
+            # 🚨 修正ポイント：名前の重複を避けるため、キーを "add_quiz_form_cloud" に変更しました！
+            with st.form("add_quiz_form_cloud"):
                 new_name = st.text_input("📝 テストの名前 (例: 中2 数学 計算ドリル)")
                 new_id = st.text_input("🔑 スプレッドシートのID (後から設定する場合は空欄でOK)", placeholder="1A2B3C4D5E6F7G...")
                 
