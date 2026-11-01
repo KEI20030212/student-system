@@ -1,10 +1,15 @@
+# views/cloud_library.py
+
 import streamlit as st
 import pandas as pd
 import time
 import os
 import requests
 import base64
-from utils.g_sheets import get_quiz_master_dict
+from utils.g_sheets import (
+    get_quiz_master_dict,
+    add_quiz_maker_sheet  # 🌟 NEW: 小テスト追加用の関数をインポート
+)
 from utils.g_drive import (
     upload_library_file, 
     list_library_files,
@@ -139,8 +144,6 @@ def render_cloud_library_page():
                         ext = os.path.splitext(file_name)[1].lower()
                         safe_file_name = file_name + ".pdf" if not ext else file_name
                         
-                        # 🌟 修正ポイント：純正ボタンをやめ、ご提示いただいたコードと同じ手法（HTMLリンク化）に変更
-                        # これで、ダウンロードを押しても絶対に画面がリロード（初期化）されなくなります！
                         with c2:
                             display_safe_download_link(file_bytes, safe_file_name)
                     else:
@@ -204,12 +207,45 @@ def render_cloud_library_page():
                 display_files(files) 
 
     # ==========================================
-    # 📤 アップロードエリア（管理者専用）
+    # 📤 アップロード・登録エリア（管理者専用）
     # ==========================================
     if is_admin:
         st.divider()
         st.markdown("### 🔐 【管理者専用】新しい教材を登録する")
-        with st.expander("➕ 教材をクラウド書庫にアップロード", expanded=False):
+        
+        # 🌟 NEW: 小テストの新規登録機能
+        with st.expander("➕ 新しい小テストをリストに登録する"):
+            st.write("他の先生も使えるように、新しい小テストの情報をシステムに保存します！")
+            with st.form("add_quiz_form"):
+                new_name = st.text_input("📝 テストの名前 (例: 中2 数学 計算ドリル)")
+                new_id = st.text_input("🔑 スプレッドシートのID (後から設定する場合は空欄でOK)", placeholder="1A2B3C4D5E6F7G...")
+                
+                # 満点と用紙サイズを横並びで設定できるように追加
+                col_m, col_s = st.columns(2)
+                with col_m:
+                    new_full_marks = st.number_input("💯 満点", min_value=1, value=100)
+                with col_s:
+                    new_paper_size = st.selectbox("🖨️ 印刷サイズ", ["A4", "B4", "A3", "B5"])
+
+                submit_new = st.form_submit_button("リストに登録する ✨")
+                
+                if submit_new:
+                    if new_name:
+                        save_id = new_id.strip() if new_id else ""
+                        # 追加処理を robust_api_call で保護
+                        success = robust_api_call(add_quiz_maker_sheet, new_name, save_id, new_full_marks, new_paper_size, fallback_value=False)
+                        if success:
+                            st.success(f"「{new_name}」({new_paper_size}サイズ) をリストに登録しました！")
+                            st.cache_data.clear() # 最新情報を読み込ませるためにキャッシュクリア
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("登録に失敗しました。")
+                    else:
+                        st.warning("⚠️ テストの名前は必ず入力してください。")
+
+        # 既存の教材アップロード機能
+        with st.expander("➕ 教材(PDF)をクラウド書庫にアップロード", expanded=False):
             reset_k = st.session_state.lib_upload_key
             u_cat = st.selectbox("📂 登録するカテゴリー", [CAT_QUIZ, CAT_EXAM], key=f"u_cat_{reset_k}")
             u_sub_cat = st.text_input("🏷 テキスト名 または 学校名（必須）", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_{reset_k}")
