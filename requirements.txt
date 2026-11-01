@@ -12,3 +12,4 @@ matplotlib
 google-generativeai
 xlsxwriter
 supabase
+openpyxl
