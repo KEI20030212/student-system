@@ -6,7 +6,6 @@ from PIL import Image
 # 📦 1. 画面部隊（views）のインポート
 # ==========================================
 from views.home import render_combined_home_page
-from views.attendance_seat import render_attendance_seat_page
 from views.multi_input import render_multi_input_page
 from views.input_combined import render_combined_input_page
 from views.student_portal import render_student_portal_page
@@ -21,6 +20,7 @@ from views.analytics_dashboard import render_analytics_dashboard_page
 from views.my_salary import render_my_salary_page
 from views.account_manager import render_account_manager_page
 from views.finance_integrated import render_finance_integrated_page
+from views.textbook_manager import render_textbook_manager_page
 
 # ==========================================
 # 🛠️ 2. 裏方部隊（utils）のインポート
@@ -172,7 +172,7 @@ def main():
     
     st.markdown(f"""
     <div style="background-color:#1E90FF;padding:10px;border-radius:10px;margin-bottom:20px;">
-        <h2 style="color:white;text-align:center;margin:0;">🌟 統合管理システム {branch_display} <span style="font-size:0.5em;background-color:white;color:#1E90FF;padding:2px 8px;border-radius:5px;">{st.session_state['username']} モード</span></h2>
+        <h2 style="color:white;text-align:center;margin:0;">🌟 管理システムK-AI {branch_display} <span style="font-size:0.5em;background-color:white;color:#1E90FF;padding:2px 8px;border-radius:5px;">{st.session_state['username']} モード</span></h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -192,6 +192,7 @@ def main():
     if st.session_state['role'] in ['admin', 'sub_admin', 'owner', 'am', 'head_teacher']:
         menu_options.extend([
             "📱 LINE用 学習レポート生成"
+            "📚 テキストマスタ管理"
         ])
 
     if st.session_state['role'] in ['admin', 'sub_admin', 'owner', 'am']:
@@ -224,6 +225,7 @@ def main():
     elif page == "🎒 学校課題管理": render_school_homework_page()
     elif page == "📱 LINE用 学習レポート生成": render_line_report_page()
     elif page == "🔍 全生徒の過去ログ検索": render_search_page()
+    elif page == "📚 テキストマスタ管理": render_textbook_manager_page()
     elif page == "📈 講師分析ダッシュボード": render_analytics_dashboard_page()
     elif page == "💴 自分の給与確認": render_my_salary_page()
     elif page == "💰 財務・請求ダッシュボード": render_finance_integrated_page()
