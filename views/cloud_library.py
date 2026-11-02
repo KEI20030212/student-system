@@ -215,7 +215,7 @@ def render_cloud_library_page():
         
         # 🌟 NEW: 小テストの新規登録機能
         with st.expander("➕ 新しい小テストをリストに登録する"):
-            st.write("他の先生も使えるように、新しい小テストの情報をシステムに保存します！")
+            st.write("新しい小テストの情報をシステムに保存します！\nスプレッドシートのリンクを登録すると「単語テスト作成」から小テストを作成することができます！")
             
             # 🚨 修正ポイント：名前の重複を避けるため、キーを "add_quiz_form_cloud" に変更しました！
             with st.form("add_quiz_form_cloud"):
@@ -248,6 +248,8 @@ def render_cloud_library_page():
 
         # 既存の教材アップロード機能
         with st.expander("➕ 教材(PDF)をクラウド書庫にアップロード", expanded=False):
+            st.write("PDFをアップロードすることで誰でもPDFをダウンロード、印刷することができます！")
+            
             reset_k = st.session_state.lib_upload_key
             u_cat = st.selectbox("📂 登録するカテゴリー", [CAT_QUIZ, CAT_EXAM], key=f"u_cat_{reset_k}")
             u_sub_cat = st.text_input("🏷 テキスト名 または 学校名（必須）", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_{reset_k}")
