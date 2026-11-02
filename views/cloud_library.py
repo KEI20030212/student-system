@@ -8,7 +8,7 @@ import requests
 import base64
 from utils.g_sheets import (
     get_quiz_master_dict,
-    add_quiz_maker_sheet  # 🌟 NEW: 小テスト追加用の関数をインポート
+    add_quiz_maker_sheet  
 )
 from utils.g_drive import (
     upload_library_file, 
@@ -21,24 +21,19 @@ from utils.api_guard import robust_api_call
 CAT_QUIZ = "小テスト・確認テスト"
 CAT_EXAM = "定期テスト過去問"
 
-# ==========================================
-# 🚀 超高速化のためのキャッシュ関数（Safariブロック対策）
-# ==========================================
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_get_quiz_master():
     return robust_api_call(get_quiz_master_dict, fallback_value={})
 
 @st.cache_data(ttl=300, show_spinner=False)
-def cached_list_library_folders(cat, sub_cat):
+def cached_list_library_folders(cat, sub_cat=None):
+    # sub_catがNoneの場合は、そのカテゴリー直下のフォルダ一覧（テキスト名一覧）を取得する
     return robust_api_call(list_library_folders, cat, sub_cat, fallback_value=[])
 
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_list_library_files(cat, sub_cat, chap):
     return robust_api_call(list_library_files, cat, sub_cat, chap, fallback_value=[])
 
-# ==========================================
-# 🧠 ウィルススキャン警告を突破して本物のファイルを取得する関数
-# ==========================================
 def download_gdrive_file_safely(file_id):
     url = "https://drive.google.com/uc?export=download"
     session = requests.Session()
@@ -73,28 +68,19 @@ def render_cloud_library_page():
         st.session_state.prepared_files = {}
     
     with st.spinner("書庫のインデックスを読み込み中..."):
-        quiz_details = cached_get_quiz_master()
-        quiz_names = []
-        for key in quiz_details.keys():
-            if "_" in key:
-                q_name = key.split("_", 1)[0]
-                if q_name not in quiz_names:
-                    quiz_names.append(q_name)
-                    
-        school_names = [
-            "田端中学校", "東十条中学校", "北中学校", "南中学校", "第一中学校", "第二中学校", "その他"
-        ]
+        # 🌟 NEW: スプレッドシートからではなく、Driveから直接「存在するフォルダ名（テキスト名）」を取得
+        quiz_names = cached_list_library_folders(CAT_QUIZ, None)
+        school_names = cached_list_library_folders(CAT_EXAM, None)
+        
+        # もしDriveにフォルダが一つもない場合のフォールバック（保険）
+        if not school_names:
+            school_names = [
+                "田端中学校", "東十条中学校", "北中学校", "南中学校", "第一中学校", "第二中学校", "その他"
+            ]
 
     st.divider()
 
-    # ==========================================
-    # 🌟 画面遷移を完全に防ぐ魔法のダウンロードボタン描画関数
-    # ==========================================
     def display_safe_download_link(pdf_bytes, filename, color="#FF4B4B"):
-        """
-        Streamlitの純正ボタン(st.download_button)を使わず、
-        HTMLのリンクとして埋め込むことで画面のリロードを完全に防ぐ。
-        """
         b64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
         html_button = f'''
         <a href="data:application/octet-stream;base64,{b64_pdf}" download="{filename}" 
@@ -107,9 +93,6 @@ def render_cloud_library_page():
         '''
         st.markdown(html_button, unsafe_allow_html=True)
 
-    # ==========================================
-    # 🌟 共通のファイル表示＆削除処理関数
-    # ==========================================
     def display_files(files_list):
         if not files_list:
             st.info("📂 この場所にプリントはまだ登録されていません。")
@@ -174,15 +157,12 @@ def render_cloud_library_page():
                             else:
                                 st.error(f"削除に失敗しました: {msg}")
 
-    # ==========================================
-    # 🌟 閲覧・ダウンロードエリア
-    # ==========================================
     tab_quiz, tab_exam = st.tabs([f"📝 {CAT_QUIZ}", f"🏫 {CAT_EXAM}"])
     
     with tab_quiz:
         st.subheader("📝 小テスト・確認テストを探す")
         if not quiz_names:
-            st.warning("設定シートから小テスト名が取得できません。")
+            st.warning("クラウド書庫(Googleドライブ)に登録されているテキストがありません。")
         else:
             selected_quiz = st.selectbox("📚 テキスト・テスト名を選択", ["-- 選択してください --"] + quiz_names, key="sel_q_txt")
             if selected_quiz != "-- 選択してください --":
@@ -196,33 +176,31 @@ def render_cloud_library_page():
 
     with tab_exam:
         st.subheader("🏫 定期テストの過去問を探す")
-        selected_school = st.selectbox("🏫 学校名を選択", ["-- 選択してください --"] + school_names, key="sel_e_sch")
-        if selected_school != "-- 選択してください --":
-            exam_folders = cached_list_library_folders(CAT_EXAM, selected_school)
-            selected_exam_chap = None
-            if exam_folders:
-                selected_exam_chap = st.selectbox("📅 年度・テスト時期を選択", ["-- 選択してください --", "-- 直下のファイル --"] + exam_folders, key="sel_e_chap")
-            if not exam_folders or (exam_folders and selected_exam_chap and selected_exam_chap != "-- 選択してください --"):
-                files = cached_list_library_files(CAT_EXAM, selected_school, selected_exam_chap)
-                display_files(files) 
+        if not school_names:
+             st.warning("クラウド書庫(Googleドライブ)に登録されている学校がありません。")
+        else:
+            selected_school = st.selectbox("🏫 学校名を選択", ["-- 選択してください --"] + school_names, key="sel_e_sch")
+            if selected_school != "-- 選択してください --":
+                exam_folders = cached_list_library_folders(CAT_EXAM, selected_school)
+                selected_exam_chap = None
+                if exam_folders:
+                    selected_exam_chap = st.selectbox("📅 年度・テスト時期を選択", ["-- 選択してください --", "-- 直下のファイル --"] + exam_folders, key="sel_e_chap")
+                if not exam_folders or (exam_folders and selected_exam_chap and selected_exam_chap != "-- 選択してください --"):
+                    files = cached_list_library_files(CAT_EXAM, selected_school, selected_exam_chap)
+                    display_files(files) 
 
-    # ==========================================
-    # 📤 アップロード・登録エリア（管理者専用）
-    # ==========================================
     if is_admin:
         st.divider()
         st.markdown("### 🔐 【管理者専用】新しい教材を登録する")
         
-        # 🌟 NEW: 小テストの新規登録機能
         with st.expander("➕ 新しい小テストをリストに登録する"):
-            st.write("新しい小テストの情報をシステムに保存します！\nスプレッドシートのリンクを登録すると「単語テスト作成」から小テストを作成することができます！")
+            st.write("新しい小テストの情報をシステムに保存します！")
+            st.write("スプレッドシートのリンクを登録すると「単語テスト作成」から小テストを作成することができます！")
             
-            # 🚨 修正ポイント：名前の重複を避けるため、キーを "add_quiz_form_cloud" に変更しました！
             with st.form("add_quiz_form_cloud"):
                 new_name = st.text_input("📝 テストの名前 (例: 中2 数学 計算ドリル)")
                 new_id = st.text_input("🔑 スプレッドシートのID (後から設定する場合は空欄でOK)", placeholder="1A2B3C4D5E6F7G...")
                 
-                # 満点と用紙サイズを横並びで設定できるように追加
                 col_m, col_s = st.columns(2)
                 with col_m:
                     new_full_marks = st.number_input("💯 満点", min_value=1, value=100)
@@ -234,11 +212,10 @@ def render_cloud_library_page():
                 if submit_new:
                     if new_name:
                         save_id = new_id.strip() if new_id else ""
-                        # 追加処理を robust_api_call で保護
                         success = robust_api_call(add_quiz_maker_sheet, new_name, save_id, new_full_marks, new_paper_size, fallback_value=False)
                         if success:
                             st.success(f"「{new_name}」({new_paper_size}サイズ) をリストに登録しました！")
-                            st.cache_data.clear() # 最新情報を読み込ませるためにキャッシュクリア
+                            st.cache_data.clear() 
                             time.sleep(1)
                             st.rerun()
                         else:
@@ -246,13 +223,25 @@ def render_cloud_library_page():
                     else:
                         st.warning("⚠️ テストの名前は必ず入力してください。")
 
-        # 既存の教材アップロード機能
         with st.expander("➕ 教材(PDF)をクラウド書庫にアップロード", expanded=False):
             st.write("PDFをアップロードすることで誰でもPDFをダウンロード、印刷することができます！")
             
             reset_k = st.session_state.lib_upload_key
+            
+            # 🌟 NEW: アップロード時もDriveに存在するフォルダ名を選択肢にする（+直接入力も可）
             u_cat = st.selectbox("📂 登録するカテゴリー", [CAT_QUIZ, CAT_EXAM], key=f"u_cat_{reset_k}")
-            u_sub_cat = st.text_input("🏷 テキスト名 または 学校名（必須）", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_{reset_k}")
+            
+            # 選択されたカテゴリーに応じて、Drive上の既存フォルダ名を取得
+            existing_sub_cats = quiz_names if u_cat == CAT_QUIZ else school_names
+            
+            # 既存のものを選択するか、新しい名前を入力するか選べるようにする
+            u_sub_cat_selection = st.selectbox("🏷 既存のテキスト/学校名から選択", ["-- 新規入力する --"] + existing_sub_cats, key=f"u_sub_cat_sel_{reset_k}")
+            
+            if u_sub_cat_selection == "-- 新規入力する --":
+                u_sub_cat = st.text_input("📝 新しいテキスト名 または 学校名を入力", placeholder="例：ターゲット1200 / 田端中学校", key=f"u_sub_cat_new_{reset_k}")
+            else:
+                u_sub_cat = u_sub_cat_selection
+                
             uploaded_files = st.file_uploader("📄 アップロードするPDF（複数選択可）", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True, key=f"u_files_{reset_k}")
             if uploaded_files:
                 st.markdown("#### ⚙️ 各ファイルの設定")
