@@ -333,7 +333,7 @@ def render_test_scores_list_page():
                             ratio = v / full_m if full_m > 0 else 0
                             if ratio >= 1.0: return f"👑 {int(v)}"
                             elif ratio >= 0.85: return f"🟢 {int(v)}"
-                            elif ratio >= 0.2: return f"🟡 {int(v)}"
+                            elif ratio >= 0.6: return f"🟡 {int(v)}"
                             else: return f"🔴 {int(v)}"
                         except:
                             return str(val)
