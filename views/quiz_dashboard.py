@@ -153,7 +153,7 @@ def render_quiz_list_page():
             styled_display[col] = styled_display[col].apply(add_icon)
 
         def color_bg(v):
-            if "👑" in str(v): return 'background-color: #fffacd; color: #000; font-weight: bold;'
+            if "👑" in str(v): return 'background-color: #87ceeb; color: #000; font-weight: bold;'
             if "🟢" in str(v): return 'background-color: #c6efce; color: #006100;'
             if "🟡" in str(v): return 'background-color: #ffeb9c; color: #9c6500;'
             if "🔴" in str(v): return 'background-color: #ffc7ce; color: #9c0006;'
